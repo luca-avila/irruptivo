@@ -14,6 +14,21 @@ export const ORDER_STATUSES = Object.values(ORDER_STATUS);
 
 export type OrderStatus = (typeof ORDER_STATUS)[keyof typeof ORDER_STATUS];
 
+export const ORDER_STATUS_LABEL = {
+  [ORDER_STATUS.pendingPayment]: "Pago pendiente",
+  [ORDER_STATUS.paid]: "Pago confirmado",
+  [ORDER_STATUS.paymentFailed]: "Pago rechazado",
+  [ORDER_STATUS.expired]: "Pago vencido",
+  [ORDER_STATUS.preparing]: "En preparación",
+  [ORDER_STATUS.shipped]: "Enviado",
+  [ORDER_STATUS.delivered]: "Entregado",
+  [ORDER_STATUS.readyForPickup]: "Listo para retirar",
+  [ORDER_STATUS.pickedUp]: "Retirado"
+} as const satisfies Record<OrderStatus, string>;
+
+export type OrderStatusLabel =
+  (typeof ORDER_STATUS_LABEL)[keyof typeof ORDER_STATUS_LABEL];
+
 export const DELIVERY_METHOD = {
   shipping: "shipping",
   pickup: "pickup"
@@ -24,6 +39,14 @@ export const DELIVERY_METHODS = Object.values(DELIVERY_METHOD);
 export type DeliveryMethod =
   (typeof DELIVERY_METHOD)[keyof typeof DELIVERY_METHOD];
 
+export const DELIVERY_METHOD_LABEL = {
+  [DELIVERY_METHOD.shipping]: "Envío a domicilio",
+  [DELIVERY_METHOD.pickup]: "Retiro local"
+} as const satisfies Record<DeliveryMethod, string>;
+
+export type DeliveryMethodLabel =
+  (typeof DELIVERY_METHOD_LABEL)[keyof typeof DELIVERY_METHOD_LABEL];
+
 export const DELIVERY_COST_ARS = {
   [DELIVERY_METHOD.shipping]: 5000,
   [DELIVERY_METHOD.pickup]: 0
@@ -31,7 +54,7 @@ export const DELIVERY_COST_ARS = {
 
 export const AVAILABILITY_LABEL = {
   available: "Disponible",
-  lowStock: "Ultimas unidades",
+  lowStock: "Últimas unidades",
   outOfStock: "Sin stock"
 } as const;
 
@@ -80,6 +103,16 @@ const FULFILLMENT_TRANSITIONS = {
 
 export function getDeliveryCost(deliveryMethod: DeliveryMethod): number {
   return DELIVERY_COST_ARS[deliveryMethod];
+}
+
+export function getDeliveryMethodLabel(
+  deliveryMethod: DeliveryMethod
+): DeliveryMethodLabel {
+  return DELIVERY_METHOD_LABEL[deliveryMethod];
+}
+
+export function getOrderStatusLabel(orderStatus: OrderStatus): OrderStatusLabel {
+  return ORDER_STATUS_LABEL[orderStatus];
 }
 
 export function getAvailabilityLabel(availableStock: number): AvailabilityLabel {

@@ -6,7 +6,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Irruptivo",
-  description: "Storefront publico de Irruptivo."
+  description: "Tienda pública de Irruptivo."
 };
 
 type RootLayoutProps = {

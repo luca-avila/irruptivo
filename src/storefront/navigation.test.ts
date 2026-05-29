@@ -10,7 +10,7 @@ import {
 describe("storefront navigation shell", () => {
   it("exposes only MVP public menu routes", () => {
     expect(storefrontMenuRoutes).toEqual([
-      { label: "Coleccion", href: "/coleccion" },
+      { label: "Colección", href: "/coleccion" },
       { label: "Suplementos", href: "/suplementos" },
       { label: "Nosotros", href: "/nosotros" }
     ]);

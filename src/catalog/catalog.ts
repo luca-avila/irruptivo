@@ -334,7 +334,7 @@ function getEffectiveVariantPrice(
 
 function getContextLabel(product: CatalogProductRecord): string {
   if (product.area === PRODUCT_AREA.clothing) {
-    return product.clothingSubcategory ?? "Coleccion";
+    return product.clothingSubcategory ?? "Colección";
   }
 
   return product.supplementType ?? "Suplementos";

@@ -2,13 +2,17 @@ import { describe, expect, it } from "vitest";
 
 import {
   DELIVERY_METHOD,
+  DELIVERY_METHOD_LABEL,
   ORDER_STATUS,
+  ORDER_STATUS_LABEL,
   calculateLineTotal,
   calculateOrderTotal,
   calculateSubtotal,
   getAllowedFulfillmentTransitions,
   getAvailabilityLabel,
   getDeliveryCost,
+  getDeliveryMethodLabel,
+  getOrderStatusLabel,
   resolveUnitPrice
 } from "./rules";
 
@@ -32,6 +36,35 @@ describe("MVP domain rules", () => {
     });
   });
 
+  it("maps internal order statuses to Spanish UI labels", () => {
+    expect(ORDER_STATUS_LABEL).toEqual({
+      pending_payment: "Pago pendiente",
+      paid: "Pago confirmado",
+      payment_failed: "Pago rechazado",
+      expired: "Pago vencido",
+      preparing: "En preparación",
+      shipped: "Enviado",
+      delivered: "Entregado",
+      ready_for_pickup: "Listo para retirar",
+      picked_up: "Retirado"
+    });
+
+    expect(getOrderStatusLabel(ORDER_STATUS.readyForPickup)).toBe(
+      "Listo para retirar"
+    );
+  });
+
+  it("maps internal delivery methods to Spanish UI labels", () => {
+    expect(DELIVERY_METHOD_LABEL).toEqual({
+      shipping: "Envío a domicilio",
+      pickup: "Retiro local"
+    });
+
+    expect(getDeliveryMethodLabel(DELIVERY_METHOD.shipping)).toBe(
+      "Envío a domicilio"
+    );
+  });
+
   it("returns fixed integer ARS delivery costs", () => {
     expect(getDeliveryCost(DELIVERY_METHOD.shipping)).toBe(5000);
     expect(getDeliveryCost(DELIVERY_METHOD.pickup)).toBe(0);
@@ -39,8 +72,8 @@ describe("MVP domain rules", () => {
 
   it.each([
     [0, "Sin stock"],
-    [1, "Ultimas unidades"],
-    [3, "Ultimas unidades"],
+    [1, "Últimas unidades"],
+    [3, "Últimas unidades"],
     [4, "Disponible"]
   ])("maps %i units to the public availability label", (stock, label) => {
     expect(getAvailabilityLabel(stock)).toBe(label);

@@ -5,8 +5,8 @@ export default function AboutPage() {
         <p className="eyebrow">Nosotros</p>
         <h1 className="page-title">Una marca directa, simple y enfocada.</h1>
         <p className="page-copy">
-          Placeholder para la pagina de marca y confianza del MVP. El contenido
-          definitivo se implementa en el slice de paginas de confianza.
+          Entrada a la página de marca y confianza del MVP. El contenido
+          definitivo se implementa en las páginas de confianza.
         </p>
       </div>
     </section>

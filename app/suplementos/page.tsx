@@ -5,8 +5,8 @@ export default function SupplementsPage() {
         <p className="eyebrow">Suplementos</p>
         <h1 className="page-title">Suplementos seleccionados.</h1>
         <p className="page-copy">
-          Placeholder publico para la grilla de suplementos. La grilla y filtros
-          se implementan en su slice correspondiente.
+          Entrada pública para la grilla de suplementos. La grilla y los filtros
+          se implementan en próximos pasos.
         </p>
       </div>
     </section>

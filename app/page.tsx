@@ -4,14 +4,14 @@ export default function HomePage() {
   return (
     <section className="page-shell">
       <div className="page-panel">
-        <p className="eyebrow">Storefront</p>
+        <p className="eyebrow">Tienda</p>
         <h1 className="page-title">IRRUPTIVO</h1>
         <p className="page-copy">
-          Shell publico mobile-first para navegar la coleccion, suplementos,
-          busqueda, carrito y paginas de confianza del MVP.
+          Entrada pensada primero para celular para navegar la colección, suplementos,
+          búsqueda, carrito y páginas de confianza del MVP.
         </p>
         <Link className="primary-link" href="/coleccion">
-          Ver coleccion
+          Ver colección
         </Link>
       </div>
     </section>

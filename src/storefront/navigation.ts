@@ -11,13 +11,13 @@ export type ExternalStorefrontLink = {
 };
 
 export const storefrontMenuRoutes = [
-  { label: "Coleccion", href: "/coleccion" },
+  { label: "Colección", href: "/coleccion" },
   { label: "Suplementos", href: "/suplementos" },
   { label: "Nosotros", href: "/nosotros" }
 ] as const satisfies readonly StorefrontRoute[];
 
 export const storefrontTrustRoutes = [
-  { label: "Envios y cambios", href: "/envios-y-cambios" }
+  { label: "Envíos y cambios", href: "/envios-y-cambios" }
 ] as const satisfies readonly StorefrontRoute[];
 
 export const contactLink = {

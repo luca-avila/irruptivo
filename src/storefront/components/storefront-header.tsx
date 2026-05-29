@@ -48,7 +48,7 @@ export function StorefrontHeader() {
         <button
           className="icon-button"
           type="button"
-          aria-label="Abrir menu"
+          aria-label="Abrir menú"
           aria-expanded={isMenuOpen}
           onClick={() => setIsMenuOpen(true)}
         >
@@ -64,7 +64,7 @@ export function StorefrontHeader() {
           IRRUPTIVO
         </Link>
 
-        <nav className="desktop-links" aria-label="Navegacion principal">
+        <nav className="desktop-links" aria-label="Navegación principal">
           {storefrontMenuRoutes.map((route) => (
             <Link
               key={route.href}
@@ -84,11 +84,11 @@ export function StorefrontHeader() {
 
       {isMenuOpen ? (
         <div className="menu-backdrop" role="presentation">
-          <aside className="menu-panel" aria-label="Menu principal">
+          <aside className="menu-panel" aria-label="Menú principal">
             <button
               className="icon-button menu-close"
               type="button"
-              aria-label="Cerrar menu"
+              aria-label="Cerrar menú"
               onClick={() => setIsMenuOpen(false)}
             >
               <X aria-hidden="true" size={30} strokeWidth={1.8} />
@@ -96,7 +96,7 @@ export function StorefrontHeader() {
 
             <div className="menu-content">
               <div className="menu-brand">IRRUPTIVO</div>
-              <nav className="menu-links" aria-label="Secciones publicas">
+              <nav className="menu-links" aria-label="Secciones públicas">
                 {publicRoutes.map((route) => (
                   <Link
                     key={route.href}
