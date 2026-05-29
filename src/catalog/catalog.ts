@@ -92,6 +92,16 @@ export type PublicProductDetailView = PublicProductCardView & {
   variants: PublicProductVariantView[];
 };
 
+export type PublicUnavailableProductView = {
+  id: string;
+  slug: string;
+  name: string;
+  description: string;
+  area: ProductArea;
+  contextLabel: string;
+  images: PublicProductImageView[];
+};
+
 export type PublicProductSlugLookup =
   | {
       status: "active";
@@ -99,6 +109,7 @@ export type PublicProductSlugLookup =
     }
   | {
       status: "inactive";
+      product: PublicUnavailableProductView;
     }
   | {
       status: "not_found";
@@ -361,7 +372,10 @@ export function getPublicProductBySlug(
   }
 
   if (product.status !== PRODUCT_STATUS.active) {
-    return { status: "inactive" };
+    return {
+      status: "inactive",
+      product: getUnavailableProductView(product)
+    };
   }
 
   return {
@@ -420,6 +434,20 @@ export function getProductDetailView(
         isAvailable: availabilityLabel !== AVAILABILITY_LABEL.outOfStock
       };
     })
+  };
+}
+
+function getUnavailableProductView(
+  product: CatalogProductRecord
+): PublicUnavailableProductView {
+  return {
+    id: product.id,
+    slug: product.slug,
+    name: product.name,
+    description: product.description,
+    area: product.area,
+    contextLabel: getContextLabel(product),
+    images: getSortedImages(product.images)
   };
 }
 

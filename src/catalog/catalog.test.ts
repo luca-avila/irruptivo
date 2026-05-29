@@ -135,7 +135,16 @@ describe("product catalog read path", () => {
     });
 
     expect(getPublicProductBySlug("remera-blanca", products)).toEqual({
-      status: "inactive"
+      status: "inactive",
+      product: {
+        id: "tee-white",
+        slug: "remera-blanca",
+        name: "Remera Blanca",
+        description: "Remera oversized.",
+        area: PRODUCT_AREA.clothing,
+        contextLabel: "Remeras",
+        images: []
+      }
     });
 
     expect(getPublicProductBySlug("no-existe", products)).toEqual({

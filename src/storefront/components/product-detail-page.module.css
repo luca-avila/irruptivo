@@ -1,0 +1,394 @@
+.detailPage {
+  min-height: calc(100svh - 72px);
+  background: #f7f7f5;
+  color: #101010;
+}
+
+.detailPage[data-area="supplement"] {
+  background: #101010;
+  color: #f7f3ec;
+}
+
+.inner {
+  width: min(100%, 72rem);
+  margin: 0 auto;
+}
+
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 44px;
+  margin: 0.4rem 0.75rem 0;
+  color: inherit;
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.layout {
+  display: grid;
+  gap: 0;
+}
+
+.gallery {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.heroImageFrame {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 1;
+  background: #e5e5e2;
+}
+
+.detailPage[data-area="supplement"] .heroImageFrame {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.08), transparent 48%),
+    #181818;
+}
+
+.heroImage {
+  object-fit: cover;
+}
+
+.imageFallback {
+  display: grid;
+  height: 100%;
+  place-items: center;
+  padding: 1rem;
+  color: #777777;
+  font-size: 0.95rem;
+  font-weight: 800;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.detailPage[data-area="supplement"] .imageFallback {
+  color: #d8d4cb;
+}
+
+.thumbnailGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.45rem;
+  padding: 0 0.75rem;
+}
+
+.thumbnail {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 1;
+  border: 1px solid #d8d8d5;
+  background: #e9e9e5;
+}
+
+.detailPage[data-area="supplement"] .thumbnail {
+  border-color: #2a2a2a;
+  background: #181818;
+}
+
+.thumbnail img {
+  object-fit: cover;
+}
+
+.content {
+  display: grid;
+  gap: 1.45rem;
+  padding: 1.45rem 1.1rem 3rem;
+  background: #ffffff;
+}
+
+.detailPage[data-area="supplement"] .content {
+  background: #f7f3ec;
+  color: #101010;
+}
+
+.summary {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.context {
+  margin: 0;
+  color: #777777;
+  font-size: 0.74rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.title {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 2.4rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 0.98;
+}
+
+.price {
+  margin: 0;
+  color: #232323;
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.description {
+  margin: 0;
+  color: #666666;
+  font-size: 1rem;
+  line-height: 1.55;
+}
+
+.availability {
+  justify-self: start;
+  padding: 0.38rem 0.5rem;
+  background: #c7f23a;
+  color: #101010;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.availability[data-state="blocked"],
+.availability[data-state="out"] {
+  background: #101010;
+  color: #ffffff;
+}
+
+.variantPanel {
+  display: grid;
+  gap: 1rem;
+}
+
+.selectorHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.selectorLabel {
+  margin: 0;
+  color: #666666;
+  font-size: 0.9rem;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.sizeGuideLink {
+  flex: 0 0 auto;
+  color: #4d4d4d;
+  font-size: 0.88rem;
+  line-height: 1.25;
+  text-decoration: underline;
+  text-underline-offset: 0.16em;
+}
+
+.optionList {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(5.2rem, 1fr));
+  gap: 0.35rem;
+  padding: 0.32rem;
+  border: 1px solid #deded9;
+  border-radius: 6px;
+  background: #ffffff;
+  box-shadow: 0 2px 10px rgba(16, 16, 16, 0.06);
+}
+
+.optionLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 48px;
+  padding: 0.45rem 0.5rem;
+  overflow-wrap: anywhere;
+  color: #565656;
+  font-size: 1.15rem;
+  font-weight: 800;
+  line-height: 1.05;
+  text-align: center;
+}
+
+.optionLink[data-active="true"] {
+  border-radius: 4px;
+  background: #101010;
+  color: #ffffff;
+}
+
+.ctaArea {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.addButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 58px;
+  width: 100%;
+  border: 0;
+  border-radius: 999px;
+  background: #000000;
+  color: #ffffff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 1.12rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.addButton:disabled {
+  cursor: not-allowed;
+  background: #d6d6d2;
+  color: #6c6c6c;
+}
+
+.ctaHelp {
+  margin: 0;
+  color: #5e5e5e;
+  font-size: 0.92rem;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.contactActions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.55rem;
+}
+
+.contactLink,
+.secondaryLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  min-height: 46px;
+  padding: 0 0.95rem;
+  border: 1px solid #d7d7d2;
+  color: #101010;
+  font-size: 0.92rem;
+  font-weight: 850;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.secondaryLink {
+  background: #f7f7f5;
+}
+
+.trustList {
+  display: grid;
+  gap: 0.75rem;
+  padding-top: 0.35rem;
+}
+
+.trustItem,
+.sizeGuide {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.75rem;
+  align-items: start;
+  padding-top: 0.9rem;
+  border-top: 1px solid #e4e4df;
+}
+
+.trustItem h2,
+.sizeGuide h2 {
+  margin: 0;
+  color: #101010;
+  font-size: 0.95rem;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
+.trustItem p,
+.sizeGuide p {
+  margin: 0.28rem 0 0;
+  color: #626262;
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.sizeGuide {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.unavailablePage {
+  min-height: calc(100svh - 72px);
+  display: grid;
+  place-items: center;
+  padding: 3rem 1rem;
+  background: #f7f7f5;
+}
+
+.unavailablePanel {
+  width: min(100%, 34rem);
+  display: grid;
+  gap: 1rem;
+  color: #101010;
+}
+
+.unavailablePanel h1 {
+  margin: 0;
+  font-size: 2rem;
+  font-weight: 650;
+  line-height: 1.05;
+}
+
+.unavailablePanel p {
+  margin: 0;
+  color: #5e5e5e;
+  font-size: 1rem;
+  line-height: 1.55;
+}
+
+.unavailableActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-top: 0.35rem;
+}
+
+@media (min-width: 760px) {
+  .backLink {
+    margin: 1rem 2rem 0;
+  }
+
+  .layout {
+    grid-template-columns: minmax(0, 1.08fr) minmax(22rem, 0.92fr);
+    align-items: start;
+    padding: 1rem 2rem 4rem;
+    gap: 1.4rem;
+  }
+
+  .heroImageFrame {
+    border-radius: 8px;
+  }
+
+  .thumbnailGrid {
+    padding: 0;
+  }
+
+  .content {
+    position: sticky;
+    top: 88px;
+    border-radius: 8px;
+    padding: 1.55rem;
+  }
+
+  .title {
+    font-size: 2.75rem;
+  }
+
+  .contactActions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
