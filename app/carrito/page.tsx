@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export default function CartPage() {
   return (
     <section className="page-shell">
@@ -8,6 +10,9 @@ export default function CartPage() {
           Entrada pública al carrito local del visitante. La experiencia de
           revisión, totales y pago se implementa en próximos pasos.
         </p>
+        <Link className="primary-link" href="/envios-y-cambios">
+          Ver envíos y cambios
+        </Link>
       </div>
     </section>
   );

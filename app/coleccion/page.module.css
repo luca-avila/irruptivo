@@ -1,0 +1,224 @@
+.collectionPage {
+  min-height: calc(100svh - 72px);
+  padding: 1.25rem 0.45rem 4rem;
+  background: #f7f7f5;
+}
+
+.collectionInner {
+  width: min(100%, 72rem);
+  margin: 0 auto;
+}
+
+.collectionTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.35rem 0.35rem 0.65rem;
+}
+
+.collectionTitle {
+  margin: 0;
+  color: #101010;
+  font-size: 2rem;
+  font-weight: 500;
+  line-height: 1.1;
+}
+
+.filterGlyph {
+  flex: 0 0 auto;
+  color: #a8a8a8;
+}
+
+.filters {
+  display: flex;
+  justify-content: space-between;
+  gap: 1.65rem;
+  overflow-x: auto;
+  padding: 0.55rem 0.35rem 1.5rem;
+  scrollbar-width: none;
+}
+
+.filters::-webkit-scrollbar {
+  display: none;
+}
+
+.filterLink {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 0 0.35rem;
+  color: #686868;
+  font-size: 1.45rem;
+  font-weight: 400;
+  line-height: 1;
+}
+
+.filterLinkActive {
+  color: #101010;
+}
+
+.filterLinkActive::after {
+  position: absolute;
+  right: 0;
+  bottom: 0.1rem;
+  left: 0;
+  height: 1px;
+  background: #101010;
+  content: "";
+}
+
+.productGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45rem 0.35rem;
+}
+
+.productCard {
+  display: block;
+  min-width: 0;
+  color: #101010;
+}
+
+.productImageFrame {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 1;
+  background: #e5e5e2;
+}
+
+.productImage {
+  object-fit: cover;
+}
+
+.productImagePlaceholder {
+  display: grid;
+  height: 100%;
+  place-items: center;
+  color: #777777;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.availabilityBadge {
+  position: absolute;
+  top: 0.45rem;
+  left: 0.45rem;
+  max-width: calc(100% - 0.9rem);
+  padding: 0.3rem 0.42rem;
+  overflow-wrap: anywhere;
+  background: rgba(199, 242, 58, 0.95);
+  color: #101010;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.availabilityBadgeUnavailable {
+  background: rgba(16, 16, 16, 0.86);
+  color: #ffffff;
+}
+
+.productMeta {
+  min-width: 0;
+  padding: 0.52rem 0.35rem 0.9rem;
+}
+
+.productContext {
+  margin: 0;
+  color: #777777;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.productName {
+  margin: 0.16rem 0 0;
+  overflow-wrap: anywhere;
+  color: #101010;
+  font-size: 1.04rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.05;
+}
+
+.productPrice {
+  margin: 0.26rem 0 0;
+  color: #666666;
+  font-size: 0.9rem;
+  line-height: 1.2;
+}
+
+.emptyState {
+  max-width: 30rem;
+  margin: 2.1rem 0.35rem 0;
+  padding-top: 1.35rem;
+  border-top: 1px solid #ddddda;
+}
+
+.emptyTitle {
+  margin: 0;
+  color: #101010;
+  font-size: 1.55rem;
+  font-weight: 700;
+  line-height: 1.12;
+}
+
+.emptyCopy {
+  margin: 0.85rem 0 0;
+  color: #626262;
+  font-size: 1rem;
+  line-height: 1.55;
+}
+
+.emptyAction {
+  display: inline-flex;
+  align-items: center;
+  min-height: 46px;
+  margin-top: 1.25rem;
+  padding: 0 1rem;
+  background: #101010;
+  color: #ffffff;
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+
+@media (min-width: 760px) {
+  .collectionPage {
+    padding: 2rem 2rem 5rem;
+  }
+
+  .collectionTop {
+    align-items: center;
+    padding-inline: 0;
+  }
+
+  .collectionTitle {
+    font-size: 2.4rem;
+  }
+
+  .filters {
+    justify-content: flex-start;
+    gap: 2.8rem;
+    padding-inline: 0;
+  }
+
+  .filterLink {
+    font-size: 1.5rem;
+  }
+
+  .productGrid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.75rem;
+  }
+
+  .productName {
+    font-size: 1.08rem;
+  }
+}

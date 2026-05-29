@@ -30,6 +30,7 @@
     "app/**/*.tsx",
     "src/**/*.ts",
     "src/**/*.tsx",
+    "proxy.ts",
     "vitest.config.ts",
     ".next/dev/types/**/*.ts"
   ],

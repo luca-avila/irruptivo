@@ -1,13 +1,60 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+
+import { aboutTrustPage } from "../../src/storefront/trust-pages";
+import styles from "../trust-pages.module.css";
+
+export const metadata: Metadata = aboutTrustPage.metadata;
+
 export default function AboutPage() {
+  const page = aboutTrustPage;
+
   return (
-    <section className="page-shell">
-      <div className="page-panel">
-        <p className="eyebrow">Nosotros</p>
-        <h1 className="page-title">Una marca directa, simple y enfocada.</h1>
-        <p className="page-copy">
-          Entrada a la página de marca y confianza del MVP. El contenido
-          definitivo se implementa en las páginas de confianza.
-        </p>
+    <section className={styles.trustPage}>
+      <div className={styles.inner}>
+        <header className={styles.hero}>
+          <p className={styles.eyebrow}>{page.eyebrow}</p>
+          <h1 className={styles.title}>{page.title}</h1>
+          <p className={styles.lead}>{page.lead}</p>
+          <div className={styles.actions}>
+            {page.links.map((link, index) =>
+              "external" in link && link.external ? (
+                <a
+                  key={link.href}
+                  className={styles.actionLink}
+                  data-secondary={index > 0}
+                  href={link.href}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {link.label}
+                </a>
+              ) : (
+                <Link
+                  key={link.href}
+                  className={styles.actionLink}
+                  data-secondary={index > 0}
+                  href={link.href}
+                >
+                  {link.label}
+                </Link>
+              )
+            )}
+          </div>
+        </header>
+
+        <div className={styles.sections}>
+          {page.sections.map((section) => (
+            <section key={section.title} className={styles.section}>
+              <h2>{section.title}</h2>
+              <div>
+                {section.body.map((paragraph) => (
+                  <p key={paragraph}>{paragraph}</p>
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
       </div>
     </section>
   );

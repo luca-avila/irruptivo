@@ -104,6 +104,54 @@ export type PublicProductSlugLookup =
       status: "not_found";
     };
 
+export const PRODUCT_LISTING_ALL_FILTER_VALUE = "todo";
+
+export type ProductListingFilterOptionView = {
+  label: string;
+  value: string;
+  isActive: boolean;
+};
+
+export type ProductListingEmptyState =
+  | {
+      reason: "empty_catalog";
+    }
+  | {
+      reason: "empty_filter";
+      selectedLabel: string;
+    };
+
+export type ClothingCollectionListingQuery = {
+  subcategory?: string | null;
+};
+
+export type ClothingCollectionListingView = {
+  filters: ProductListingFilterOptionView[];
+  products: PublicProductCardView[];
+  emptyState: ProductListingEmptyState | null;
+  selectedSubcategory: string | null;
+};
+
+export type ProductSearchResultView = PublicProductCardView & {
+  href: string;
+  areaLabel: string;
+};
+
+export type ProductSearchEmptyState =
+  | {
+      reason: "empty_query";
+    }
+  | {
+      reason: "no_results";
+      query: string;
+    };
+
+export type ProductSearchView = {
+  query: string;
+  results: ProductSearchResultView[];
+  emptyState: ProductSearchEmptyState | null;
+};
+
 export const demoCatalogProducts = [
   {
     id: "irruptivo-training-tee",
@@ -218,16 +266,86 @@ export function listActiveProducts(
 ): PublicProductCardView[] {
   assertUniqueSlugs(products);
 
-  return products
-    .filter((product) => product.status === PRODUCT_STATUS.active)
-    .map(getProductCardView);
+  return getActiveProductRecords(products).map(getProductCardView);
 }
 
 export function listActiveProductsByArea(
   area: ProductArea,
   products: readonly CatalogProductRecord[] = demoCatalogProducts
 ): PublicProductCardView[] {
-  return listActiveProducts(products).filter((product) => product.area === area);
+  assertUniqueSlugs(products);
+
+  return getActiveProductRecordsByArea(area, products).map(getProductCardView);
+}
+
+export function searchActiveProductsByName(
+  query: string | null | undefined,
+  products: readonly CatalogProductRecord[] = demoCatalogProducts
+): ProductSearchView {
+  assertUniqueSlugs(products);
+
+  const normalizedQuery = normalizeSearchQuery(query);
+
+  if (!normalizedQuery) {
+    return {
+      query: "",
+      results: [],
+      emptyState: {
+        reason: "empty_query"
+      }
+    };
+  }
+
+  const normalizedMatchText = normalizeSearchText(normalizedQuery);
+  const results = getActiveProductRecords(products)
+    .filter((product) =>
+      normalizeSearchText(product.name).includes(normalizedMatchText)
+    )
+    .map(getProductSearchResultView);
+
+  return {
+    query: normalizedQuery,
+    results,
+    emptyState:
+      results.length > 0
+        ? null
+        : {
+            reason: "no_results",
+            query: normalizedQuery
+          }
+  };
+}
+
+export function getClothingCollectionListing(
+  query: ClothingCollectionListingQuery = {},
+  products: readonly CatalogProductRecord[] = demoCatalogProducts
+): ClothingCollectionListingView {
+  assertUniqueSlugs(products);
+
+  const activeClothingProducts = getActiveProductRecordsByArea(
+    PRODUCT_AREA.clothing,
+    products
+  );
+  const selectedSubcategory = normalizeListingFilterValue(query.subcategory);
+  const filteredProducts = selectedSubcategory
+    ? activeClothingProducts.filter(
+        (product) => getClothingSubcategoryLabel(product) === selectedSubcategory
+      )
+    : activeClothingProducts;
+
+  return {
+    filters: getClothingSubcategoryFilters(
+      activeClothingProducts,
+      selectedSubcategory
+    ),
+    products: filteredProducts.map(getProductCardView),
+    emptyState: getProductListingEmptyState({
+      totalProducts: activeClothingProducts.length,
+      visibleProducts: filteredProducts.length,
+      selectedLabel: selectedSubcategory
+    }),
+    selectedSubcategory
+  };
 }
 
 export function getPublicProductBySlug(
@@ -269,6 +387,16 @@ export function getProductCardView(
     priceArs: getLowestEffectivePrice(product),
     availabilityLabel,
     isAvailable: availabilityLabel !== AVAILABILITY_LABEL.outOfStock
+  };
+}
+
+function getProductSearchResultView(
+  product: CatalogProductRecord
+): ProductSearchResultView {
+  return {
+    ...getProductCardView(product),
+    href: getProductDetailHref(product),
+    areaLabel: getProductAreaLabel(product.area)
   };
 }
 
@@ -334,10 +462,134 @@ function getEffectiveVariantPrice(
 
 function getContextLabel(product: CatalogProductRecord): string {
   if (product.area === PRODUCT_AREA.clothing) {
-    return product.clothingSubcategory ?? "Colección";
+    return getClothingSubcategoryLabel(product) ?? "Colección";
   }
 
   return product.supplementType ?? "Suplementos";
+}
+
+function getActiveProductRecords(
+  products: readonly CatalogProductRecord[]
+): CatalogProductRecord[] {
+  return products.filter((product) => product.status === PRODUCT_STATUS.active);
+}
+
+function getActiveProductRecordsByArea(
+  area: ProductArea,
+  products: readonly CatalogProductRecord[]
+): CatalogProductRecord[] {
+  return getActiveProductRecords(products).filter((product) => product.area === area);
+}
+
+function getProductDetailHref(product: CatalogProductRecord): string {
+  if (product.area === PRODUCT_AREA.clothing) {
+    return `/coleccion/${product.slug}`;
+  }
+
+  return `/suplementos/${product.slug}`;
+}
+
+function getProductAreaLabel(area: ProductArea): string {
+  if (area === PRODUCT_AREA.clothing) {
+    return "Colección";
+  }
+
+  return "Suplementos";
+}
+
+function normalizeSearchQuery(query: string | null | undefined): string {
+  return query?.trim() ?? "";
+}
+
+function normalizeSearchText(value: string): string {
+  return value.toLocaleLowerCase("es-AR");
+}
+
+function getClothingSubcategoryFilters(
+  activeClothingProducts: readonly CatalogProductRecord[],
+  selectedSubcategory: string | null
+): ProductListingFilterOptionView[] {
+  const filters: ProductListingFilterOptionView[] = [
+    {
+      label: "Todo",
+      value: PRODUCT_LISTING_ALL_FILTER_VALUE,
+      isActive: selectedSubcategory === null
+    }
+  ];
+
+  for (const subcategory of getUniqueClothingSubcategories(activeClothingProducts)) {
+    filters.push({
+      label: subcategory,
+      value: subcategory,
+      isActive: selectedSubcategory === subcategory
+    });
+  }
+
+  return filters;
+}
+
+function getUniqueClothingSubcategories(
+  activeClothingProducts: readonly CatalogProductRecord[]
+): string[] {
+  const seenSubcategories = new Set<string>();
+  const subcategories: string[] = [];
+
+  for (const product of activeClothingProducts) {
+    const subcategory = getClothingSubcategoryLabel(product);
+
+    if (!subcategory || seenSubcategories.has(subcategory)) {
+      continue;
+    }
+
+    seenSubcategories.add(subcategory);
+    subcategories.push(subcategory);
+  }
+
+  return subcategories;
+}
+
+function getClothingSubcategoryLabel(
+  product: CatalogProductRecord
+): string | null {
+  return product.clothingSubcategory?.trim() || null;
+}
+
+function normalizeListingFilterValue(value?: string | null): string | null {
+  const normalizedValue = value?.trim();
+
+  if (
+    !normalizedValue ||
+    normalizedValue.toLowerCase() === PRODUCT_LISTING_ALL_FILTER_VALUE
+  ) {
+    return null;
+  }
+
+  return normalizedValue;
+}
+
+function getProductListingEmptyState({
+  totalProducts,
+  visibleProducts,
+  selectedLabel
+}: {
+  totalProducts: number;
+  visibleProducts: number;
+  selectedLabel: string | null;
+}): ProductListingEmptyState | null {
+  if (visibleProducts > 0) {
+    return null;
+  }
+
+  if (totalProducts === 0) {
+    return {
+      reason: "empty_catalog"
+    };
+  }
+
+  return {
+    reason: "empty_filter",
+    selectedLabel: selectedLabel ?? ""
+  };
 }
 
 function assertHasVariant(product: CatalogProductRecord): void {

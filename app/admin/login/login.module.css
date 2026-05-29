@@ -1,0 +1,154 @@
+.page {
+  display: grid;
+  min-height: 100svh;
+  place-items: center;
+  padding: 1.25rem;
+  background:
+    linear-gradient(135deg, rgba(17, 17, 17, 0.05), transparent 36rem),
+    #f3f1ec;
+}
+
+.panel {
+  width: min(100%, 27rem);
+  padding: 1.35rem;
+  border: 1px solid rgba(17, 17, 17, 0.1);
+  border-radius: 8px;
+  background: #fffdf8;
+  box-shadow: 0 1.5rem 4rem rgba(17, 17, 17, 0.08);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-bottom: 2rem;
+  color: #111111;
+  font-size: 0.78rem;
+  font-weight: 850;
+  letter-spacing: 0.12em;
+}
+
+.brandIcon {
+  display: grid;
+  width: 2.2rem;
+  height: 2.2rem;
+  place-items: center;
+  border-radius: 8px;
+  background: #c7f23a;
+  color: #111111;
+}
+
+.eyebrow {
+  margin: 0 0 0.55rem;
+  color: #706c64;
+  font-size: 0.76rem;
+  font-weight: 850;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.title {
+  margin: 0;
+  color: #111111;
+  font-size: 2rem;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.copy {
+  margin: 0.9rem 0 0;
+  color: #5f5b54;
+  font-size: 0.96rem;
+  line-height: 1.55;
+}
+
+.feedback {
+  margin-top: 1.1rem;
+  padding: 0.9rem;
+  border: 1px solid rgba(17, 17, 17, 0.12);
+  border-radius: 8px;
+  background: #f7f4ee;
+  color: #37342f;
+}
+
+.feedbackError {
+  border-color: rgba(146, 43, 43, 0.24);
+  background: #fff0ed;
+}
+
+.feedbackTitle {
+  display: block;
+  margin-bottom: 0.25rem;
+  font-size: 0.9rem;
+  font-weight: 850;
+}
+
+.feedbackMessage {
+  display: block;
+  color: #5f5b54;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.form {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1.25rem;
+}
+
+.field {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.label {
+  color: #37342f;
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.input {
+  width: 100%;
+  min-height: 3rem;
+  padding: 0 0.85rem;
+  border: 1px solid rgba(17, 17, 17, 0.16);
+  border-radius: 8px;
+  background: #ffffff;
+  color: #111111;
+  font: inherit;
+}
+
+.input:focus {
+  border-color: #111111;
+  outline: 2px solid rgba(199, 242, 58, 0.7);
+  outline-offset: 2px;
+}
+
+.submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 3rem;
+  border: 0;
+  border-radius: 8px;
+  background: #111111;
+  color: #ffffff;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.secondaryLink {
+  display: inline-flex;
+  width: fit-content;
+  margin-top: 1.1rem;
+  color: #5f5b54;
+  font-size: 0.9rem;
+  font-weight: 750;
+}
+
+@media (min-width: 42rem) {
+  .panel {
+    padding: 1.75rem;
+  }
+}

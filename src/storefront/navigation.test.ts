@@ -4,7 +4,8 @@ import {
   contactLink,
   getStoredCartItemCount,
   instagramLink,
-  storefrontMenuRoutes
+  storefrontMenuRoutes,
+  storefrontTrustRoutes
 } from "./navigation";
 
 describe("storefront navigation shell", () => {
@@ -20,6 +21,12 @@ describe("storefront navigation shell", () => {
     expect(labels).not.toContain("login");
     expect(labels).not.toContain("registrarse");
     expect(labels).not.toContain("mi cuenta");
+  });
+
+  it("exposes trust routes for public navigation", () => {
+    expect(storefrontTrustRoutes).toEqual([
+      { label: "Envíos y cambios", href: "/envios-y-cambios" }
+    ]);
   });
 
   it("keeps contact and instagram as external public links", () => {
