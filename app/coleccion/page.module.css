@@ -73,13 +73,18 @@
 .productGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.45rem 0.35rem;
+  gap: 1.1rem 0.6rem;
 }
 
 .productCard {
   display: block;
   min-width: 0;
   color: #101010;
+  transition: transform 0.12s ease;
+}
+
+.productCard:active {
+  transform: scale(0.99);
 }
 
 .productImageFrame {
@@ -91,6 +96,18 @@
 
 .productImage {
   object-fit: cover;
+  transition: transform 0.55s ease;
+}
+
+@media (hover: hover) {
+  .productCard:hover .productImage {
+    transform: scale(1.05);
+  }
+
+  .productCard:hover .productName {
+    text-decoration: underline;
+    text-underline-offset: 0.16em;
+  }
 }
 
 .productImagePlaceholder {
@@ -187,6 +204,19 @@
   color: #ffffff;
   font-size: 0.95rem;
   font-weight: 800;
+  transition:
+    background-color 0.18s ease,
+    transform 0.12s ease;
+}
+
+.emptyAction:active {
+  transform: scale(0.98);
+}
+
+@media (hover: hover) {
+  .emptyAction:hover {
+    background: #000000;
+  }
 }
 
 @media (min-width: 760px) {

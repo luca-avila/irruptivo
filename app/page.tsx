@@ -10,7 +10,7 @@ import {
 import Link from "next/link";
 import type { ReactNode } from "react";
 
-import { type PublicProductCardView } from "../src/catalog/catalog";
+import { PRODUCT_AREA, type PublicProductCardView } from "../src/catalog/catalog";
 import { getHomepageFeaturedProducts } from "../src/storefront/homepage";
 import { contactLink, instagramLink } from "../src/storefront/navigation";
 
@@ -179,8 +179,15 @@ type ProductCardProps = {
 };
 
 function ProductCard({ product, compact = false }: ProductCardProps) {
+  const basePath =
+    product.area === PRODUCT_AREA.supplement ? "/suplementos" : "/coleccion";
+
   return (
-    <article className={compact ? "homepage-product-card is-compact" : "homepage-product-card"}>
+    <Link
+      className={compact ? "homepage-product-card is-compact" : "homepage-product-card"}
+      href={`${basePath}/${product.slug}`}
+      aria-label={`Ver ${product.name}`}
+    >
       <div className="homepage-product-card__media">
         {product.image ? (
           <img src={product.image.path} alt={product.image.alt} loading="lazy" />
@@ -196,7 +203,7 @@ function ProductCard({ product, compact = false }: ProductCardProps) {
           <span>{product.availabilityLabel}</span>
         </div>
       </div>
-    </article>
+    </Link>
   );
 }
 

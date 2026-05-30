@@ -59,6 +59,25 @@
   background: #111111;
   color: #ffffff;
   font-weight: 850;
+  transition:
+    background-color 0.18s ease,
+    border-color 0.18s ease,
+    transform 0.12s ease;
+}
+
+.actionLink:active {
+  transform: scale(0.98);
+}
+
+@media (hover: hover) {
+  .actionLink:hover {
+    background: #000000;
+  }
+
+  .actionLink[data-secondary="true"]:hover {
+    background: rgba(17, 17, 17, 0.06);
+    border-color: rgba(17, 17, 17, 0.4);
+  }
 }
 
 .actionLink[data-secondary="true"] {
