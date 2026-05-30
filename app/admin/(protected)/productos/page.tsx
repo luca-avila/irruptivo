@@ -171,6 +171,8 @@ function getProductErrorMessage(error: ProductManagementErrorCode): string {
   switch (error) {
     case "cannot_publish_without_variants":
       return "El producto necesita al menos una variante/SKU para activarse.";
+    case "duplicate_variant_sku":
+      return "Ya existe una variante/SKU con ese código.";
     case "not_found":
       return "No encontramos el producto solicitado.";
     case "validation":

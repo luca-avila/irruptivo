@@ -5,11 +5,16 @@ import {
   PRODUCT_STATUS,
   type CatalogProductRecord
 } from "../catalog/catalog";
+import { getProductDetailView } from "../catalog/catalog";
+import { AVAILABILITY_LABEL } from "../domain/rules";
 import {
+  addProductVariant,
   canPublishProduct,
   createProduct,
+  getAdminProductVariantViews,
   setProductStatus,
   updateProduct,
+  updateProductVariant,
   type ProductUpdateInput
 } from "./products";
 
@@ -28,7 +33,11 @@ const baseProducts = [
         id: "training-tee-m",
         sku: "TEE-BLK-M",
         name: "Negro / M",
-        stock: 4
+        stock: 4,
+        options: {
+          color: "Negro",
+          size: "M"
+        }
       }
     ],
     images: []
@@ -159,6 +168,251 @@ describe("admin product management", () => {
         clothingSubcategory: null,
         basePriceArs: 31000
       }
+    });
+  });
+
+  it("adds clothing variants with option values, exact stock and price overrides", () => {
+    const result = addProductVariant(
+      "empty-shell",
+      {
+        sku: "CAMP-BLK-M",
+        color: "Negro",
+        size: "M",
+        stock: 2,
+        priceOverrideArs: 61000
+      },
+      baseProducts
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      product: {
+        variants: [
+          {
+            sku: "CAMP-BLK-M",
+            name: "Negro / M",
+            stock: 2,
+            priceOverrideArs: 61000,
+            options: {
+              color: "Negro",
+              size: "M"
+            }
+          }
+        ]
+      }
+    });
+
+    if (!result.ok) {
+      throw new Error("Expected variant creation to succeed");
+    }
+
+    expect(getAdminProductVariantViews(result.product)[0]).toMatchObject({
+      sku: "CAMP-BLK-M",
+      stockCount: 2,
+      stockLabel: "2 unidades",
+      effectivePriceArs: 61000,
+      availabilityLabel: AVAILABILITY_LABEL.lowStock
+    });
+  });
+
+  it("adds supplement variants with flavor, weight and presentation values", () => {
+    const supplementProducts = [
+      ...baseProducts,
+      {
+        id: "whey-shell",
+        slug: "whey-shell",
+        name: "Whey",
+        description: "Proteina en polvo.",
+        area: PRODUCT_AREA.supplement,
+        status: PRODUCT_STATUS.inactive,
+        basePriceArs: 32000,
+        supplementType: "Proteina",
+        variants: [],
+        images: []
+      }
+    ] satisfies CatalogProductRecord[];
+
+    const result = addProductVariant(
+      "whey-shell",
+      {
+        sku: "WHEY-CHO-1KG",
+        flavor: "Chocolate",
+        weight: "1 kg",
+        presentation: "Polvo",
+        stock: 5,
+        priceOverrideArs: null
+      },
+      supplementProducts
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      product: {
+        variants: [
+          {
+            sku: "WHEY-CHO-1KG",
+            name: "Chocolate / 1 kg / Polvo",
+            stock: 5,
+            priceOverrideArs: null,
+            options: {
+              flavor: "Chocolate",
+              weight: "1 kg",
+              presentation: "Polvo"
+            }
+          }
+        ]
+      }
+    });
+  });
+
+  it("allows activation once a valid variant exists", () => {
+    const withVariant = addProductVariant(
+      "empty-shell",
+      {
+        sku: "CAMP-BLK-M",
+        color: "Negro",
+        size: "M",
+        stock: 0,
+        priceOverrideArs: null
+      },
+      baseProducts
+    );
+
+    if (!withVariant.ok) {
+      throw new Error("Expected variant creation to succeed");
+    }
+
+    expect(canPublishProduct(withVariant.product)).toBe(true);
+    expect(
+      setProductStatus("empty-shell", PRODUCT_STATUS.active, withVariant.products)
+    ).toMatchObject({
+      ok: true,
+      product: {
+        status: PRODUCT_STATUS.active
+      }
+    });
+  });
+
+  it("updates variant stock and keeps exact counts admin-only", () => {
+    const withVariant = addProductVariant(
+      "empty-shell",
+      {
+        sku: "CAMP-BLK-M",
+        color: "Negro",
+        size: "M",
+        stock: 4,
+        priceOverrideArs: null
+      },
+      baseProducts
+    );
+
+    if (!withVariant.ok) {
+      throw new Error("Expected variant creation to succeed");
+    }
+
+    const variantId = withVariant.product.variants[0]?.id;
+    const updated = updateProductVariant(
+      "empty-shell",
+      variantId ?? "",
+      {
+        sku: "CAMP-BLK-M",
+        color: "Negro",
+        size: "M",
+        stock: 0,
+        priceOverrideArs: 58000
+      },
+      withVariant.products
+    );
+
+    expect(updated).toMatchObject({
+      ok: true,
+      product: {
+        variants: [
+          {
+            stock: 0,
+            priceOverrideArs: 58000
+          }
+        ]
+      }
+    });
+
+    if (!updated.ok) {
+      throw new Error("Expected variant update to succeed");
+    }
+
+    const adminVariant = getAdminProductVariantViews(updated.product)[0];
+    const publicDetail = getProductDetailView(updated.product);
+
+    expect(adminVariant).toMatchObject({
+      stockCount: 0,
+      stockLabel: "0 unidades",
+      availabilityLabel: AVAILABILITY_LABEL.outOfStock
+    });
+    expect(publicDetail.variants[0]).toMatchObject({
+      availabilityLabel: AVAILABILITY_LABEL.outOfStock,
+      effectivePriceArs: 58000,
+      isAvailable: false
+    });
+    expect(publicDetail.variants[0]).not.toHaveProperty("stock");
+    expect(JSON.stringify(publicDetail)).not.toContain('"stock"');
+  });
+
+  it("rejects duplicate SKUs within a product with a localized error", () => {
+    const result = addProductVariant(
+      "training-tee",
+      {
+        sku: "tee-blk-m",
+        color: "Negro",
+        size: "L",
+        stock: 3,
+        priceOverrideArs: null
+      },
+      baseProducts
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: "duplicate_variant_sku",
+        message: "Ya existe una variante/SKU con ese código."
+      }
+    });
+  });
+
+  it("rejects updating a variant to an SKU used by another variant", () => {
+    const withSecondVariant = addProductVariant(
+      "training-tee",
+      {
+        sku: "TEE-BLK-L",
+        color: "Negro",
+        size: "L",
+        stock: 2,
+        priceOverrideArs: null
+      },
+      baseProducts
+    );
+
+    if (!withSecondVariant.ok) {
+      throw new Error("Expected variant creation to succeed");
+    }
+
+    const secondVariantId = withSecondVariant.product.variants[1]?.id;
+    const result = updateProductVariant(
+      "training-tee",
+      secondVariantId ?? "",
+      {
+        sku: "tee-blk-m",
+        color: "Negro",
+        size: "L",
+        stock: 2,
+        priceOverrideArs: null
+      },
+      withSecondVariant.products
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: "duplicate_variant_sku" }
     });
   });
 });

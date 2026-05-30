@@ -11,6 +11,15 @@ import {
   type ProductStatus,
   type VariantOptionValues
 } from "../catalog/catalog";
+import { getAvailableStock } from "../catalog/stock";
+import {
+  createVariant as createCatalogVariant,
+  getVariantAvailability,
+  isValidSellableVariant,
+  resolveUnitPrice,
+  updateVariant as updateCatalogVariant
+} from "../catalog/variants";
+import { type AvailabilityLabel } from "../domain/rules";
 
 export type ProductCreateInput = {
   name: string;
@@ -31,9 +40,21 @@ export type ProductUpdateInput = {
   basePriceArs: number;
 };
 
+export type ProductVariantInput = {
+  sku: string;
+  stock: number;
+  priceOverrideArs?: number | null;
+  color?: string | null;
+  size?: string | null;
+  flavor?: string | null;
+  weight?: string | null;
+  presentation?: string | null;
+};
+
 export type ProductManagementErrorCode =
   | "validation"
   | "not_found"
+  | "duplicate_variant_sku"
   | "cannot_publish_without_variants";
 
 export type ProductManagementError = {
@@ -72,6 +93,22 @@ export type AdminProductListView = {
   inactiveProductCount: number;
 };
 
+export type AdminProductVariantView = {
+  id: string;
+  sku: string;
+  name: string;
+  options: VariantOptionValues;
+  optionSummary: string;
+  stockCount: number;
+  stockLabel: string;
+  priceOverrideArs: number | null;
+  priceOverrideLabel: string;
+  effectivePriceArs: number;
+  effectivePriceLabel: string;
+  availabilityLabel: AvailabilityLabel;
+  isAvailable: boolean;
+};
+
 const productAreaSchema = z.enum([PRODUCT_AREA.clothing, PRODUCT_AREA.supplement]);
 const productStatusSchema = z.enum([
   PRODUCT_STATUS.active,
@@ -105,6 +142,23 @@ const productInputSchema = z
   }));
 
 type NormalizedProductInput = z.infer<typeof productInputSchema>;
+
+const priceOverrideSchema = z
+  .union([z.coerce.number().int().positive(), z.null()])
+  .optional()
+  .transform((value) => value ?? null);
+const variantInputSchema = z.object({
+  sku: requiredTextSchema,
+  stock: z.coerce.number().int().min(0),
+  priceOverrideArs: priceOverrideSchema,
+  color: optionalTextSchema,
+  size: optionalTextSchema,
+  flavor: optionalTextSchema,
+  weight: optionalTextSchema,
+  presentation: optionalTextSchema
+});
+
+type NormalizedVariantInput = z.infer<typeof variantInputSchema>;
 
 const mutableDemoCatalogProducts =
   demoCatalogProducts as unknown as CatalogProductRecord[];
@@ -259,10 +313,160 @@ export function setProductStatus(
   };
 }
 
+export function addProductVariant(
+  productId: string,
+  input: ProductVariantInput,
+  products: readonly CatalogProductRecord[] = readAdminProductRecords()
+): ProductManagementResult {
+  const productIndex = products.findIndex((product) => product.id === productId);
+
+  if (productIndex === -1) {
+    return getNotFoundError();
+  }
+
+  const normalizedInput = normalizeVariantInput(input);
+
+  if (!normalizedInput) {
+    return getValidationError();
+  }
+
+  const currentProduct = products[productIndex];
+
+  if (hasDuplicateVariantSku(normalizedInput.sku, currentProduct.variants)) {
+    return getDuplicateVariantSkuError();
+  }
+
+  const variant = createCatalogVariant({
+    productId: currentProduct.id,
+    area: currentProduct.area,
+    sku: normalizedInput.sku,
+    stock: normalizedInput.stock,
+    priceOverrideArs: normalizedInput.priceOverrideArs,
+    options: getVariantOptions(normalizedInput),
+    existingVariants: currentProduct.variants
+  });
+
+  if (!variant) {
+    return getValidationError();
+  }
+
+  const nextProduct: CatalogProductRecord = {
+    ...currentProduct,
+    variants: [...currentProduct.variants.map(cloneVariantRecord), variant]
+  };
+  const nextProducts = cloneProductRecords(products);
+  nextProducts[productIndex] = nextProduct;
+
+  return {
+    ok: true,
+    product: nextProduct,
+    products: nextProducts
+  };
+}
+
+export function updateProductVariant(
+  productId: string,
+  variantId: string,
+  input: ProductVariantInput,
+  products: readonly CatalogProductRecord[] = readAdminProductRecords()
+): ProductManagementResult {
+  const productIndex = products.findIndex((product) => product.id === productId);
+
+  if (productIndex === -1) {
+    return getNotFoundError();
+  }
+
+  const normalizedInput = normalizeVariantInput(input);
+
+  if (!normalizedInput) {
+    return getValidationError();
+  }
+
+  const currentProduct = products[productIndex];
+  const variantIndex = currentProduct.variants.findIndex(
+    (variant) => variant.id === variantId
+  );
+
+  if (variantIndex === -1) {
+    return getNotFoundError();
+  }
+
+  if (
+    hasDuplicateVariantSku(
+      normalizedInput.sku,
+      currentProduct.variants,
+      currentProduct.variants[variantIndex].id
+    )
+  ) {
+    return getDuplicateVariantSkuError();
+  }
+
+  const variant = updateCatalogVariant(currentProduct.variants[variantIndex], {
+    area: currentProduct.area,
+    sku: normalizedInput.sku,
+    stock: normalizedInput.stock,
+    priceOverrideArs: normalizedInput.priceOverrideArs,
+    options: getVariantOptions(normalizedInput)
+  });
+
+  if (!variant) {
+    return getValidationError();
+  }
+
+  const nextVariants = currentProduct.variants.map((currentVariant, index) =>
+    index === variantIndex ? variant : cloneVariantRecord(currentVariant)
+  );
+  const nextProduct: CatalogProductRecord = {
+    ...currentProduct,
+    variants: nextVariants
+  };
+  const nextProducts = cloneProductRecords(products);
+  nextProducts[productIndex] = nextProduct;
+
+  return {
+    ok: true,
+    product: nextProduct,
+    products: nextProducts
+  };
+}
+
 export function canPublishProduct(
-  product: Pick<CatalogProductRecord, "variants">
+  product: Pick<CatalogProductRecord, "area" | "variants">
 ): boolean {
-  return product.variants.length > 0;
+  return product.variants.some((variant) =>
+    isValidSellableVariant(product.area, variant)
+  );
+}
+
+export function getAdminProductVariantViews(
+  product: CatalogProductRecord
+): AdminProductVariantView[] {
+  return product.variants.map((variant) => {
+    const availability = getVariantAvailability(variant);
+    const effectivePriceArs = resolveUnitPrice({
+      productBasePriceArs: product.basePriceArs,
+      variantPriceOverrideArs: variant.priceOverrideArs
+    });
+
+    return {
+      id: variant.id,
+      sku: variant.sku,
+      name: variant.name,
+      options: variant.options ?? {},
+      optionSummary: getVariantOptionSummary(product.area, variant.options),
+      stockCount: getAvailableStock(variant),
+      stockLabel: formatUnitCount(getAvailableStock(variant)),
+      priceOverrideArs: variant.priceOverrideArs ?? null,
+      priceOverrideLabel:
+        variant.priceOverrideArs === null || variant.priceOverrideArs === undefined
+          ? "Usa precio base"
+          : formatPriceArs(variant.priceOverrideArs),
+      effectivePriceArs,
+      effectivePriceLabel: formatPriceArs(effectivePriceArs),
+      availabilityLabel: availability.availabilityLabel,
+      isAvailable: availability.isAvailable
+    };
+  });
 }
 
 export function getAdminProductAreaLabel(area: ProductArea): string {
@@ -287,6 +491,36 @@ function normalizeProductInput(
   const parsedInput = productInputSchema.safeParse(input);
 
   return parsedInput.success ? parsedInput.data : null;
+}
+
+function normalizeVariantInput(
+  input: ProductVariantInput
+): NormalizedVariantInput | null {
+  const parsedInput = variantInputSchema.safeParse(input);
+
+  return parsedInput.success ? parsedInput.data : null;
+}
+
+function getVariantOptions(input: NormalizedVariantInput): VariantOptionValues {
+  return {
+    color: input.color ?? undefined,
+    size: input.size ?? undefined,
+    flavor: input.flavor ?? undefined,
+    weight: input.weight ?? undefined,
+    presentation: input.presentation ?? undefined
+  };
+}
+
+function hasDuplicateVariantSku(
+  sku: string,
+  variants: readonly CatalogProductVariantRecord[],
+  ignoredVariantId?: string
+): boolean {
+  return variants.some(
+    (variant) =>
+      variant.id !== ignoredVariantId &&
+      normalizeSku(variant.sku) === normalizeSku(sku)
+  );
 }
 
 function getAdminProductListItemView(
@@ -315,6 +549,21 @@ function getAdminProductContextLabel(product: CatalogProductRecord): string {
   }
 
   return product.supplementType?.trim() || "Sin tipo";
+}
+
+function getVariantOptionSummary(
+  area: ProductArea,
+  options: VariantOptionValues | undefined
+): string {
+  const optionKeys: (keyof VariantOptionValues)[] =
+    area === PRODUCT_AREA.clothing
+      ? ["color", "size"]
+      : ["flavor", "weight", "presentation"];
+  const optionValues = optionKeys
+    .map((optionKey) => options?.[optionKey])
+    .filter((value): value is string => Boolean(value));
+
+  return optionValues.length > 0 ? optionValues.join(" / ") : "Sin opciones";
 }
 
 function generateUniqueProductId(
@@ -375,6 +624,10 @@ function normalizeText(value: string): string {
   return value.trim().replace(/\s+/g, " ");
 }
 
+function normalizeSku(value: string): string {
+  return normalizeText(value).toLocaleUpperCase("es-AR");
+}
+
 function normalizeOptionalText(value: string | null | undefined): string | null {
   const normalizedValue = value?.trim().replace(/\s+/g, " ") ?? "";
 
@@ -424,6 +677,10 @@ function formatPriceArs(priceArs: number): string {
   }).format(priceArs);
 }
 
+function formatUnitCount(stock: number): string {
+  return stock === 1 ? "1 unidad" : `${stock} unidades`;
+}
+
 function getValidationError(): ProductManagementResult {
   return {
     ok: false,
@@ -440,6 +697,16 @@ function getNotFoundError(): ProductManagementResult {
     error: {
       code: "not_found",
       message: "No encontramos el producto solicitado."
+    }
+  };
+}
+
+function getDuplicateVariantSkuError(): ProductManagementResult {
+  return {
+    ok: false,
+    error: {
+      code: "duplicate_variant_sku",
+      message: "Ya existe una variante/SKU con ese código."
     }
   };
 }

@@ -7,6 +7,7 @@ import {
 } from "../../../../../../src/admin/products";
 import styles from "../../../admin.module.css";
 import { ProductForm } from "../../product-form";
+import { VariantManagement } from "../../variant-management";
 
 type EditProductPageProps = {
   params: Promise<{
@@ -57,6 +58,8 @@ export default async function EditProductPage({
         product={product}
         submitLabel="Guardar cambios"
       />
+
+      <VariantManagement product={product} />
     </>
   );
 }
@@ -79,6 +82,17 @@ function getProductFeedbackMessage({
     return { tone: "success", message: "Producto actualizado correctamente." };
   }
 
+  if (state === "variante-creada") {
+    return { tone: "success", message: "Variante/SKU creada correctamente." };
+  }
+
+  if (state === "variante-actualizada") {
+    return {
+      tone: "success",
+      message: "Variante/SKU actualizada correctamente."
+    };
+  }
+
   return null;
 }
 
@@ -86,6 +100,8 @@ function getProductErrorMessage(error: ProductManagementErrorCode): string {
   switch (error) {
     case "cannot_publish_without_variants":
       return "El producto necesita al menos una variante/SKU para activarse.";
+    case "duplicate_variant_sku":
+      return "Ya existe una variante/SKU con ese código.";
     case "not_found":
       return "No encontramos el producto solicitado.";
     case "validation":
