@@ -14,6 +14,7 @@ import {
   type ProductVariantSelectionView
 } from "../../catalog/product-detail";
 import { contactLink, instagramLink } from "../navigation";
+import { AddToCartControl } from "./add-to-cart-control";
 import styles from "./product-detail-page.module.css";
 
 type SearchParamValue = string | string[] | undefined;
@@ -280,17 +281,13 @@ function PurchaseReadiness({
   selection: ProductVariantSelectionView;
 }) {
   return (
-    <section className={styles.ctaArea} aria-label="Compra del producto">
-      <button
-        className={styles.addButton}
-        type="button"
-        disabled={!selection.canAddToCart}
-        aria-label={`Añadir ${product.name} al carrito`}
-      >
-        Añadir al carrito
-      </button>
-      <p className={styles.ctaHelp}>{getReadinessCopy(selection)}</p>
-    </section>
+    <AddToCartControl
+      productId={product.id}
+      productName={product.name}
+      variantId={selection.selectedVariant?.id}
+      canAddToCart={selection.canAddToCart}
+      readinessCopy={getReadinessCopy(selection)}
+    />
   );
 }
 

@@ -165,6 +165,69 @@ describe("product catalog read path", () => {
     ]);
   });
 
+  it("uses non-deleted image renditions in admin-defined order for public views", () => {
+    const product = {
+      ...products[0],
+      images: [
+        {
+          id: "deleted-primary",
+          path: "products/hoodie/deleted/detail.webp",
+          alt: "Imagen eliminada",
+          sortOrder: 1,
+          deletedAt: "2026-05-30T12:00:00.000Z",
+          renditions: {
+            card: {
+              path: "products/hoodie/deleted/card.webp",
+              width: 640,
+              height: 853
+            },
+            detail: {
+              path: "products/hoodie/deleted/detail.webp",
+              width: 1200,
+              height: 1600
+            },
+            original: {
+              path: "products/hoodie/deleted/original.webp",
+              width: 1800,
+              height: 2400
+            }
+          }
+        },
+        {
+          id: "secondary",
+          path: "products/hoodie/secondary/detail.webp",
+          alt: "Hoodie detalle",
+          sortOrder: 2,
+          deletedAt: null,
+          renditions: {
+            card: {
+              path: "products/hoodie/secondary/card.webp",
+              width: 640,
+              height: 853
+            },
+            detail: {
+              path: "products/hoodie/secondary/detail.webp",
+              width: 1200,
+              height: 1600
+            },
+            original: {
+              path: "products/hoodie/secondary/original.webp",
+              width: 1800,
+              height: 2400
+            }
+          }
+        }
+      ]
+    } satisfies CatalogProductRecord;
+
+    expect(getProductCardView(product).image?.path).toBe(
+      "/media/products/hoodie/secondary/card.webp"
+    );
+    expect(getProductDetailView(product).images.map((image) => image.path)).toEqual([
+      "/media/products/hoodie/secondary/detail.webp"
+    ]);
+  });
+
   it("resolves public prices from variant override when present", () => {
     expect(getProductCardView(products[2])).toMatchObject({
       priceArs: 33700

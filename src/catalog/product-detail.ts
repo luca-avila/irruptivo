@@ -1,9 +1,5 @@
-import {
-  AVAILABILITY_LABEL,
-  getAvailabilityLabel,
-  resolveUnitPrice,
-  type AvailabilityLabel
-} from "../domain/rules";
+import { type AvailabilityLabel } from "../domain/rules";
+import { getVariantAvailability, resolveUnitPrice } from "./variants";
 import {
   PRODUCT_AREA,
   PRODUCT_STATUS,
@@ -17,10 +13,7 @@ import {
   type VariantOptionValues
 } from "./catalog";
 
-export type PublicVariantAvailabilityView = {
-  availabilityLabel: AvailabilityLabel;
-  isAvailable: boolean;
-};
+export { getVariantAvailability } from "./variants";
 
 export type ProductVariantSelectionStatus =
   | "no_selection"
@@ -60,17 +53,6 @@ type ProductDetailPageInput = {
   selectedOptions: VariantOptionValues;
   products?: readonly CatalogProductRecord[];
 };
-
-export function getVariantAvailability(
-  variant: Pick<CatalogProductVariantRecord, "stock">
-): PublicVariantAvailabilityView {
-  const availabilityLabel = getAvailabilityLabel(variant.stock);
-
-  return {
-    availabilityLabel,
-    isAvailable: availabilityLabel !== AVAILABILITY_LABEL.outOfStock
-  };
-}
 
 export function resolveSelectedVariant(
   product: CatalogProductRecord,

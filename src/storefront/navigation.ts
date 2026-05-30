@@ -1,3 +1,5 @@
+import { getCartCount, hydrateCart } from "../cart/cart";
+
 export const CART_STORAGE_KEY = "irruptivo.cart";
 
 export type StorefrontRoute = {
@@ -41,50 +43,5 @@ export const cartRoute = {
 } as const satisfies StorefrontRoute;
 
 export function getStoredCartItemCount(rawCart: string | null): number {
-  if (!rawCart) {
-    return 0;
-  }
-
-  try {
-    const parsedCart: unknown = JSON.parse(rawCart);
-    const items = getCartItems(parsedCart);
-    let count = 0;
-
-    for (const item of items) {
-      count += getCartItemQuantity(item);
-    }
-
-    return count;
-  } catch {
-    return 0;
-  }
-}
-
-function getCartItems(parsedCart: unknown): unknown[] {
-  if (Array.isArray(parsedCart)) {
-    return parsedCart;
-  }
-
-  if (
-    parsedCart &&
-    typeof parsedCart === "object" &&
-    "items" in parsedCart &&
-    Array.isArray(parsedCart.items)
-  ) {
-    return parsedCart.items;
-  }
-
-  return [];
-}
-
-function getCartItemQuantity(item: unknown): number {
-  if (!item || typeof item !== "object" || !("quantity" in item)) {
-    return 0;
-  }
-
-  const quantity = item.quantity;
-
-  return typeof quantity === "number" && Number.isInteger(quantity) && quantity > 0
-    ? quantity
-    : 0;
+  return getCartCount(hydrateCart(rawCart));
 }

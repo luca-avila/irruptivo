@@ -46,8 +46,22 @@ describe("storefront navigation shell", () => {
       getStoredCartItemCount(
         JSON.stringify({
           items: [
-            { variantId: "tee-m", quantity: 2 },
-            { variantId: "short-l", quantity: 1 }
+            {
+              productId: "training-tee",
+              variantId: "tee-m",
+              sku: "TEE-M",
+              quantity: 2,
+              priceSnapshotArs: 26000,
+              priceSnapshotAt: "2026-05-30T12:00:00.000Z"
+            },
+            {
+              productId: "essential-short",
+              variantId: "short-l",
+              sku: "SHORT-L",
+              quantity: 1,
+              priceSnapshotArs: 32000,
+              priceSnapshotAt: "2026-05-30T12:00:00.000Z"
+            }
           ]
         })
       )

@@ -198,6 +198,12 @@
 
 .textButton {
   cursor: pointer;
+  gap: 0.4rem;
+}
+
+.textButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .feedback {
@@ -506,7 +512,8 @@
   gap: 0.65rem;
 }
 
-.variantSection {
+.variantSection,
+.imageSection {
   display: grid;
   gap: 1rem;
   margin-top: 1.25rem;
@@ -542,13 +549,72 @@
   margin-top: 0.35rem;
 }
 
-.variantCard {
+.variantCard,
+.imageUploadPanel {
   display: grid;
   gap: 0.9rem;
   padding: 1rem;
   border: 1px solid rgba(17, 17, 17, 0.1);
   border-radius: 8px;
   background: #fffdf8;
+}
+
+.imageGrid {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.imageCard {
+  display: grid;
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid rgba(17, 17, 17, 0.1);
+  border-radius: 8px;
+  background: #fffdf8;
+}
+
+.imagePreview {
+  aspect-ratio: 4 / 3;
+  background: #ece8df;
+}
+
+.imagePreview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.imageCardBody {
+  display: grid;
+  gap: 0.85rem;
+  padding: 0.9rem;
+}
+
+.imageCardBody > div:first-child {
+  display: grid;
+  gap: 0.22rem;
+}
+
+.imageCardBody strong {
+  color: #111111;
+  line-height: 1.25;
+}
+
+.imageCardBody span {
+  color: #5f5b54;
+  font-size: 0.86rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.imageActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.imageActions form {
+  margin: 0;
 }
 
 .variantCardHeader {
@@ -659,6 +725,10 @@
   }
 
   .variantFormGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .imageGrid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }

@@ -1,9 +1,7 @@
-import {
-  AVAILABILITY_LABEL,
-  getAvailabilityLabel,
-  resolveUnitPrice,
-  type AvailabilityLabel
-} from "../domain/rules";
+import { type AvailabilityLabel } from "../domain/rules";
+import { getPublicImageSet } from "./product-images";
+import { getAvailableStock } from "./stock";
+import { getVariantAvailability, resolveUnitPrice } from "./variants";
 
 export const PRODUCT_AREA = {
   clothing: "clothing",
@@ -42,6 +40,26 @@ export type CatalogProductImageRecord = {
   path: string;
   alt: string;
   sortOrder: number;
+  width?: number;
+  height?: number;
+  renditions?: CatalogProductImageRenditionsRecord;
+  associatedColor?: string | null;
+  variantId?: string | null;
+  deletedAt?: string | null;
+};
+
+export type CatalogProductImageRenditionRecord = {
+  path: string;
+  width: number;
+  height: number;
+  byteSize?: number;
+  mimeType?: string;
+};
+
+export type CatalogProductImageRenditionsRecord = {
+  card: CatalogProductImageRenditionRecord;
+  detail: CatalogProductImageRenditionRecord;
+  original: CatalogProductImageRenditionRecord;
 };
 
 export type CatalogProductRecord = {
@@ -62,6 +80,13 @@ export type PublicProductImageView = {
   id: string;
   path: string;
   alt: string;
+  width?: number;
+  height?: number;
+  cardPath?: string;
+  detailPath?: string;
+  originalPath?: string;
+  associatedColor?: string | null;
+  variantId?: string | null;
 };
 
 export type PublicProductCardView = {
@@ -387,9 +412,9 @@ export function getPublicProductBySlug(
 export function getProductCardView(
   product: CatalogProductRecord
 ): PublicProductCardView {
-  const sortedImages = getSortedImages(product.images);
+  const sortedImages = getPublicImageSet(product.images, { usage: "card" });
   const totalStock = getTotalStock(product);
-  const availabilityLabel = getAvailabilityLabel(totalStock);
+  const availability = getVariantAvailability({ stock: totalStock });
 
   return {
     id: product.id,
@@ -399,8 +424,8 @@ export function getProductCardView(
     contextLabel: getContextLabel(product),
     image: sortedImages[0] ?? null,
     priceArs: getLowestEffectivePrice(product),
-    availabilityLabel,
-    isAvailable: availabilityLabel !== AVAILABILITY_LABEL.outOfStock
+    availabilityLabel: availability.availabilityLabel,
+    isAvailable: availability.isAvailable
   };
 }
 
@@ -420,9 +445,9 @@ export function getProductDetailView(
   return {
     ...getProductCardView(product),
     description: product.description,
-    images: getSortedImages(product.images),
+    images: getPublicImageSet(product.images, { usage: "detail" }),
     variants: product.variants.map((variant) => {
-      const availabilityLabel = getAvailabilityLabel(variant.stock);
+      const availability = getVariantAvailability(variant);
 
       return {
         id: variant.id,
@@ -430,8 +455,8 @@ export function getProductDetailView(
         name: variant.name,
         options: variant.options ?? {},
         effectivePriceArs: getEffectiveVariantPrice(product, variant),
-        availabilityLabel,
-        isAvailable: availabilityLabel !== AVAILABILITY_LABEL.outOfStock
+        availabilityLabel: availability.availabilityLabel,
+        isAvailable: availability.isAvailable
       };
     })
   };
@@ -447,27 +472,15 @@ function getUnavailableProductView(
     description: product.description,
     area: product.area,
     contextLabel: getContextLabel(product),
-    images: getSortedImages(product.images)
+    images: getPublicImageSet(product.images, { usage: "detail" })
   };
 }
 
-function getSortedImages(
-  images: readonly CatalogProductImageRecord[]
-): PublicProductImageView[] {
-  return [...images]
-    .sort(
-      (first, second) =>
-        first.sortOrder - second.sortOrder || first.id.localeCompare(second.id)
-    )
-    .map((image) => ({
-      id: image.id,
-      path: image.path,
-      alt: image.alt
-    }));
-}
-
 function getTotalStock(product: CatalogProductRecord): number {
-  return product.variants.reduce((total, variant) => total + variant.stock, 0);
+  return product.variants.reduce(
+    (total, variant) => total + getAvailableStock(variant),
+    0
+  );
 }
 
 function getLowestEffectivePrice(product: CatalogProductRecord): number {

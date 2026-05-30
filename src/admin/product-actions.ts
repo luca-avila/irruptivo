@@ -4,12 +4,22 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import {
+  reorderProductImages,
+  softDeleteProductImage,
+  uploadProductImage,
+  type ProductImageManagementErrorCode
+} from "../catalog/product-images";
+import {
   PRODUCT_STATUS,
   type CatalogProductRecord,
   type ProductArea,
   type ProductStatus
 } from "../catalog/catalog";
 import { requireAdmin } from "./auth";
+import {
+  deleteProcessedProductImageFiles,
+  processProductImageUpload
+} from "./product-image-processing";
 import {
   addProductVariant,
   createProduct,
@@ -164,10 +174,120 @@ export async function updateAdminProductVariant(
   );
 }
 
+export async function uploadAdminProductImage(formData: FormData): Promise<void> {
+  await requireAdmin();
+
+  const productId = readStringField(formData, "productId");
+  const products = readAdminProductRecords();
+
+  if (!products.some((product) => product.id === productId)) {
+    redirect(getEditErrorRedirect(productId, "not_found"));
+  }
+
+  const processedImage = await processProductImageUpload({
+    productId,
+    file: readFileField(formData, "image"),
+    alt: readStringField(formData, "alt"),
+    associatedColor: readStringField(formData, "associatedColor"),
+    variantId: readStringField(formData, "variantId")
+  });
+
+  if (!processedImage.ok) {
+    redirect(
+      getEditErrorRedirect(
+        productId,
+        processedImage.error.code,
+        getImageFormStateParams(formData)
+      )
+    );
+  }
+
+  const result = uploadProductImage(productId, processedImage.image, products);
+
+  if (!result.ok) {
+    await deleteProcessedProductImageFiles(processedImage.image);
+    redirect(
+      getEditErrorRedirect(
+        productId,
+        result.error.code,
+        getImageFormStateParams(formData)
+      )
+    );
+  }
+
+  saveAdminProductRecords(result.products);
+  revalidateCatalogPaths(result.product);
+
+  redirect(
+    `${ADMIN_PRODUCTS_PATH}/${encodeURIComponent(productId)}/editar?estado=imagen-subida`
+  );
+}
+
+export async function reorderAdminProductImages(
+  formData: FormData
+): Promise<void> {
+  await requireAdmin();
+
+  const productId = readStringField(formData, "productId");
+  const orderedImageIds = readStringField(formData, "imageOrder")
+    .split(",")
+    .map((imageId) => imageId.trim())
+    .filter(Boolean);
+  const result = reorderProductImages(
+    productId,
+    orderedImageIds,
+    readAdminProductRecords()
+  );
+
+  if (!result.ok) {
+    redirect(getEditErrorRedirect(productId, result.error.code));
+  }
+
+  saveAdminProductRecords(result.products);
+  revalidateCatalogPaths(result.product);
+
+  redirect(
+    `${ADMIN_PRODUCTS_PATH}/${encodeURIComponent(
+      productId
+    )}/editar?estado=imagenes-ordenadas`
+  );
+}
+
+export async function softDeleteAdminProductImage(
+  formData: FormData
+): Promise<void> {
+  await requireAdmin();
+
+  const productId = readStringField(formData, "productId");
+  const imageId = readStringField(formData, "imageId");
+  const result = softDeleteProductImage(
+    productId,
+    imageId,
+    readAdminProductRecords()
+  );
+
+  if (!result.ok) {
+    redirect(getEditErrorRedirect(productId, result.error.code));
+  }
+
+  saveAdminProductRecords(result.products);
+  revalidateCatalogPaths(result.product);
+
+  redirect(
+    `${ADMIN_PRODUCTS_PATH}/${encodeURIComponent(productId)}/editar?estado=imagen-eliminada`
+  );
+}
+
 function readStringField(formData: FormData, name: string): string {
   const value = formData.get(name);
 
   return typeof value === "string" ? value : "";
+}
+
+function readFileField(formData: FormData, name: string): File | null {
+  const value = formData.get(name);
+
+  return typeof File !== "undefined" && value instanceof File ? value : null;
 }
 
 function readVariantInput(formData: FormData): ProductVariantInput {
@@ -195,15 +315,40 @@ function getCreateErrorRedirect(errorCode: ProductManagementErrorCode): string {
 
 function getEditErrorRedirect(
   productId: string,
-  errorCode: ProductManagementErrorCode
+  errorCode: ProductManagementErrorCode | ProductImageManagementErrorCode,
+  searchParams?: URLSearchParams
 ): string {
   if (!productId || errorCode === "not_found") {
     return `${ADMIN_PRODUCTS_PATH}?error=${errorCode}`;
   }
 
+  const params = new URLSearchParams(searchParams);
+  params.set("error", errorCode);
+
   return `${ADMIN_PRODUCTS_PATH}/${encodeURIComponent(
     productId
-  )}/editar?error=${errorCode}`;
+  )}/editar?${params.toString()}`;
+}
+
+function getImageFormStateParams(formData: FormData): URLSearchParams {
+  const params = new URLSearchParams();
+  const alt = readStringField(formData, "alt").trim();
+  const associatedColor = readStringField(formData, "associatedColor").trim();
+  const variantId = readStringField(formData, "variantId").trim();
+
+  if (alt) {
+    params.set("imageAlt", alt);
+  }
+
+  if (associatedColor) {
+    params.set("imageColor", associatedColor);
+  }
+
+  if (variantId) {
+    params.set("imageVariantId", variantId);
+  }
+
+  return params;
 }
 
 function revalidateCatalogPaths(product?: CatalogProductRecord): void {

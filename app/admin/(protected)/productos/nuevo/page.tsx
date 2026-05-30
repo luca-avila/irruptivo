@@ -21,8 +21,8 @@ export default async function NewProductPage({
         <p className={styles.eyebrow}>Catálogo</p>
         <h1 className={styles.title}>Nuevo producto</h1>
         <p className={styles.copy}>
-          Cargá los datos base del producto. Las variantes, stock e imágenes se
-          gestionan en slices posteriores.
+          Cargá los datos base del producto. Después podés gestionar variantes,
+          stock e imágenes desde la edición.
         </p>
       </header>
 

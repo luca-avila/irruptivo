@@ -5,6 +5,7 @@ import {
   PRODUCT_STATUS,
   demoCatalogProducts,
   type CatalogProductImageRecord,
+  type CatalogProductImageRenditionsRecord,
   type CatalogProductRecord,
   type CatalogProductVariantRecord,
   type ProductArea,
@@ -666,7 +667,20 @@ function cloneVariantOptions(
 function cloneImageRecord(
   image: CatalogProductImageRecord
 ): CatalogProductImageRecord {
-  return { ...image };
+  return {
+    ...image,
+    renditions: image.renditions ? cloneImageRenditions(image.renditions) : undefined
+  };
+}
+
+function cloneImageRenditions(
+  renditions: CatalogProductImageRenditionsRecord
+): CatalogProductImageRenditionsRecord {
+  return {
+    card: { ...renditions.card },
+    detail: { ...renditions.detail },
+    original: { ...renditions.original }
+  };
 }
 
 function formatPriceArs(priceArs: number): string {

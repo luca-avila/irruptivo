@@ -209,15 +209,25 @@
   min-height: 48px;
   padding: 0.45rem 0.5rem;
   overflow-wrap: anywhere;
+  border-radius: 4px;
   color: #565656;
   font-size: 1.15rem;
   font-weight: 800;
   line-height: 1.05;
   text-align: center;
+  transition:
+    background-color 0.16s ease,
+    color 0.16s ease;
+}
+
+@media (hover: hover) {
+  .optionLink:not([data-active="true"]):hover {
+    background: #f0f0ec;
+    color: #101010;
+  }
 }
 
 .optionLink[data-active="true"] {
-  border-radius: 4px;
   background: #101010;
   color: #ffffff;
 }
@@ -242,6 +252,31 @@
   font-size: 1.12rem;
   font-weight: 900;
   line-height: 1;
+  transition:
+    background-color 0.18s ease,
+    transform 0.12s ease,
+    box-shadow 0.18s ease;
+}
+
+@media (hover: hover) {
+  .addButton:not(:disabled):hover {
+    background: #1c1c1c;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
+  }
+}
+
+.addButton:not(:disabled):active {
+  transform: scale(0.985);
+}
+
+.addButtonContent {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.addButtonContent svg {
+  animation: buttonSpin 0.9s linear infinite;
 }
 
 .addButton:disabled {
@@ -256,6 +291,59 @@
   font-size: 0.92rem;
   line-height: 1.4;
   text-align: center;
+}
+
+.addFeedback {
+  margin: 0;
+  padding: 0.72rem 0.82rem;
+  border-left: 3px solid #101010;
+  background: #f0f0ec;
+  color: #2f2f2f;
+  font-size: 0.9rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.addFeedback[data-tone="error"] {
+  border-left-color: #b42318;
+  background: #fff0ee;
+  color: #7a1c14;
+}
+
+.addedOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 1.25rem;
+  background: rgba(0, 0, 0, 0.68);
+  backdrop-filter: blur(7px);
+}
+
+.addedOverlayContent {
+  display: grid;
+  justify-items: center;
+  gap: 1.4rem;
+  color: #ffffff;
+  font-size: clamp(1.65rem, 8vw, 2.3rem);
+  font-weight: 800;
+  line-height: 1.05;
+  text-align: center;
+}
+
+.addedOverlayContent p {
+  margin: 0;
+}
+
+.addedIcon {
+  display: grid;
+  width: 5.2rem;
+  height: 5.2rem;
+  place-items: center;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #101010;
 }
 
 .contactActions {
@@ -278,6 +366,17 @@
   font-weight: 850;
   line-height: 1.2;
   text-align: center;
+  transition:
+    background-color 0.18s ease,
+    border-color 0.18s ease;
+}
+
+@media (hover: hover) {
+  .contactLink:hover,
+  .secondaryLink:hover {
+    border-color: #101010;
+    background: #f0f0ec;
+  }
 }
 
 .secondaryLink {
@@ -390,5 +489,11 @@
 
   .contactActions {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@keyframes buttonSpin {
+  to {
+    transform: rotate(360deg);
   }
 }

@@ -5,7 +5,9 @@ import {
   getAdminProductById,
   type ProductManagementErrorCode
 } from "../../../../../../src/admin/products";
+import { type ProductImageManagementErrorCode } from "../../../../../../src/catalog/product-images";
 import styles from "../../../admin.module.css";
+import { ProductImageManagement } from "../../product-image-management";
 import { ProductForm } from "../../product-form";
 import { VariantManagement } from "../../variant-management";
 
@@ -16,6 +18,9 @@ type EditProductPageProps = {
   searchParams?: Promise<{
     estado?: string | string[];
     error?: string | string[];
+    imageAlt?: string | string[];
+    imageColor?: string | string[];
+    imageVariantId?: string | string[];
   }>;
 };
 
@@ -60,6 +65,17 @@ export default async function EditProductPage({
       />
 
       <VariantManagement product={product} />
+
+      <ProductImageManagement
+        product={product}
+        formState={{
+          alt: getFirstSearchParamValue(resolvedSearchParams?.imageAlt) ?? "",
+          associatedColor:
+            getFirstSearchParamValue(resolvedSearchParams?.imageColor) ?? "",
+          variantId:
+            getFirstSearchParamValue(resolvedSearchParams?.imageVariantId) ?? ""
+        }}
+      />
     </>
   );
 }
@@ -93,15 +109,39 @@ function getProductFeedbackMessage({
     };
   }
 
+  if (state === "imagen-subida") {
+    return { tone: "success", message: "Imagen subida correctamente." };
+  }
+
+  if (state === "imagenes-ordenadas") {
+    return { tone: "success", message: "Galería reordenada correctamente." };
+  }
+
+  if (state === "imagen-eliminada") {
+    return { tone: "success", message: "Imagen eliminada de la galería." };
+  }
+
   return null;
 }
 
-function getProductErrorMessage(error: ProductManagementErrorCode): string {
+function getProductErrorMessage(
+  error: ProductManagementErrorCode | ProductImageManagementErrorCode
+): string {
   switch (error) {
     case "cannot_publish_without_variants":
       return "El producto necesita al menos una variante/SKU para activarse.";
     case "duplicate_variant_sku":
       return "Ya existe una variante/SKU con ese código.";
+    case "image_not_found":
+      return "No encontramos la imagen solicitada.";
+    case "image_too_large":
+      return "La imagen supera el tamaño máximo permitido.";
+    case "unsupported_image_type":
+      return "El formato de imagen no está permitido.";
+    case "image_processing_failed":
+      return "No pudimos procesar la imagen. Probá con otro archivo.";
+    case "image_validation":
+      return "Revisá la imagen, el texto alternativo y la asociación elegida.";
     case "not_found":
       return "No encontramos el producto solicitado.";
     case "validation":
