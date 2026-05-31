@@ -53,6 +53,8 @@ export type UpdateOrderStatusInStoreInput = {
   status: OrderStatus;
 };
 
+export type UpdateOrderInStoreInput = Order;
+
 const pendingOrders: StoredPendingOrder[] = [];
 const stockReservations: StockReservationRecord[] = [];
 
@@ -211,6 +213,26 @@ export function updateOrderStatusInStore({
     ...storedOrder.order,
     status
   });
+
+  return cloneOrder(storedOrder.order);
+}
+
+export function updateOrderInStore(order: UpdateOrderInStoreInput): Order | null {
+  const normalizedOrderId = order.id.trim();
+
+  if (!normalizedOrderId) {
+    return null;
+  }
+
+  const storedOrder = pendingOrders.find(
+    (pendingOrder) => pendingOrder.order.id === normalizedOrderId
+  );
+
+  if (!storedOrder) {
+    return null;
+  }
+
+  storedOrder.order = cloneOrder(order);
 
   return cloneOrder(storedOrder.order);
 }

@@ -179,6 +179,14 @@ export function getAllowedFulfillmentTransitions({
   return [...(transitions[currentStatus] ?? [])];
 }
 
+export function isAdminPaymentLockedOrderStatus(status: OrderStatus): boolean {
+  return (
+    status === ORDER_STATUS.pendingPayment ||
+    status === ORDER_STATUS.paymentFailed ||
+    status === ORDER_STATUS.expired
+  );
+}
+
 function assertMoney(value: number, name: string): void {
   assertNonNegativeInteger(value, name);
 }

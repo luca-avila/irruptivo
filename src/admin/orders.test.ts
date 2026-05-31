@@ -142,6 +142,16 @@ describe("admin order projection", () => {
     expect(detail).toMatchObject({
       orderNumber: "IRR-SNAPSHOT",
       statusLabel: "Pago confirmado",
+      fulfillment: {
+        actions: [
+          {
+            id: "preparar",
+            label: "Marcar en preparación",
+            targetStatusLabel: "En preparación"
+          }
+        ],
+        unavailableReason: null
+      },
       items: [
         {
           productName: "Nombre guardado",
@@ -197,6 +207,61 @@ describe("admin order projection", () => {
     expect(JSON.stringify(detail)).not.toContain("manual_review_required");
     expect(JSON.stringify(detail)).not.toContain(ORDER_STATUS.expired);
     expect(JSON.stringify(detail)).not.toContain(ORDER_STATUS.pendingPayment);
+  });
+
+  it("shows only the valid next fulfillment action for the delivery method", () => {
+    const shippingDetail = getAdminOrderDetail("order-001", {
+      orderRepository: createOrderRepository([
+        getOrder({
+          deliveryMethod: DELIVERY_METHOD.shipping,
+          status: ORDER_STATUS.preparing
+        })
+      ])
+    });
+    const pickupDetail = getAdminOrderDetail("order-001", {
+      orderRepository: createOrderRepository([
+        getOrder({
+          deliveryMethod: DELIVERY_METHOD.pickup,
+          status: ORDER_STATUS.preparing
+        })
+      ])
+    });
+
+    expect(shippingDetail?.fulfillment.actions).toEqual([
+      {
+        id: "registrar-envio",
+        label: "Marcar enviado",
+        targetStatusLabel: "Enviado",
+        description: "Avanza el envío al paso siguiente de cumplimiento."
+      }
+    ]);
+    expect(pickupDetail?.fulfillment.actions).toEqual([
+      {
+        id: "marcar-listo-retiro",
+        label: "Marcar listo para retirar",
+        targetStatusLabel: "Listo para retirar",
+        description: "Avanza el retiro al paso siguiente de cumplimiento."
+      }
+    ]);
+    expect(JSON.stringify(shippingDetail?.fulfillment)).not.toContain(
+      ORDER_STATUS.shipped
+    );
+    expect(JSON.stringify(pickupDetail?.fulfillment)).not.toContain(
+      ORDER_STATUS.readyForPickup
+    );
+  });
+
+  it("explains when fulfillment has no available admin action", () => {
+    const detail = getAdminOrderDetail("order-001", {
+      orderRepository: createOrderRepository([
+        getOrder({ status: ORDER_STATUS.delivered })
+      ])
+    });
+
+    expect(detail?.fulfillment.actions).toEqual([]);
+    expect(detail?.fulfillment.unavailableReason).toBe(
+      "Este pedido ya no tiene pasos de cumplimiento disponibles."
+    );
   });
 });
 

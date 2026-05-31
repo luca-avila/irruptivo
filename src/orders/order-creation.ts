@@ -82,6 +82,7 @@ type OrderSnapshot = {
   guestAccessToken: string;
   contact: CheckoutContact;
   delivery: PendingOrderDeliverySnapshot;
+  adminNotes?: string | null;
   items: PendingOrderItemSnapshot[];
   subtotalArs: number;
   deliveryCostArs: number;
@@ -204,6 +205,7 @@ export function createPendingOrderFromCheckout({
         ...checkoutValidation.checkout.contact
       },
       delivery: snapshotDelivery(checkoutValidation.checkout.delivery),
+      adminNotes: null,
       items: orderItems,
       subtotalArs: checkoutValidation.summary.subtotalArs,
       deliveryCostArs: checkoutValidation.summary.deliveryCostArs,

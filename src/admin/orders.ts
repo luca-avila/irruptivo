@@ -3,6 +3,7 @@ import {
   ORDER_STATUS,
   getDeliveryMethodLabel,
   getOrderStatusLabel,
+  isAdminPaymentLockedOrderStatus,
   type OrderStatus
 } from "../domain/rules";
 import {
@@ -17,6 +18,11 @@ import {
   getPaymentManualReviewForOrder,
   type PaymentManualReviewState
 } from "../payments/payment-events";
+import { isOrderEditableAfterPayment } from "./order-fulfillment-edits";
+import {
+  getAllowedAdminTransitions,
+  type AdminAllowedFulfillmentTransition
+} from "./order-transitions";
 
 export type AdminOrderRepository = {
   listOrders: () => readonly Order[];
@@ -84,14 +90,22 @@ export type AdminOrderDetailView = {
   statusTone: AdminOrderStatusTone;
   delivery: {
     methodLabel: string;
+    requiresShippingAddress: boolean;
     shippingAddress: AdminOrderShippingAddressView | null;
     notes: string | null;
     notesFallback: string;
+  };
+  fulfillmentEdit: {
+    canEdit: boolean;
+    unavailableReason: string | null;
+    adminNotes: string | null;
+    adminNotesFallback: string;
   };
   items: AdminOrderDetailItemView[];
   financial: AdminOrderFinancialView;
   payment: AdminOrderPaymentView;
   manualReview: AdminOrderManualReviewView;
+  fulfillment: AdminOrderFulfillmentView;
 };
 
 export type AdminOrderShippingAddressView = {
@@ -133,6 +147,11 @@ export type AdminOrderPaymentView = {
 
 export type AdminOrderManualReviewView = PaymentManualReviewState & {
   latestEventAtLabel: string | null;
+};
+
+export type AdminOrderFulfillmentView = {
+  actions: AdminAllowedFulfillmentTransition[];
+  unavailableReason: string | null;
 };
 
 export type AdminOrderStatusTone =
@@ -316,9 +335,18 @@ function getAdminOrderDetailView(
     statusTone: getStatusTone(order.status),
     delivery: {
       methodLabel: getDeliveryMethodLabel(order.delivery.method),
+      requiresShippingAddress: order.delivery.method === DELIVERY_METHOD.shipping,
       shippingAddress: getShippingAddressView(order),
       notes: order.delivery.notes,
       notesFallback: "Sin notas cargadas."
+    },
+    fulfillmentEdit: {
+      canEdit: isOrderEditableAfterPayment(order),
+      unavailableReason: isOrderEditableAfterPayment(order)
+        ? null
+        : "Los datos operativos se pueden editar cuando el pago está confirmado.",
+      adminNotes: order.adminNotes ?? null,
+      adminNotesFallback: "Sin notas internas cargadas."
     },
     items: order.items.map(getDetailItemView),
     financial: {
@@ -354,8 +382,27 @@ function getAdminOrderDetailView(
       latestEventAtLabel: manualReview.latestEventAt
         ? formatDateTime(manualReview.latestEventAt)
         : null
-    }
+    },
+    fulfillment: getAdminOrderFulfillmentView(order)
   };
+}
+
+function getAdminOrderFulfillmentView(order: Order): AdminOrderFulfillmentView {
+  const actions = getAllowedAdminTransitions(order);
+
+  return {
+    actions,
+    unavailableReason:
+      actions.length > 0 ? null : getAdminOrderFulfillmentUnavailableReason(order)
+  };
+}
+
+function getAdminOrderFulfillmentUnavailableReason(order: Order): string {
+  if (isAdminPaymentLockedOrderStatus(order.status)) {
+    return `No se puede avanzar desde ${getOrderStatusLabel(order.status)}.`;
+  }
+
+  return "Este pedido ya no tiene pasos de cumplimiento disponibles.";
 }
 
 function getDetailItemView(

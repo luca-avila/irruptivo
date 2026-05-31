@@ -13,6 +13,7 @@ import {
   getDeliveryCost,
   getDeliveryMethodLabel,
   getOrderStatusLabel,
+  isAdminPaymentLockedOrderStatus,
   resolveUnitPrice
 } from "./rules";
 
@@ -186,5 +187,13 @@ describe("MVP domain rules", () => {
         currentStatus: ORDER_STATUS.preparing
       })
     ).not.toContain(ORDER_STATUS.shipped);
+  });
+
+  it("identifies payment statuses that admin fulfillment cannot move", () => {
+    expect(isAdminPaymentLockedOrderStatus(ORDER_STATUS.pendingPayment)).toBe(true);
+    expect(isAdminPaymentLockedOrderStatus(ORDER_STATUS.paymentFailed)).toBe(true);
+    expect(isAdminPaymentLockedOrderStatus(ORDER_STATUS.expired)).toBe(true);
+    expect(isAdminPaymentLockedOrderStatus(ORDER_STATUS.paid)).toBe(false);
+    expect(isAdminPaymentLockedOrderStatus(ORDER_STATUS.preparing)).toBe(false);
   });
 });

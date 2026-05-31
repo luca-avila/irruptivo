@@ -8,20 +8,40 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 
+import { type AdminOrderFulfillmentEditErrorCode } from "../../../../../src/admin/order-fulfillment-edits";
+import { transitionAdminOrderFulfillment } from "../../../../../src/admin/order-actions";
 import { getAdminOrderDetail } from "../../../../../src/admin/orders";
 import styles from "../../admin.module.css";
+import { OrderFulfillmentEditForm } from "./order-fulfillment-edit-form";
 
 type AdminOrderDetailPageProps = {
   params: Promise<{
     id: string;
   }>;
+  searchParams?: Promise<{
+    estado?: string | string[];
+    error?: string | string[];
+  }>;
 };
 
 export default async function AdminOrderDetailPage({
-  params
+  params,
+  searchParams
 }: AdminOrderDetailPageProps) {
   const resolvedParams = await params;
+  const resolvedSearchParams = await searchParams;
+  const requestedState = getFirstSearchParamValue(resolvedSearchParams?.estado);
+  const requestedError = getFirstSearchParamValue(resolvedSearchParams?.error);
   const detail = getAdminOrderDetail(decodeURIComponent(resolvedParams.id));
+  const transitionFeedback = getTransitionFeedback({
+    state: requestedState,
+    error: isOrderFulfillmentEditErrorCode(requestedError) ? null : requestedError,
+    statusLabel: detail?.statusLabel ?? null
+  });
+  const editFeedback = getOrderFulfillmentEditFeedback({
+    state: requestedState,
+    error: isOrderFulfillmentEditErrorCode(requestedError) ? requestedError : null
+  });
 
   if (!detail) {
     return (
@@ -77,6 +97,69 @@ export default async function AdminOrderDetailPage({
           ) : null}
         </section>
       ) : null}
+
+      {transitionFeedback ? (
+        <section
+          className={styles.feedback}
+          data-tone={transitionFeedback.tone}
+          role={transitionFeedback.tone === "error" ? "alert" : "status"}
+        >
+          <strong>{transitionFeedback.title}</strong>
+          <p>{transitionFeedback.description}</p>
+        </section>
+      ) : null}
+
+      {editFeedback ? (
+        <section
+          className={styles.feedback}
+          data-tone={editFeedback.tone}
+          role={editFeedback.tone === "error" ? "alert" : "status"}
+        >
+          <strong>{editFeedback.title}</strong>
+          <p>{editFeedback.description}</p>
+        </section>
+      ) : null}
+
+      <section
+        className={styles.fulfillmentPanel}
+        aria-labelledby="fulfillment-title"
+      >
+        <div className={styles.fulfillmentHeader}>
+          <div>
+            <p className={styles.eyebrow}>Cumplimiento</p>
+            <h2 id="fulfillment-title">Avance operativo</h2>
+          </div>
+          <span className={styles.statusPill} data-tone={detail.statusTone}>
+            {detail.statusLabel}
+          </span>
+        </div>
+
+        {detail.fulfillment.actions.length > 0 ? (
+          <div className={styles.fulfillmentActionList}>
+            {detail.fulfillment.actions.map((action) => (
+              <div className={styles.fulfillmentAction} key={action.id}>
+                <div>
+                  <strong>Siguiente estado: {action.targetStatusLabel}</strong>
+                  <p>{action.description}</p>
+                </div>
+                <form action={transitionAdminOrderFulfillment}>
+                  <input type="hidden" name="orderId" value={detail.id} />
+                  <input type="hidden" name="actionId" value={action.id} />
+                  <button className={styles.primaryButton} type="submit">
+                    <PackageCheck aria-hidden="true" size={17} strokeWidth={2.1} />
+                    <span>{action.label}</span>
+                  </button>
+                </form>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className={styles.formHint}>
+            {detail.fulfillment.unavailableReason ??
+              "No hay acciones de cumplimiento disponibles."}
+          </p>
+        )}
+      </section>
 
       <section className={styles.detailGrid} aria-label="Datos del pedido">
         <article className={styles.detailPanel}>
@@ -176,6 +259,8 @@ export default async function AdminOrderDetailPage({
         </article>
       </section>
 
+      <OrderFulfillmentEditForm detail={detail} />
+
       <section className={styles.orderItemsSection} aria-labelledby="items-title">
         <div className={styles.sectionHeader}>
           <h2 id="items-title">Ítems del pedido</h2>
@@ -223,4 +308,149 @@ export default async function AdminOrderDetailPage({
       </section>
     </>
   );
+}
+
+function getTransitionFeedback({
+  state,
+  error,
+  statusLabel
+}: {
+  state: string | null;
+  error: string | null;
+  statusLabel: string | null;
+}): {
+  tone: "success" | "error";
+  title: string;
+  description: string;
+} | null {
+  if (error) {
+    return {
+      tone: "error",
+      title: "No pudimos actualizar el pedido",
+      description: getTransitionErrorMessage(error)
+    };
+  }
+
+  if (state === "estado-actualizado") {
+    return {
+      tone: "success",
+      title: "Estado actualizado",
+      description: statusLabel
+        ? `El pedido quedó como ${statusLabel}. La cola ya refleja el cambio.`
+        : "La cola ya refleja el cambio."
+    };
+  }
+
+  return null;
+}
+
+function getTransitionErrorMessage(error: string): string {
+  switch (error) {
+    case "accion-invalida":
+      return "La acción solicitada no existe. Usá uno de los botones disponibles.";
+    case "accion-no-disponible":
+      return "Esa acción no corresponde al estado o método de entrega actual.";
+    case "estado-pago-bloqueado":
+      return "El pedido no tiene un pago confirmado para avanzar en cumplimiento.";
+    case "estado-final":
+      return "Este pedido ya no tiene pasos de cumplimiento disponibles.";
+    case "guardado-fallido":
+      return "No pudimos guardar el nuevo estado. Volvé a intentar.";
+    case "pedido-no-encontrado":
+    default:
+      return "No encontramos el pedido para actualizar.";
+  }
+}
+
+const ORDER_FULFILLMENT_EDIT_ERROR_CODES = new Set<string>([
+  "empty_update",
+  "field_too_long",
+  "immutable_field",
+  "invalid_address_line",
+  "invalid_city",
+  "invalid_email",
+  "invalid_full_name",
+  "invalid_phone",
+  "invalid_postal_code",
+  "invalid_province",
+  "not_found",
+  "order_not_editable",
+  "save_failed"
+]);
+
+function getOrderFulfillmentEditFeedback({
+  state,
+  error
+}: {
+  state: string | null;
+  error: AdminOrderFulfillmentEditErrorCode | null;
+}): {
+  tone: "success" | "error";
+  title: string;
+  description: string;
+} | null {
+  if (error) {
+    return {
+      tone: "error",
+      title: "No pudimos guardar los datos",
+      description: getOrderFulfillmentEditErrorMessage(error)
+    };
+  }
+
+  if (state === "fulfillment-actualizado") {
+    return {
+      tone: "success",
+      title: "Datos actualizados",
+      description: "Los datos de cumplimiento se guardaron correctamente."
+    };
+  }
+
+  return null;
+}
+
+function getOrderFulfillmentEditErrorMessage(
+  error: AdminOrderFulfillmentEditErrorCode
+): string {
+  switch (error) {
+    case "empty_update":
+      return "No hay datos de cumplimiento para guardar.";
+    case "field_too_long":
+      return "Uno de los campos supera el largo permitido.";
+    case "immutable_field":
+      return "Los ítems, importes, costo de entrega, pago y estado no se pueden editar desde esta pantalla.";
+    case "invalid_address_line":
+      return "Ingresá una dirección de entrega.";
+    case "invalid_city":
+      return "Ingresá la ciudad de entrega.";
+    case "invalid_email":
+      return "Ingresá un email válido.";
+    case "invalid_full_name":
+      return "Ingresá el nombre del cliente.";
+    case "invalid_phone":
+      return "Ingresá un teléfono de contacto.";
+    case "invalid_postal_code":
+      return "Ingresá el código postal.";
+    case "invalid_province":
+      return "Ingresá la provincia de entrega.";
+    case "not_found":
+      return "No encontramos el pedido solicitado.";
+    case "order_not_editable":
+      return "Los datos operativos se pueden editar cuando el pago está confirmado.";
+    case "save_failed":
+      return "No pudimos guardar los datos del pedido. Volvé a intentar.";
+  }
+}
+
+function isOrderFulfillmentEditErrorCode(
+  error: string | null
+): error is AdminOrderFulfillmentEditErrorCode {
+  return Boolean(error && ORDER_FULFILLMENT_EDIT_ERROR_CODES.has(error));
+}
+
+function getFirstSearchParamValue(value: string | string[] | undefined): string | null {
+  if (Array.isArray(value)) {
+    return value[0] ?? null;
+  }
+
+  return value ?? null;
 }
