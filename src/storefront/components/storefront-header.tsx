@@ -20,8 +20,8 @@ import {
 // Tailwind utilities that follow); it is kept as a hook so the admin layout's
 // `.storefront-header { display: none }` override can continue to hide it.
 const headerClass =
-  "storefront-header sticky top-0 z-20 flex items-center gap-2 min-h-[72px] py-3 px-4 border-b border-b-[rgba(17,17,17,0.08)] bg-[rgba(246,243,238,0.92)] backdrop-blur-[18px] min-[760px]:px-8";
-const headerSideClass = "flex flex-1 items-center gap-16 min-w-0";
+  "storefront-header sticky top-0 z-20 grid grid-cols-[1fr_auto_1fr] items-center gap-2 min-h-[72px] py-3 px-4 border-b border-b-[rgba(17,17,17,0.08)] bg-[rgba(246,243,238,0.92)] backdrop-blur-[18px] min-[760px]:px-8";
+const headerSideClass = "flex items-center gap-2 min-w-0 min-[760px]:gap-16";
 
 const controlBaseClass =
   "inline-flex items-center justify-center min-w-[44px] min-h-[44px] border transition-[background-color,border-color,transform] duration-[180ms] ease-[ease] active:scale-[0.96]";
