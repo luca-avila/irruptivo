@@ -54,6 +54,11 @@
   padding: 0.55rem;
 }
 
+.cartItem[data-status="blocked"] {
+  border-color: #d6aaa1;
+  background: #fffaf8;
+}
+
 .productImageLink {
   display: block;
 }
@@ -239,6 +244,31 @@
   line-height: 1.3;
 }
 
+.issueList {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.issueList li {
+  border-left: 3px solid #b89019;
+  padding: 0.45rem 0.55rem;
+  border-radius: 6px;
+  background: #fff8e4;
+  color: #5f4811;
+  font-size: 0.82rem;
+  font-weight: 720;
+  line-height: 1.35;
+}
+
+.issueList li[data-blocking="true"] {
+  border-left-color: #b3402f;
+  background: #fff0ec;
+  color: #7a1c14;
+}
+
 .summaryPanel,
 .emptyPanel,
 .statePanel {
@@ -324,6 +354,8 @@
   border-radius: 999px;
   background: #101010;
   color: #ffffff;
+  cursor: pointer;
+  text-decoration: none;
 }
 
 .checkoutButton:disabled {
@@ -445,6 +477,10 @@
   .quantityControl button:not(:disabled):hover {
     background: #101010;
     color: #ffffff;
+  }
+
+  .checkoutButton:not(:disabled):hover {
+    background: #000000;
   }
 
   .primaryAction:hover {

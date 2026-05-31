@@ -2,7 +2,6 @@
 
 import {
   PRODUCT_AREA,
-  PRODUCT_STATUS,
   demoCatalogProducts,
   type CatalogProductImageRecord,
   type CatalogProductRecord,
@@ -10,7 +9,6 @@ import {
   type VariantOptionValues
 } from "../catalog/catalog";
 import { getVariantAvailability } from "../catalog/variants";
-import { resolveUnitPrice } from "../domain/rules";
 import {
   validateAddToCartSelection,
   type AddToCartValidationError,
@@ -18,13 +16,16 @@ import {
 } from "./add-to-cart-validation";
 import {
   getCartSummary,
-  getLineTotal,
   hydrateCart,
   serializeCart,
-  type Cart,
-  type CartItem,
   type CartSummary
 } from "./cart";
+import {
+  validateCart,
+  type CartIssueClassification,
+  type CartValidationItem,
+  type CartValidationItemStatus
+} from "./cart-validation";
 
 export type ValidateAddToCartActionInput = {
   productId: string;
@@ -64,12 +65,21 @@ export type CartReviewItem = {
   quantity: number;
   unitPriceArs: number;
   lineTotalArs: number;
+  status: CartValidationItemStatus;
+  isCheckoutEligible: boolean;
+  issues: CartReviewIssue[];
+};
+
+export type CartReviewIssue = CartIssueClassification & {
+  isBlocking: boolean;
 };
 
 export type CartReviewActionResult = {
   items: CartReviewItem[];
   serializedCart: string;
   summary: CartSummary;
+  canCheckout: boolean;
+  hasBlockingIssues: boolean;
 };
 
 const ADD_TO_CART_ERROR_COPY = {
@@ -122,97 +132,61 @@ export async function refreshCartReviewAction(
   rawCart: string | null
 ): Promise<CartReviewActionResult> {
   const cart = hydrateCart(rawCart);
-  const reviewItems = getCartReviewItems(cart);
-  const adjustedCart = getAdjustedCart(cart, reviewItems);
+  const validation = validateCart({
+    cart,
+    products: demoCatalogProducts
+  });
+  const reviewItems = getCartReviewItems(validation.items);
 
   return {
     items: reviewItems,
-    serializedCart: serializeCart(adjustedCart),
+    serializedCart: serializeCart(validation.updatedCart),
     summary: getCartSummary(
-      reviewItems.map((item) => ({
-        unitPriceArs: item.unitPriceArs,
-        quantity: item.quantity
+      validation.items
+        .filter((item) => item.isCheckoutEligible)
+        .map((item) => ({
+          unitPriceArs: item.unitPriceArs,
+          quantity: item.quantity
+        }))
+    ),
+    canCheckout: validation.canCheckout,
+    hasBlockingIssues: validation.hasBlockingIssues
+  };
+}
+
+function getCartReviewItems(
+  validationItems: readonly CartValidationItem[]
+): CartReviewItem[] {
+  return validationItems.map((validationItem) => {
+    const { cartItem, product, variant } = validationItem;
+    const availability = variant ? getVariantAvailability(variant) : null;
+
+    return {
+      productId: cartItem.productId,
+      variantId: cartItem.variantId,
+      sku: variant?.sku ?? cartItem.sku,
+      productName: product?.name ?? "Producto no disponible",
+      productHref: product ? getProductHref(product) : "/coleccion",
+      variantName: variant?.name ?? "Variante no disponible",
+      optionSummary: variant
+        ? getOptionSummary(variant.options, variant.name)
+        : cartItem.sku,
+      image: product ? getPrimaryImage(product.images) : null,
+      availabilityLabel: getCartAvailabilityLabel(validationItem, availability),
+      isAvailable:
+        validationItem.isCheckoutEligible && Boolean(availability?.isAvailable),
+      availableStock: variant?.stock ?? 0,
+      quantity: validationItem.quantity,
+      unitPriceArs: validationItem.unitPriceArs,
+      lineTotalArs: validationItem.lineTotalArs,
+      status: validationItem.status,
+      isCheckoutEligible: validationItem.isCheckoutEligible,
+      issues: validationItem.issues.map((issue) => ({
+        ...issue,
+        isBlocking: issue.severity === "blocking"
       }))
-    )
-  };
-}
-
-function getCartReviewItems(cart: Cart): CartReviewItem[] {
-  return cart.items.flatMap((cartItem) => {
-    const product = getActiveProductById(cartItem.productId);
-    const variant = product?.variants.find(
-      (candidate) => candidate.id === cartItem.variantId
-    );
-
-    if (!product || !variant) {
-      return [];
-    }
-
-    const availability = getVariantAvailability(variant);
-    const availableStock = variant.stock;
-    const quantity =
-      availableStock > 0
-        ? Math.min(cartItem.quantity, availableStock)
-        : cartItem.quantity;
-    const unitPriceArs = resolveUnitPrice({
-      productBasePriceArs: product.basePriceArs,
-      variantPriceOverrideArs: variant.priceOverrideArs
-    });
-
-    return [
-      {
-        productId: product.id,
-        variantId: variant.id,
-        sku: variant.sku,
-        productName: product.name,
-        productHref: getProductHref(product),
-        variantName: variant.name,
-        optionSummary: getOptionSummary(variant.options, variant.name),
-        image: getPrimaryImage(product.images),
-        availabilityLabel: availability.availabilityLabel,
-        isAvailable: availability.isAvailable,
-        availableStock,
-        quantity,
-        unitPriceArs,
-        lineTotalArs: getLineTotal({
-          unitPriceArs,
-          quantity
-        })
-      }
-    ];
+    };
   });
-}
-
-function getAdjustedCart(cart: Cart, reviewItems: readonly CartReviewItem[]): Cart {
-  const reviewItemByVariantId = new Map(
-    reviewItems.map((item) => [item.variantId, item])
-  );
-
-  return {
-    items: cart.items.flatMap((item) => {
-      const reviewItem = reviewItemByVariantId.get(item.variantId);
-
-      if (!reviewItem) {
-        return [];
-      }
-
-      return [
-        {
-          ...item,
-          quantity: reviewItem.quantity
-        } satisfies CartItem
-      ];
-    })
-  };
-}
-
-function getActiveProductById(productId: string): CatalogProductRecord | null {
-  return (
-    demoCatalogProducts.find(
-      (product) =>
-        product.id === productId && product.status === PRODUCT_STATUS.active
-    ) ?? null
-  );
 }
 
 function getProductHref(product: CatalogProductRecord): string {
@@ -256,4 +230,19 @@ function getOrderedOptionValues(options: VariantOptionValues): string[] {
     options.weight,
     options.presentation
   ].filter((value): value is string => Boolean(value));
+}
+
+function getCartAvailabilityLabel(
+  validationItem: CartValidationItem,
+  availability: ReturnType<typeof getVariantAvailability> | null
+): string {
+  if (validationItem.isCheckoutEligible && availability) {
+    return availability.availabilityLabel;
+  }
+
+  if (validationItem.issues.some((issue) => issue.code === "out_of_stock")) {
+    return availability?.availabilityLabel ?? "Sin stock";
+  }
+
+  return "No disponible";
 }

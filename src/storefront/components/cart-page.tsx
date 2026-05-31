@@ -153,11 +153,21 @@ function CartItemRow({
   const canDecrease = item.isAvailable && item.availableStock > 0 && item.quantity > 1;
   const canIncrease =
     item.isAvailable && item.availableStock > 0 && item.quantity < item.availableStock;
+  const hasStockCapNotice = item.issues.some(
+    (issue) => issue.code === "insufficient_stock"
+  );
   const hasReachedStockLimit =
-    item.isAvailable && item.availableStock > 0 && item.quantity >= item.availableStock;
+    item.isAvailable &&
+    item.availableStock > 0 &&
+    item.quantity >= item.availableStock &&
+    !hasStockCapNotice;
 
   return (
-    <article className={styles.cartItem} aria-label={item.productName}>
+    <article
+      className={styles.cartItem}
+      data-status={item.status}
+      aria-label={item.productName}
+    >
       <Link className={styles.productImageLink} href={item.productHref} tabIndex={-1}>
         <span className={styles.productImageFrame}>
           {item.image ? (
@@ -231,6 +241,18 @@ function CartItemRow({
         {hasReachedStockLimit ? (
           <p className={styles.stockNote}>Llegaste al stock disponible.</p>
         ) : null}
+        {item.issues.length > 0 ? (
+          <ul
+            className={styles.issueList}
+            aria-label={`Avisos de ${item.productName}`}
+          >
+            {item.issues.map((issue) => (
+              <li data-blocking={issue.isBlocking} key={issue.code}>
+                {issue.message}
+              </li>
+            ))}
+          </ul>
+        ) : null}
       </div>
     </article>
   );
@@ -243,6 +265,8 @@ function CartSummaryPanel({
   review: CartReviewActionResult;
   isRefreshing: boolean;
 }) {
+  const canProceedToCheckout = review.canCheckout && !isRefreshing;
+
   return (
     <aside className={styles.summaryPanel} aria-label="Resumen del carrito">
       <h2>Resumen</h2>
@@ -260,12 +284,21 @@ function CartSummaryPanel({
           <dd>Se confirma en checkout</dd>
         </div>
       </dl>
-      <button className={styles.checkoutButton} type="button" disabled>
-        <span>Continuar al checkout</span>
-        <ArrowRight aria-hidden="true" size={19} strokeWidth={2.2} />
-      </button>
+      {canProceedToCheckout ? (
+        <Link className={styles.checkoutButton} href="/checkout">
+          <span>Continuar al checkout</span>
+          <ArrowRight aria-hidden="true" size={19} strokeWidth={2.2} />
+        </Link>
+      ) : (
+        <button className={styles.checkoutButton} type="button" disabled>
+          <span>Continuar al checkout</span>
+          <ArrowRight aria-hidden="true" size={19} strokeWidth={2.2} />
+        </button>
+      )}
       <p className={styles.summaryHelp}>
-        Vas a elegir envío o retiro antes de crear el pedido.
+        {review.hasBlockingIssues
+          ? "Quitá o corregí los productos marcados para continuar."
+          : "Vas a elegir envío o retiro antes de crear el pedido."}
       </p>
       {isRefreshing ? (
         <p className={styles.refreshingStatus} role="status">
