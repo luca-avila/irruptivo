@@ -1,3 +1,13 @@
+/*
+ * Tailwind is introduced incrementally. We import only the theme and utilities
+ * layers and intentionally skip Preflight, so the existing hand-written global
+ * styles below keep rendering exactly as before. New/migrated areas can use
+ * Tailwind utility classes.
+ */
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+
 :root {
   color-scheme: light;
   --background: #f6f3ee;
