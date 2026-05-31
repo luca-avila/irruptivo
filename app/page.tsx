@@ -74,12 +74,22 @@ export default function HomePage() {
         </Link>
       </section>
 
-      <section className="homepage-trust" aria-labelledby="homepage-trust-title">
-        <div className="homepage-trust__header">
-          <p className="homepage-kicker">Compra simple</p>
-          <h2 id="homepage-trust-title">Señales claras antes de comprar</h2>
+      <section
+        className="bg-[#f0f0ed] pt-12 px-4 pb-[3.4rem] min-[760px]:px-8"
+        aria-labelledby="homepage-trust-title"
+      >
+        <div className="w-[min(100%,70rem)] mx-auto mb-[1.6rem]">
+          <p className="m-0 text-[0.76rem] font-[850] tracking-[0.13em] uppercase text-[#686868]">
+            Compra simple
+          </p>
+          <h2
+            id="homepage-trust-title"
+            className="m-0 mt-[0.45rem] text-[clamp(1.8rem,7vw,3.2rem)] leading-[1.04] tracking-[0]"
+          >
+            Señales claras antes de comprar
+          </h2>
         </div>
-        <div className="homepage-trust__grid">
+        <div className="grid gap-[0.7rem] w-[min(100%,70rem)] mx-auto min-[760px]:grid-cols-3 min-[1100px]:grid-cols-4">
           <TrustSignal
             icon={<CreditCard aria-hidden="true" size={21} strokeWidth={2} />}
             label="Mercado Pago"
@@ -268,31 +278,38 @@ type TrustSignalProps = {
   external?: boolean;
 };
 
+const trustItemClass =
+  "grid grid-cols-[2.5rem_1fr] gap-[0.8rem] items-start min-h-[4.7rem] p-[0.85rem] border border-[rgba(17,17,17,0.1)] bg-white";
+
 function TrustSignal({ icon, label, copy, href, external = false }: TrustSignalProps) {
   const content = (
     <>
-      <span className="homepage-trust__icon">{icon}</span>
+      <span className="grid w-[2.5rem] h-[2.5rem] place-items-center bg-[#111111] text-white">
+        {icon}
+      </span>
       <span>
-        <strong>{label}</strong>
-        <span>{copy}</span>
+        <strong className="block text-[0.95rem]">{label}</strong>
+        <span className="block mt-[0.18rem] text-[#686868] text-[0.88rem] leading-[1.35]">
+          {copy}
+        </span>
       </span>
     </>
   );
 
   if (!href) {
-    return <div className="homepage-trust__item">{content}</div>;
+    return <div className={trustItemClass}>{content}</div>;
   }
 
   if (external) {
     return (
-      <a className="homepage-trust__item" href={href} target="_blank" rel="noreferrer">
+      <a className={trustItemClass} href={href} target="_blank" rel="noreferrer">
         {content}
       </a>
     );
   }
 
   return (
-    <Link className="homepage-trust__item" href={href}>
+    <Link className={trustItemClass} href={href}>
       {content}
     </Link>
   );

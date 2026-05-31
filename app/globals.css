@@ -398,8 +398,7 @@ button {
   color: #f8f8f6;
 }
 
-.homepage-section__header,
-.homepage-trust__header {
+.homepage-section__header {
   width: min(100%, 70rem);
   margin: 0 auto 1.6rem;
 }
@@ -412,8 +411,7 @@ button {
   color: rgba(248, 248, 246, 0.62);
 }
 
-.homepage-section h2,
-.homepage-trust h2 {
+.homepage-section h2 {
   margin: 0.45rem 0 0;
   font-size: clamp(1.8rem, 7vw, 3.2rem);
   line-height: 1.04;
@@ -435,54 +433,6 @@ button {
 
 .homepage-text-link--dark {
   color: #ffffff;
-}
-
-.homepage-trust {
-  padding: 3rem 1rem 3.4rem;
-  background: #f0f0ed;
-}
-
-.homepage-trust__grid {
-  display: grid;
-  gap: 0.7rem;
-  width: min(100%, 70rem);
-  margin: 0 auto;
-}
-
-.homepage-trust__item {
-  display: grid;
-  grid-template-columns: 2.5rem 1fr;
-  gap: 0.8rem;
-  align-items: start;
-  min-height: 4.7rem;
-  padding: 0.85rem;
-  border: 1px solid rgba(17, 17, 17, 0.1);
-  background: #ffffff;
-}
-
-.homepage-trust__icon {
-  display: grid;
-  width: 2.5rem;
-  height: 2.5rem;
-  place-items: center;
-  background: #111111;
-  color: #ffffff;
-}
-
-.homepage-trust__item strong,
-.homepage-trust__item span span {
-  display: block;
-}
-
-.homepage-trust__item strong {
-  font-size: 0.95rem;
-}
-
-.homepage-trust__item span span {
-  margin-top: 0.18rem;
-  color: #686868;
-  font-size: 0.88rem;
-  line-height: 1.35;
 }
 
 .homepage-footer {
@@ -566,13 +516,8 @@ button {
     padding-inline: 3rem;
   }
 
-  .homepage-section,
-  .homepage-trust {
+  .homepage-section {
     padding-inline: 2rem;
-  }
-
-  .homepage-trust__grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .homepage-footer {
@@ -589,9 +534,5 @@ button {
 @media (min-width: 1100px) {
   .homepage-hero__content {
     margin-left: max(3rem, calc((100vw - 72rem) / 2));
-  }
-
-  .homepage-trust__grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
