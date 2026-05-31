@@ -13,7 +13,11 @@ import {
   type CheckoutInput,
   type CheckoutValidationResult
 } from "./checkout";
-import { createPendingOrderInStore } from "../orders/order-store";
+import {
+  createCheckoutPaymentHandoff,
+  type PendingOrderPaymentHandoff
+} from "./payment-handoff";
+import { type PendingOrderPaymentPreference } from "../orders/order-creation";
 
 export type CheckoutFormValues = Omit<CheckoutInput, "cart">;
 
@@ -33,17 +37,11 @@ export type CreatePendingOrderActionInput = {
   idempotencyKey: string;
 };
 
-export type PendingOrderPaymentHandoff = {
-  orderId: string;
-  orderNumber: string;
-  guestAccessToken: string;
-  totalArs: number;
-};
-
 export type CreatePendingOrderActionResult =
   | {
       status: "created";
       order: PendingOrderPaymentHandoff;
+      payment: PendingOrderPaymentPreference;
       serializedCart: string;
       isDuplicate: boolean;
     }
@@ -55,6 +53,7 @@ export type CreatePendingOrderActionResult =
   | {
       status: "error";
       message: string;
+      isRetryable: boolean;
       serializedCart: string;
     };
 
@@ -96,7 +95,7 @@ export async function createPendingOrderAction({
   idempotencyKey
 }: CreatePendingOrderActionInput): Promise<CreatePendingOrderActionResult> {
   const cart = hydrateCart(rawCart);
-  const result = createPendingOrderInStore({
+  const result = await createCheckoutPaymentHandoff({
     idempotencyKey,
     cart,
     checkout,
@@ -106,12 +105,8 @@ export async function createPendingOrderAction({
   if (result.status === "created") {
     return {
       status: "created",
-      order: {
-        orderId: result.order.id,
-        orderNumber: result.order.orderNumber,
-        guestAccessToken: result.order.guestAccessToken,
-        totalArs: result.order.totalArs
-      },
+      order: result.order,
+      payment: result.payment,
       serializedCart: serializeCart(result.updatedCart),
       isDuplicate: result.isDuplicate
     };
@@ -132,6 +127,7 @@ export async function createPendingOrderAction({
   return {
     status: "error",
     message: result.message,
+    isRetryable: result.isRetryable,
     serializedCart: serializeCart(result.updatedCart)
   };
 }

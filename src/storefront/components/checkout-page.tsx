@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   ArrowRight,
   CheckCircle2,
+  ExternalLink,
   Loader2,
   MapPin,
   PackageCheck,
@@ -44,6 +45,11 @@ type SubmitFeedback = {
   message: string;
 };
 
+type PaymentHandoffState = {
+  orderNumber: string;
+  checkoutUrl: string;
+};
+
 type DeliveryOption = {
   method: DeliveryMethod;
   description: string;
@@ -75,6 +81,8 @@ export function StorefrontCheckoutPage() {
   >("");
   const [fieldErrors, setFieldErrors] = useState<CheckoutValidationErrors>({});
   const [submitFeedback, setSubmitFeedback] = useState<SubmitFeedback | null>(null);
+  const [paymentHandoff, setPaymentHandoff] =
+    useState<PaymentHandoffState | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const checkoutSubmissionKeyRef = useRef("");
@@ -137,10 +145,14 @@ export function StorefrontCheckoutPage() {
         });
       } else if (result.status === "created") {
         setFieldErrors({});
-        setSubmitFeedback({
-          tone: "success",
-          message: `Pedido ${result.order.orderNumber} creado. El pago con Mercado Pago queda listo para el próximo paso.`
+        setPaymentHandoff({
+          orderNumber: result.order.orderNumber,
+          checkoutUrl: result.payment.checkoutUrl
         });
+        window.setTimeout(() => {
+          window.location.assign(result.payment.checkoutUrl);
+        }, 650);
+        return;
       } else {
         setFieldErrors({
           cart: [result.message]
@@ -189,6 +201,10 @@ export function StorefrontCheckoutPage() {
 
   if (status === "error") {
     return <CheckoutErrorState onRetry={() => void refreshCart(true)} />;
+  }
+
+  if (paymentHandoff) {
+    return <CheckoutPaymentHandoffState handoff={paymentHandoff} />;
   }
 
   const items = review?.items ?? [];
@@ -592,6 +608,41 @@ function CheckoutLoadingState() {
           <Loader2 aria-hidden="true" size={34} strokeWidth={2.2} />
           <p>Cargando compra</p>
         </div>
+      </div>
+    </section>
+  );
+}
+
+function CheckoutPaymentHandoffState({
+  handoff
+}: {
+  handoff: PaymentHandoffState;
+}) {
+  return (
+    <section className={styles.checkoutPage} aria-busy="true">
+      <div className={styles.inner}>
+        <section
+          className={`${styles.statePanel} ${styles.handoffPanel}`}
+          role="status"
+          aria-live="polite"
+        >
+          <Loader2
+            className={styles.spinner}
+            aria-hidden="true"
+            size={34}
+            strokeWidth={2.2}
+          />
+          <p className={styles.handoffEyebrow}>Pago seguro</p>
+          <h1>Te estamos llevando a Mercado Pago</h1>
+          <p>
+            Pedido {handoff.orderNumber}. El pago se confirma por Mercado Pago;
+            hasta entonces el pedido queda pendiente.
+          </p>
+          <a className={styles.primaryAction} href={handoff.checkoutUrl}>
+            <span>Abrir Mercado Pago</span>
+            <ExternalLink aria-hidden="true" size={17} strokeWidth={2.2} />
+          </a>
+        </section>
       </div>
     </section>
   );

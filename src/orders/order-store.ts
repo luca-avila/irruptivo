@@ -4,7 +4,8 @@ import {
   createPendingOrderFromCheckout,
   type PendingOrder,
   type PendingOrderCheckoutInput,
-  type PendingOrderCreationResult
+  type PendingOrderCreationResult,
+  type PendingOrderPaymentPreference
 } from "./order-creation";
 import { type StockReservationRecord } from "./stock-reservation";
 
@@ -117,6 +118,29 @@ export function readOrderStoreSnapshot(): OrderStoreSnapshot {
   };
 }
 
+export function storePendingOrderPaymentPreference({
+  orderId,
+  paymentPreference
+}: {
+  orderId: string;
+  paymentPreference: PendingOrderPaymentPreference;
+}): PendingOrder | null {
+  const storedOrder = pendingOrders.find(
+    (pendingOrder) => pendingOrder.order.id === orderId
+  );
+
+  if (!storedOrder) {
+    return null;
+  }
+
+  storedOrder.order = clonePendingOrder({
+    ...storedOrder.order,
+    paymentPreference: clonePaymentPreference(paymentPreference)
+  });
+
+  return clonePendingOrder(storedOrder.order);
+}
+
 export function resetOrderStoreForTests(): void {
   pendingOrders.splice(0, pendingOrders.length);
   stockReservations.splice(0, stockReservations.length);
@@ -141,7 +165,18 @@ function clonePendingOrder(order: PendingOrder): PendingOrder {
       options: {
         ...item.options
       }
-    }))
+    })),
+    paymentPreference: order.paymentPreference
+      ? clonePaymentPreference(order.paymentPreference)
+      : null
+  };
+}
+
+function clonePaymentPreference(
+  paymentPreference: PendingOrderPaymentPreference
+): PendingOrderPaymentPreference {
+  return {
+    ...paymentPreference
   };
 }
 

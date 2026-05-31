@@ -64,6 +64,16 @@ export type PendingOrderDeliverySnapshot = {
   notes: string | null;
 };
 
+export type PendingOrderPaymentPreference = {
+  provider: "mercado_pago";
+  preferenceId: string;
+  checkoutUrl: string;
+  initPoint: string;
+  sandboxInitPoint: string | null;
+  externalReference: string;
+  createdAt: string;
+};
+
 export type PendingOrder = {
   id: string;
   orderNumber: string;
@@ -76,6 +86,7 @@ export type PendingOrder = {
   subtotalArs: number;
   deliveryCostArs: number;
   totalArs: number;
+  paymentPreference: PendingOrderPaymentPreference | null;
 };
 
 export type PendingOrderCreationInput = {
@@ -188,7 +199,8 @@ export function createPendingOrderFromCheckout({
       items: orderItems,
       subtotalArs: checkoutValidation.summary.subtotalArs,
       deliveryCostArs: checkoutValidation.summary.deliveryCostArs,
-      totalArs: checkoutValidation.summary.totalArs
+      totalArs: checkoutValidation.summary.totalArs,
+      paymentPreference: null
     },
     reservations: reservationResult.reservations,
     updatedCart: cloneCart(cartValidation.updatedCart)

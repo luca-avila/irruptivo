@@ -457,12 +457,26 @@
   line-height: 1.5;
 }
 
-.statePanel [aria-hidden="true"],
+.handoffPanel {
+  max-width: 38rem;
+}
+
+.handoffEyebrow {
+  color: #214f20;
+  font-size: 0.74rem;
+  font-weight: 850;
+  letter-spacing: 0.13em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.statePanel > [aria-hidden="true"],
 .spinner {
   animation: spin 0.9s linear infinite;
 }
 
 .primaryAction {
+  gap: 0.45rem;
   border: 1px solid #101010;
   background: #101010;
   padding: 0 1rem;
