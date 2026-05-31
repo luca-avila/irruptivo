@@ -301,53 +301,6 @@ button {
   }
 }
 
-.page-shell {
-  display: grid;
-  align-content: center;
-  min-height: calc(100svh - 72px);
-  padding: 3.5rem 1rem;
-}
-
-.page-panel {
-  width: min(100%, 42rem);
-  margin: 0 auto;
-}
-
-.eyebrow {
-  margin: 0 0 0.85rem;
-  color: var(--muted);
-  font-size: 0.78rem;
-  font-weight: 800;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-.page-title {
-  margin: 0;
-  font-size: clamp(2.5rem, 13vw, 5.2rem);
-  line-height: 0.9;
-  letter-spacing: 0;
-}
-
-.page-copy {
-  max-width: 34rem;
-  margin: 1.35rem 0 0;
-  color: var(--muted);
-  font-size: 1rem;
-  line-height: 1.65;
-}
-
-.primary-link {
-  display: inline-flex;
-  align-items: center;
-  min-height: 46px;
-  margin-top: 1.75rem;
-  padding: 0 1.1rem;
-  background: #111111;
-  color: #ffffff;
-  font-weight: 800;
-}
-
 .homepage {
   background: #f8f8f6;
 }
