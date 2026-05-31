@@ -76,8 +76,7 @@ button {
   position: sticky;
   top: 0;
   z-index: 20;
-  display: grid;
-  grid-template-columns: auto auto 1fr auto;
+  display: flex;
   align-items: center;
   gap: 0.5rem;
   min-height: 72px;
@@ -135,8 +134,20 @@ button {
   color: var(--muted);
 }
 
+.header-side {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 4rem;
+  min-width: 0;
+}
+
+.header-side--end {
+  justify-content: flex-end;
+}
+
 .brand-wordmark {
-  justify-self: center;
+  flex-shrink: 0;
   font-size: 1.02rem;
   font-weight: 800;
   letter-spacing: 0.14em;
@@ -720,18 +731,27 @@ button {
 
 @media (min-width: 760px) {
   .storefront-header {
-    grid-template-columns: auto 1fr auto auto;
     padding-inline: 2rem;
   }
 
+  .search-entry {
+    min-width: 13rem;
+    justify-content: flex-start;
+  }
+
   .brand-wordmark {
-    justify-self: start;
+    position: static;
+    transform: none;
+  }
+
+  .cart-entry {
+    margin-left: 0;
   }
 
   .desktop-links {
     display: flex;
-    justify-self: center;
-    gap: 1.25rem;
+    margin-inline: auto;
+    gap: 4rem;
     color: var(--muted);
     font-size: 0.92rem;
     font-weight: 700;

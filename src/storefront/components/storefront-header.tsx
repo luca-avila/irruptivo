@@ -45,41 +45,45 @@ export function StorefrontHeader() {
   return (
     <>
       <header className="storefront-header">
-        <button
-          className="icon-button"
-          type="button"
-          aria-label="Abrir menú"
-          aria-expanded={isMenuOpen}
-          onClick={() => setIsMenuOpen(true)}
-        >
-          <Menu aria-hidden="true" size={22} strokeWidth={2} />
-        </button>
+        <div className="header-side header-side--start">
+          <button
+            className="icon-button"
+            type="button"
+            aria-label="Abrir menú"
+            aria-expanded={isMenuOpen}
+            onClick={() => setIsMenuOpen(true)}
+          >
+            <Menu aria-hidden="true" size={22} strokeWidth={2} />
+          </button>
 
-        <Link className="search-entry" href={searchRoute.href} aria-label="Buscar productos">
-          <Search aria-hidden="true" size={18} strokeWidth={2} />
-          <span>{searchRoute.label}</span>
-        </Link>
+          <Link className="search-entry" href={searchRoute.href} aria-label="Buscar productos">
+            <Search aria-hidden="true" size={18} strokeWidth={2} />
+            <span>{searchRoute.label}</span>
+          </Link>
+        </div>
 
         <Link className="brand-wordmark" href="/" aria-label="Irruptivo inicio">
           IRRUPTIVO
         </Link>
 
-        <nav className="desktop-links" aria-label="Navegación principal">
-          {storefrontMenuRoutes.map((route) => (
-            <Link
-              key={route.href}
-              href={route.href}
-              aria-current={pathname === route.href ? "page" : undefined}
-            >
-              {route.label}
-            </Link>
-          ))}
-        </nav>
+        <div className="header-side header-side--end">
+          <nav className="desktop-links" aria-label="Navegación principal">
+            {storefrontMenuRoutes.map((route) => (
+              <Link
+                key={route.href}
+                href={route.href}
+                aria-current={pathname === route.href ? "page" : undefined}
+              >
+                {route.label}
+              </Link>
+            ))}
+          </nav>
 
-        <Link className="cart-entry" href={cartRoute.href} aria-label="Ver carrito">
-          <ShoppingBag aria-hidden="true" size={21} strokeWidth={2} />
-          {cartCount > 0 ? <span className="cart-count">{cartCount}</span> : null}
-        </Link>
+          <Link className="cart-entry" href={cartRoute.href} aria-label="Ver carrito">
+            <ShoppingBag aria-hidden="true" size={21} strokeWidth={2} />
+            {cartCount > 0 ? <span className="cart-count">{cartCount}</span> : null}
+          </Link>
+        </div>
       </header>
 
       {isMenuOpen ? (
