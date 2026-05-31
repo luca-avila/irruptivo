@@ -1,4 +1,5 @@
 import { StorefrontPaymentResultPage } from "../../../src/storefront/components/payment-result-page";
+import { expirePendingPaymentOrders } from "../../../src/orders/order-expiration";
 import { findOrderForPaymentReturn } from "../../../src/orders/order-store";
 import { getPaymentResultView } from "../../../src/payments/payment-result";
 
@@ -13,6 +14,9 @@ export async function PaymentResultRoutePage({
   searchParams
 }: PaymentResultRoutePageProps) {
   const params = await searchParams;
+
+  expirePendingPaymentOrders();
+
   const order = findOrderForPaymentReturn({
     orderId: firstParam(params?.order),
     guestAccessToken: firstParam(params?.token)

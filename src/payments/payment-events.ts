@@ -1,5 +1,8 @@
 export type PaymentEventProvider = "mercado_pago";
 
+export const PAYMENT_MANUAL_REVIEW_PROCESSING_RESULT =
+  "manual_review_required";
+
 export type PaymentEventIdentity = {
   provider: PaymentEventProvider;
   providerEventId: string;
@@ -26,6 +29,14 @@ export type RecordPaymentEventOnceResult =
       status: "duplicate";
       event: PaymentEventRecord;
     };
+
+export type PaymentManualReviewState = {
+  required: boolean;
+  label: string;
+  description: string;
+  providerPaymentIds: string[];
+  latestEventAt: string | null;
+};
 
 const paymentEvents: PaymentEventRecord[] = [];
 
@@ -64,6 +75,36 @@ export function hasProcessedPaymentEvent({
     (event) =>
       event.provider === provider && event.providerEventId === providerEventId
   );
+}
+
+export function getPaymentManualReviewForOrder(
+  orderId: string,
+  events: readonly PaymentEventRecord[] = paymentEvents
+): PaymentManualReviewState {
+  const normalizedOrderId = orderId.trim();
+
+  if (!normalizedOrderId) {
+    return getNeutralManualReviewState();
+  }
+
+  const reviewEvents = events.filter(
+    (event) =>
+      event.orderId === normalizedOrderId &&
+      event.processingResult === PAYMENT_MANUAL_REVIEW_PROCESSING_RESULT
+  );
+
+  if (reviewEvents.length === 0) {
+    return getNeutralManualReviewState();
+  }
+
+  return {
+    required: true,
+    label: "Revisión manual requerida",
+    description:
+      "Llegó un pago aprobado para un pedido con reserva vencida. Revisá el caso antes de preparar o devolver el pago.",
+    providerPaymentIds: getUniqueProviderPaymentIds(reviewEvents),
+    latestEventAt: getLatestReceivedAt(reviewEvents)
+  };
 }
 
 export function readPaymentEventsForTests(): PaymentEventRecord[] {
@@ -108,6 +149,36 @@ function clonePaymentEvent(event: PaymentEventRecord): PaymentEventRecord {
   return {
     ...event
   };
+}
+
+function getNeutralManualReviewState(): PaymentManualReviewState {
+  return {
+    required: false,
+    label: "Sin revisión manual",
+    description: "No hay pagos tardíos pendientes de revisión para este pedido.",
+    providerPaymentIds: [],
+    latestEventAt: null
+  };
+}
+
+function getUniqueProviderPaymentIds(
+  events: readonly PaymentEventRecord[]
+): string[] {
+  return [...new Set(events.map((event) => event.providerPaymentId))];
+}
+
+function getLatestReceivedAt(
+  events: readonly PaymentEventRecord[]
+): string {
+  let latestReceivedAt = events[0]?.receivedAt ?? new Date(0).toISOString();
+
+  for (const event of events.slice(1)) {
+    if (Date.parse(event.receivedAt) > Date.parse(latestReceivedAt)) {
+      latestReceivedAt = event.receivedAt;
+    }
+  }
+
+  return latestReceivedAt;
 }
 
 function assertNonEmptyString(value: string, name: string): void {

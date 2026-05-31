@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { DELIVERY_METHOD, ORDER_STATUS, type OrderStatus } from "../domain/rules";
+import {
+  resetOrderConfirmationEmailDeliveriesForTests,
+  type OrderConfirmationEmailResult
+} from "../notifications/order-confirmation-email";
 import { type Order } from "../orders/order-creation";
 import {
   releaseReservedStockForOrder,
@@ -22,14 +26,21 @@ const now = "2026-05-30T12:00:00.000Z";
 describe("Mercado Pago payment reconciliation", () => {
   beforeEach(() => {
     resetPaymentEventsForTests();
+    resetOrderConfirmationEmailDeliveriesForTests();
   });
 
-  it("moves a pending order to paid after verified server-side approved payment", async () => {
+  it("moves a pending order to paid and sends confirmation email after verified server-side approved payment", async () => {
     const repository = createOrderRepository(getOrder(ORDER_STATUS.pendingPayment));
+    const confirmationEmails: Order[] = [];
 
     const result = await reconcileMercadoPagoEvent(getNotification(), {
       paymentProvider: async () => getPayment({ status: "approved" }),
       orderRepository: repository,
+      confirmationEmailSender: async (order) => {
+        confirmationEmails.push(order);
+
+        return getSentConfirmationEmailResult(order);
+      },
       now
     });
 
@@ -37,10 +48,21 @@ describe("Mercado Pago payment reconciliation", () => {
       status: "paid",
       orderId: "order-001",
       providerPaymentId: "payment-001",
-      orderStatus: ORDER_STATUS.paid
+      orderStatus: ORDER_STATUS.paid,
+      confirmationEmail: {
+        status: "sent",
+        orderId: "order-001",
+        recipientEmail: "luca@example.com",
+        providerMessageId: "message-order-001"
+      }
     });
     expect(repository.getOrder()?.status).toBe(ORDER_STATUS.paid);
     expect(repository.transitionCount).toBe(1);
+    expect(confirmationEmails).toHaveLength(1);
+    expect(confirmationEmails[0]).toMatchObject({
+      id: "order-001",
+      status: ORDER_STATUS.paid
+    });
     expect(readPaymentEventsForTests()).toMatchObject([
       {
         providerEventId: "event-001",
@@ -75,15 +97,25 @@ describe("Mercado Pago payment reconciliation", () => {
   it("does not repeat a paid transition for a duplicate success event", async () => {
     const repository = createOrderRepository(getOrder(ORDER_STATUS.pendingPayment));
     const notification = getNotification();
+    const confirmationEmails: Order[] = [];
+    const confirmationEmailSender = async (
+      order: Order
+    ): Promise<OrderConfirmationEmailResult> => {
+      confirmationEmails.push(order);
+
+      return getSentConfirmationEmailResult(order);
+    };
 
     await reconcileMercadoPagoEvent(notification, {
       paymentProvider: async () => getPayment({ status: "approved" }),
       orderRepository: repository,
+      confirmationEmailSender,
       now
     });
     const duplicateResult = await reconcileMercadoPagoEvent(notification, {
       paymentProvider: async () => getPayment({ status: "approved" }),
       orderRepository: repository,
+      confirmationEmailSender,
       now
     });
 
@@ -94,6 +126,7 @@ describe("Mercado Pago payment reconciliation", () => {
     });
     expect(repository.getOrder()?.status).toBe(ORDER_STATUS.paid);
     expect(repository.transitionCount).toBe(1);
+    expect(confirmationEmails).toHaveLength(1);
   });
 
   it("does not release stock twice for a duplicate failure event", async () => {
@@ -211,6 +244,36 @@ describe("Mercado Pago payment reconciliation", () => {
     });
     expect(repository.getOrder()?.status).toBe(ORDER_STATUS.expired);
   });
+
+  it("surfaces confirmation email failure without rolling back the paid transition", async () => {
+    const repository = createOrderRepository(getOrder(ORDER_STATUS.pendingPayment));
+
+    const result = await reconcileMercadoPagoEvent(getNotification(), {
+      paymentProvider: async () => getPayment({ status: "approved" }),
+      orderRepository: repository,
+      confirmationEmailSender: async (order) => ({
+        status: "failed",
+        orderId: order.id,
+        recipientEmail: order.contact.email,
+        message: "El proveedor de email rechazó el envío."
+      }),
+      now
+    });
+
+    expect(result).toEqual({
+      status: "paid",
+      orderId: "order-001",
+      providerPaymentId: "payment-001",
+      orderStatus: ORDER_STATUS.paid,
+      confirmationEmail: {
+        status: "failed",
+        orderId: "order-001",
+        recipientEmail: "luca@example.com",
+        message: "El proveedor de email rechazó el envío."
+      }
+    });
+    expect(repository.getOrder()?.status).toBe(ORDER_STATUS.paid);
+  });
 });
 
 function getNotification({
@@ -252,6 +315,17 @@ function getPayment({
     metadata: {
       internalOrderId: orderId
     }
+  };
+}
+
+function getSentConfirmationEmailResult(
+  order: Order
+): OrderConfirmationEmailResult {
+  return {
+    status: "sent",
+    orderId: order.id,
+    recipientEmail: order.contact.email,
+    providerMessageId: `message-${order.id}`
   };
 }
 

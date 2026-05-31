@@ -1,4 +1,10 @@
 import { ORDER_STATUS, type OrderStatus } from "../domain/rules";
+import {
+  sendOrderConfirmationOnce,
+  type OrderConfirmationEmailResult,
+  type OrderConfirmationEmailSender
+} from "../notifications/order-confirmation-email";
+import { expirePendingPaymentOrders } from "../orders/order-expiration";
 import { type Order } from "../orders/order-creation";
 import {
   findOrderByIdInStore,
@@ -7,6 +13,7 @@ import {
 } from "../orders/order-store";
 import { type StockReservationReleaseResult } from "../orders/stock-reservation";
 import {
+  PAYMENT_MANUAL_REVIEW_PROCESSING_RESULT,
   recordPaymentEventOnce,
   type PaymentEventRecord
 } from "./payment-events";
@@ -41,6 +48,7 @@ export type PaymentReconciliationConfig = {
 export type ReconcileMercadoPagoEventOptions = {
   paymentProvider?: MercadoPagoPaymentProvider;
   orderRepository?: PaymentReconciliationOrderRepository;
+  confirmationEmailSender?: OrderConfirmationEmailSender;
   config?: PaymentReconciliationConfig;
   now?: Date | string;
 };
@@ -51,6 +59,7 @@ export type PaymentReconciliationResult =
       orderId: string;
       providerPaymentId: string;
       orderStatus: typeof ORDER_STATUS.paid;
+      confirmationEmail: OrderConfirmationEmailResult;
     }
   | {
       status: "payment_failed";
@@ -95,6 +104,7 @@ export async function reconcileMercadoPagoEvent(
   {
     paymentProvider,
     orderRepository = defaultOrderRepository,
+    confirmationEmailSender = sendOrderConfirmationOnce,
     config = {},
     now = new Date()
   }: ReconcileMercadoPagoEventOptions = {}
@@ -143,7 +153,15 @@ export async function reconcileMercadoPagoEvent(
   }
 
   const providerStatus = mapMercadoPagoPaymentStatus(payment.status);
-  const processingResult = getProcessingResult(order.status, providerStatus);
+  const reconciledOrder = expirePendingPaymentOrderIfNeeded({
+    order,
+    orderRepository,
+    now
+  });
+  const processingResult = getProcessingResult(
+    reconciledOrder.status,
+    providerStatus
+  );
   const recordResult = recordPaymentEventOnce(
     buildPaymentEventRecord({
       notification,
@@ -171,29 +189,63 @@ export async function reconcileMercadoPagoEvent(
   }
 
   if (providerStatus === "approved") {
-    return reconcileApprovedPayment({
-      order,
+    return await reconcileApprovedPayment({
+      order: reconciledOrder,
       payment,
-      orderRepository
+      orderRepository,
+      confirmationEmailSender
     });
   }
 
   return reconcileFailedPayment({
-    order,
+    order: reconciledOrder,
     payment,
     orderRepository
   });
 }
 
-function reconcileApprovedPayment({
+function expirePendingPaymentOrderIfNeeded({
+  order,
+  orderRepository,
+  now
+}: {
+  order: Order;
+  orderRepository: PaymentReconciliationOrderRepository;
+  now: Date | string;
+}): Order {
+  const expirationResult = expirePendingPaymentOrders({
+    now,
+    orderRepository: {
+      listOrders: () => [order],
+      updateOrderStatus: (input) => orderRepository.updateOrderStatus(input),
+      releaseReservedStockForOrder: (orderId) =>
+        orderRepository.releaseReservedStockForOrder(orderId)
+    }
+  });
+
+  if (expirationResult.expiredOrderCount === 0) {
+    return order;
+  }
+
+  return (
+    orderRepository.findOrderById(order.id) ?? {
+      ...order,
+      status: ORDER_STATUS.expired
+    }
+  );
+}
+
+async function reconcileApprovedPayment({
   order,
   payment,
-  orderRepository
+  orderRepository,
+  confirmationEmailSender
 }: {
   order: Order;
   payment: MercadoPagoPayment;
   orderRepository: PaymentReconciliationOrderRepository;
-}): PaymentReconciliationResult {
+  confirmationEmailSender: OrderConfirmationEmailSender;
+}): Promise<PaymentReconciliationResult> {
   if (order.status === ORDER_STATUS.expired) {
     return {
       status: "manual_review_required",
@@ -215,6 +267,17 @@ function reconcileApprovedPayment({
     orderId: order.id,
     status: ORDER_STATUS.paid
   });
+  const paidOrder =
+    updatedOrder?.status === ORDER_STATUS.paid
+      ? updatedOrder
+      : {
+          ...order,
+          status: ORDER_STATUS.paid
+        };
+  const confirmationEmail = await sendConfirmationEmailSafely(
+    confirmationEmailSender,
+    paidOrder
+  );
 
   return {
     status: "paid",
@@ -222,8 +285,25 @@ function reconcileApprovedPayment({
     providerPaymentId: payment.id,
     orderStatus: updatedOrder?.status === ORDER_STATUS.paid
       ? updatedOrder.status
-      : ORDER_STATUS.paid
+      : ORDER_STATUS.paid,
+    confirmationEmail
   };
+}
+
+async function sendConfirmationEmailSafely(
+  confirmationEmailSender: OrderConfirmationEmailSender,
+  order: Order
+): Promise<OrderConfirmationEmailResult> {
+  try {
+    return await confirmationEmailSender(order);
+  } catch {
+    return {
+      status: "failed",
+      orderId: order.id,
+      recipientEmail: order.contact.email,
+      message: "No pudimos enviar el email transaccional."
+    };
+  }
 }
 
 function reconcileFailedPayment({
@@ -339,7 +419,7 @@ function getProcessingResult(
 
   if (providerStatus === "approved") {
     return orderStatus === ORDER_STATUS.expired
-      ? "manual_review_required"
+      ? PAYMENT_MANUAL_REVIEW_PROCESSING_RESULT
       : orderStatus === ORDER_STATUS.pendingPayment
         ? "paid"
         : "ignored";
