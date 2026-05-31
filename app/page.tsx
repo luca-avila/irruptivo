@@ -151,7 +151,10 @@ function ProductRail({ products, emptyTitle, emptyCopy }: ProductListProps) {
   }
 
   return (
-    <div className="homepage-product-rail" aria-label="Productos destacados de colección">
+    <div
+      className="grid grid-flow-col [grid-auto-columns:minmax(15.5rem,82vw)] min-[760px]:[grid-auto-columns:minmax(16rem,22rem)] gap-[0.95rem] w-[min(100%,70rem)] mx-auto overflow-x-auto [overscroll-behavior-inline:contain] pb-[0.65rem] snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      aria-label="Productos destacados de colección"
+    >
       {products.map((product) => (
         <ProductCard key={product.id} product={product} />
       ))}
@@ -161,11 +164,14 @@ function ProductRail({ products, emptyTitle, emptyCopy }: ProductListProps) {
 
 function ProductGrid({ products, emptyTitle, emptyCopy }: ProductListProps) {
   if (products.length === 0) {
-    return <EmptyProductState title={emptyTitle} copy={emptyCopy} />;
+    return <EmptyProductState title={emptyTitle} copy={emptyCopy} dark />;
   }
 
   return (
-    <div className="homepage-product-grid" aria-label="Suplementos destacados">
+    <div
+      className="grid grid-cols-2 min-[760px]:grid-cols-3 min-[1100px]:grid-cols-4 gap-[0.8rem] w-[min(100%,70rem)] mx-auto"
+      aria-label="Suplementos destacados"
+    >
       {products.map((product) => (
         <ProductCard key={product.id} product={product} compact />
       ))}
@@ -182,23 +188,46 @@ function ProductCard({ product, compact = false }: ProductCardProps) {
   const basePath =
     product.area === PRODUCT_AREA.supplement ? "/suplementos" : "/coleccion";
 
+  const mediaClass = compact
+    ? "grid min-h-[auto] overflow-hidden place-items-center bg-[#1b1b1b]"
+    : "grid min-h-[19rem] overflow-hidden place-items-center bg-[#e8e8e4]";
+  const imageClass = `block w-full h-full object-cover transition-transform duration-[550ms] ease-[ease] group-hover:scale-[1.045] ${
+    compact ? "aspect-square" : "aspect-[4/5]"
+  }`;
+  const contextClass = `m-0 text-[0.76rem] font-[850] tracking-[0.1em] uppercase ${
+    compact ? "text-[rgba(248,248,246,0.62)]" : "text-[var(--muted)]"
+  }`;
+  const nameClass = `m-0 mt-[0.22rem] text-[1.13rem] leading-[1.2] group-hover:underline group-hover:underline-offset-[0.16em] ${
+    compact ? "text-white" : ""
+  }`;
+  const metaClass = `flex flex-wrap justify-center gap-x-[0.75rem] gap-y-[0.35rem] m-0 mt-[0.33rem] text-[0.94rem] ${
+    compact ? "text-[rgba(248,248,246,0.62)]" : "text-[#686868]"
+  }`;
+
   return (
     <Link
-      className={compact ? "homepage-product-card is-compact" : "homepage-product-card"}
+      className="group snap-start active:scale-[0.992]"
       href={`${basePath}/${product.slug}`}
       aria-label={`Ver ${product.name}`}
     >
-      <div className="homepage-product-card__media">
+      <div className={mediaClass}>
         {product.image ? (
-          <img src={product.image.path} alt={product.image.alt} loading="lazy" />
+          <img
+            className={imageClass}
+            src={product.image.path}
+            alt={product.image.alt}
+            loading="lazy"
+          />
         ) : (
-          <div className="homepage-product-card__image-empty">Sin imagen</div>
+          <div className="grid w-full min-h-[18rem] place-items-center text-[#595959] font-[800]">
+            Sin imagen
+          </div>
         )}
       </div>
-      <div className="homepage-product-card__body">
-        <p>{product.contextLabel}</p>
-        <h3>{product.name}</h3>
-        <div>
+      <div className="pt-[0.85rem] text-center">
+        <p className={contextClass}>{product.contextLabel}</p>
+        <h3 className={nameClass}>{product.name}</h3>
+        <div className={metaClass}>
           <span>{priceFormatter.format(product.priceArs)}</span>
           <span>{product.availabilityLabel}</span>
         </div>
@@ -210,13 +239,23 @@ function ProductCard({ product, compact = false }: ProductCardProps) {
 type EmptyProductStateProps = {
   title: string;
   copy: string;
+  dark?: boolean;
 };
 
-function EmptyProductState({ title, copy }: EmptyProductStateProps) {
+function EmptyProductState({ title, copy, dark = false }: EmptyProductStateProps) {
+  const containerClass = `w-[min(100%,70rem)] mx-auto p-[1.35rem] border ${
+    dark
+      ? "border-[rgba(255,255,255,0.16)] bg-[rgba(255,255,255,0.06)]"
+      : "border-[rgba(17,17,17,0.12)] bg-[rgba(255,255,255,0.72)]"
+  }`;
+  const copyClass = `m-0 mt-[0.42rem] leading-[1.55] ${
+    dark ? "text-[rgba(248,248,246,0.7)]" : "text-[var(--muted)]"
+  }`;
+
   return (
-    <div className="homepage-empty-state">
-      <h3>{title}</h3>
-      <p>{copy}</p>
+    <div className={containerClass}>
+      <h3 className="m-0 text-[1.05rem]">{title}</h3>
+      <p className={copyClass}>{copy}</p>
     </div>
   );
 }
