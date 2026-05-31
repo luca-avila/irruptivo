@@ -29,12 +29,23 @@ export type StockReservationResult =
       unavailableItems: StockUnavailableItem[];
     };
 
+export type StockReservationReleaseResult = {
+  status: "released" | "already_released";
+  releasedReservations: StockReservationRecord[];
+  remainingReservations: StockReservationRecord[];
+};
+
 export type ReserveStockForOrderInput = {
   orderId: string;
   items: readonly StockReservationItem[];
   variants: readonly ReservableStockVariant[];
   existingReservations?: readonly StockReservationRecord[];
   reservedAt?: Date | string;
+};
+
+export type ReleaseReservedStockForOrderInput = {
+  orderId: string;
+  reservations: readonly StockReservationRecord[];
 };
 
 export function getAvailableStock(
@@ -106,6 +117,37 @@ export function reserveStockForOrder({
       quantity,
       reservedAt: reservationTimestamp
     }))
+  };
+}
+
+export function releaseReservedStockForOrder({
+  orderId,
+  reservations
+}: ReleaseReservedStockForOrderInput): StockReservationReleaseResult {
+  assertNonEmptyString(orderId, "orderId");
+
+  const releasedReservations: StockReservationRecord[] = [];
+  const remainingReservations: StockReservationRecord[] = [];
+
+  for (const [index, reservation] of reservations.entries()) {
+    assertReservationRecord(reservation, index);
+
+    const clonedReservation = {
+      ...reservation
+    };
+
+    if (reservation.orderId === orderId) {
+      releasedReservations.push(clonedReservation);
+    } else {
+      remainingReservations.push(clonedReservation);
+    }
+  }
+
+  return {
+    status:
+      releasedReservations.length > 0 ? "released" : "already_released",
+    releasedReservations,
+    remainingReservations
   };
 }
 

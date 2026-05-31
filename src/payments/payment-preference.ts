@@ -180,9 +180,21 @@ function buildMercadoPagoPreferenceRequest(
       email: order.contact.email
     },
     back_urls: {
-      success: buildReturnUrl(config.appUrl, "/checkout/pago/exito", order.id),
-      failure: buildReturnUrl(config.appUrl, "/checkout/pago/fallo", order.id),
-      pending: buildReturnUrl(config.appUrl, "/checkout/pago/pendiente", order.id)
+      success: buildReturnUrl(
+        config.appUrl,
+        "/checkout/pago/exito",
+        order
+      ),
+      failure: buildReturnUrl(
+        config.appUrl,
+        "/checkout/pago/fallo",
+        order
+      ),
+      pending: buildReturnUrl(
+        config.appUrl,
+        "/checkout/pago/pendiente",
+        order
+      )
     },
     auto_return: "approved",
     external_reference: order.id,
@@ -232,9 +244,14 @@ function getPreferenceItemsTotal(
   );
 }
 
-function buildReturnUrl(appUrl: string, pathname: string, orderId: string): string {
+function buildReturnUrl(
+  appUrl: string,
+  pathname: string,
+  order: PendingOrder
+): string {
   const url = new URL(pathname, appUrl);
-  url.searchParams.set("order", orderId);
+  url.searchParams.set("order", order.id);
+  url.searchParams.set("token", order.guestAccessToken);
 
   return url.toString();
 }

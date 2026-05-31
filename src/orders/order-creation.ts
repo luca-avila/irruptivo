@@ -18,7 +18,8 @@ import {
 import {
   ORDER_STATUS,
   type DeliveryMethod,
-  type DeliveryMethodLabel
+  type DeliveryMethodLabel,
+  type OrderStatus
 } from "../domain/rules";
 import {
   validateCheckoutInput,
@@ -74,10 +75,9 @@ export type PendingOrderPaymentPreference = {
   createdAt: string;
 };
 
-export type PendingOrder = {
+type OrderSnapshot = {
   id: string;
   orderNumber: string;
-  status: typeof ORDER_STATUS.pendingPayment;
   createdAt: string;
   guestAccessToken: string;
   contact: CheckoutContact;
@@ -87,6 +87,14 @@ export type PendingOrder = {
   deliveryCostArs: number;
   totalArs: number;
   paymentPreference: PendingOrderPaymentPreference | null;
+};
+
+export type Order = OrderSnapshot & {
+  status: OrderStatus;
+};
+
+export type PendingOrder = OrderSnapshot & {
+  status: typeof ORDER_STATUS.pendingPayment;
 };
 
 export type PendingOrderCreationInput = {

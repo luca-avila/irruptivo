@@ -103,9 +103,12 @@ describe("Mercado Pago payment preference", () => {
         order_number: "IRR-000001"
       },
       back_urls: {
-        success: "https://irruptivo.test/checkout/pago/exito?order=order-001",
-        failure: "https://irruptivo.test/checkout/pago/fallo?order=order-001",
-        pending: "https://irruptivo.test/checkout/pago/pendiente?order=order-001"
+        success:
+          "https://irruptivo.test/checkout/pago/exito?order=order-001&token=guest-access-token",
+        failure:
+          "https://irruptivo.test/checkout/pago/fallo?order=order-001&token=guest-access-token",
+        pending:
+          "https://irruptivo.test/checkout/pago/pendiente?order=order-001&token=guest-access-token"
       },
       auto_return: "approved"
     });

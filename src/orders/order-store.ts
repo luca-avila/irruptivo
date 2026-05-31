@@ -1,17 +1,23 @@
 import { type Cart } from "../cart/cart";
 import { type CatalogProductRecord } from "../catalog/catalog";
+import { type OrderStatus } from "../domain/rules";
 import {
   createPendingOrderFromCheckout,
+  type Order,
   type PendingOrder,
   type PendingOrderCheckoutInput,
   type PendingOrderCreationResult,
   type PendingOrderPaymentPreference
 } from "./order-creation";
-import { type StockReservationRecord } from "./stock-reservation";
+import {
+  releaseReservedStockForOrder,
+  type StockReservationRecord,
+  type StockReservationReleaseResult
+} from "./stock-reservation";
 
 type StoredPendingOrder = {
   idempotencyKey: string;
-  order: PendingOrder;
+  order: Order;
   updatedCart: Cart;
 };
 
@@ -33,8 +39,18 @@ export type PendingOrderStoreCreationResult =
   | Exclude<PendingOrderCreationResult, { status: "created" }>;
 
 export type OrderStoreSnapshot = {
-  orders: PendingOrder[];
+  orders: Order[];
   reservations: StockReservationRecord[];
+};
+
+export type PaymentReturnOrderLookupInput = {
+  orderId: string | null | undefined;
+  guestAccessToken: string | null | undefined;
+};
+
+export type UpdateOrderStatusInStoreInput = {
+  orderId: string;
+  status: OrderStatus;
 };
 
 const pendingOrders: StoredPendingOrder[] = [];
@@ -63,7 +79,7 @@ export function createPendingOrderInStore({
   if (existingOrder) {
     return {
       status: "created",
-      order: clonePendingOrder(existingOrder.order),
+      order: clonePendingOrder(existingOrder.order as PendingOrder),
       reservations: [],
       updatedCart: cloneCart(existingOrder.updatedCart),
       isDuplicate: true
@@ -109,13 +125,45 @@ export function createPendingOrderInStore({
 
 export function readOrderStoreSnapshot(): OrderStoreSnapshot {
   return {
-    orders: pendingOrders.map((storedOrder) =>
-      clonePendingOrder(storedOrder.order)
-    ),
+    orders: pendingOrders.map((storedOrder) => cloneOrder(storedOrder.order)),
     reservations: stockReservations.map((reservation) => ({
       ...reservation
     }))
   };
+}
+
+export function findOrderByIdInStore(orderId: string): Order | null {
+  const normalizedOrderId = orderId.trim();
+
+  if (!normalizedOrderId) {
+    return null;
+  }
+
+  const storedOrder = pendingOrders.find(
+    ({ order }) => order.id === normalizedOrderId
+  );
+
+  return storedOrder ? cloneOrder(storedOrder.order) : null;
+}
+
+export function findOrderForPaymentReturn({
+  orderId,
+  guestAccessToken
+}: PaymentReturnOrderLookupInput): PendingOrder | null {
+  const normalizedOrderId = orderId?.trim() ?? "";
+  const normalizedGuestAccessToken = guestAccessToken?.trim() ?? "";
+
+  if (!normalizedOrderId || !normalizedGuestAccessToken) {
+    return null;
+  }
+
+  const storedOrder = pendingOrders.find(
+    ({ order }) =>
+      order.id === normalizedOrderId &&
+      order.guestAccessToken === normalizedGuestAccessToken
+  );
+
+  return storedOrder ? clonePendingOrder(storedOrder.order as PendingOrder) : null;
 }
 
 export function storePendingOrderPaymentPreference({
@@ -133,12 +181,55 @@ export function storePendingOrderPaymentPreference({
     return null;
   }
 
-  storedOrder.order = clonePendingOrder({
+  storedOrder.order = cloneOrder({
     ...storedOrder.order,
     paymentPreference: clonePaymentPreference(paymentPreference)
   });
 
-  return clonePendingOrder(storedOrder.order);
+  return clonePendingOrder(storedOrder.order as PendingOrder);
+}
+
+export function updateOrderStatusInStore({
+  orderId,
+  status
+}: UpdateOrderStatusInStoreInput): Order | null {
+  const normalizedOrderId = orderId.trim();
+
+  if (!normalizedOrderId) {
+    return null;
+  }
+
+  const storedOrder = pendingOrders.find(
+    ({ order }) => order.id === normalizedOrderId
+  );
+
+  if (!storedOrder) {
+    return null;
+  }
+
+  storedOrder.order = cloneOrder({
+    ...storedOrder.order,
+    status
+  });
+
+  return cloneOrder(storedOrder.order);
+}
+
+export function releaseReservedStockForOrderInStore(
+  orderId: string
+): StockReservationReleaseResult {
+  const releaseResult = releaseReservedStockForOrder({
+    orderId,
+    reservations: stockReservations
+  });
+
+  stockReservations.splice(
+    0,
+    stockReservations.length,
+    ...releaseResult.remainingReservations
+  );
+
+  return releaseResult;
 }
 
 export function resetOrderStoreForTests(): void {
@@ -147,6 +238,10 @@ export function resetOrderStoreForTests(): void {
 }
 
 function clonePendingOrder(order: PendingOrder): PendingOrder {
+  return cloneOrder(order);
+}
+
+function cloneOrder<T extends Order>(order: T): T {
   return {
     ...order,
     contact: {
@@ -169,7 +264,7 @@ function clonePendingOrder(order: PendingOrder): PendingOrder {
     paymentPreference: order.paymentPreference
       ? clonePaymentPreference(order.paymentPreference)
       : null
-  };
+  } as T;
 }
 
 function clonePaymentPreference(

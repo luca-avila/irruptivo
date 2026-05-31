@@ -9,6 +9,7 @@ import { type Cart } from "../cart/cart";
 import { DELIVERY_METHOD } from "../domain/rules";
 import {
   createPendingOrderInStore,
+  findOrderForPaymentReturn,
   resetOrderStoreForTests,
   readOrderStoreSnapshot
 } from "./order-store";
@@ -102,6 +103,97 @@ describe("pending order in-memory store", () => {
         reservedAt: now
       }
     ]);
+  });
+
+  it("finds an order for payment result pages only with the matching guest token", () => {
+    resetOrderStoreForTests();
+
+    createPendingOrderInStore({
+      idempotencyKey: "checkout-submit-lookup",
+      cart: getCart(),
+      checkout: {
+        fullName: "Luca Irruptivo",
+        email: "luca@example.com",
+        phone: "11 5555 5555",
+        deliveryMethod: DELIVERY_METHOD.pickup
+      },
+      products,
+      orderId: "order-lookup",
+      orderNumber: "IRR-000099",
+      guestAccessToken: "guest-token-lookup",
+      now
+    });
+
+    const order = findOrderForPaymentReturn({
+      orderId: "order-lookup",
+      guestAccessToken: "guest-token-lookup"
+    });
+
+    expect(order).toMatchObject({
+      id: "order-lookup",
+      guestAccessToken: "guest-token-lookup",
+      orderNumber: "IRR-000099"
+    });
+    expect(
+      findOrderForPaymentReturn({
+        orderId: "order-lookup",
+        guestAccessToken: "wrong-token"
+      })
+    ).toBeNull();
+    expect(
+      findOrderForPaymentReturn({
+        orderId: "order-lookup",
+        guestAccessToken: ""
+      })
+    ).toBeNull();
+  });
+
+  it("returns a cloned order for payment result lookup", () => {
+    resetOrderStoreForTests();
+
+    createPendingOrderInStore({
+      idempotencyKey: "checkout-submit-clone",
+      cart: getCart(),
+      checkout: {
+        fullName: "Luca Irruptivo",
+        email: "luca@example.com",
+        phone: "11 5555 5555",
+        deliveryMethod: DELIVERY_METHOD.pickup
+      },
+      products,
+      orderId: "order-clone",
+      orderNumber: "IRR-000100",
+      guestAccessToken: "guest-token-clone",
+      now
+    });
+
+    const order = findOrderForPaymentReturn({
+      orderId: "order-clone",
+      guestAccessToken: "guest-token-clone"
+    });
+
+    if (!order) {
+      throw new Error("Expected order lookup to succeed.");
+    }
+
+    order.contact.fullName = "Mutated Name";
+    order.items[0].quantity = 99;
+
+    expect(
+      findOrderForPaymentReturn({
+        orderId: "order-clone",
+        guestAccessToken: "guest-token-clone"
+      })
+    ).toMatchObject({
+      contact: {
+        fullName: "Luca Irruptivo"
+      },
+      items: [
+        {
+          quantity: 2
+        }
+      ]
+    });
   });
 });
 
