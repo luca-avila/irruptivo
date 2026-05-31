@@ -23,28 +23,52 @@ const priceFormatter = new Intl.NumberFormat("es-AR", {
 const footerLinkClass =
   "justify-self-start transition-colors duration-[180ms] ease-[ease] hover:text-[#111111]! hover:underline! hover:underline-offset-[0.18em]";
 
+const heroCtaClass =
+  "inline-flex items-center gap-[0.45rem] min-h-12 font-[850] mt-[2.35rem] px-[1.1rem] bg-white text-[#111111]! text-[1.05rem] transition-[background-color,transform] duration-[180ms] ease-[ease] hover:bg-[#f1efe9] hover:-translate-y-px [&_svg]:transition-transform [&_svg]:duration-200 [&_svg]:ease-[ease] hover:[&_svg]:translate-x-1";
+
+const textLinkBaseClass =
+  "inline-flex items-center gap-[0.45rem] min-h-12 font-[850] w-[min(100%,70rem)] mx-auto mt-[1.3rem] text-[1.08rem] [&_svg]:transition-transform [&_svg]:duration-200 [&_svg]:ease-[ease] hover:[&_svg]:translate-x-1";
+const textLinkLightClass = `${textLinkBaseClass} text-[#111111]!`;
+const textLinkDarkClass = `${textLinkBaseClass} text-white!`;
+
+const sectionClass = "py-12 px-4 min-[760px]:px-8";
+const sectionHeaderClass = "w-[min(100%,70rem)] mx-auto mb-[1.6rem]";
+const kickerBaseClass =
+  "m-0 text-[0.76rem] font-[850] tracking-[0.13em] uppercase";
+const sectionH2BaseClass = "m-0 mt-[0.45rem] leading-[1.04] tracking-[0]";
+
 export default function HomePage() {
   const featuredProducts = getHomepageFeaturedProducts();
 
   return (
-    <div className="homepage">
-      <section className="homepage-hero" aria-labelledby="homepage-hero-title">
-        <div className="homepage-hero__content">
-          <p className="homepage-hero__eyebrow">Indumentaria deportiva</p>
-          <h1 id="homepage-hero-title">
+    <div className="bg-[#f8f8f6]">
+      <section
+        className='relative grid items-end min-h-[calc(100svh-72px)] overflow-hidden text-white bg-center bg-cover [background-image:linear-gradient(180deg,rgba(0,0,0,0.12)_0%,rgba(0,0,0,0.24)_42%,rgba(0,0,0,0.84)_100%),url("/brand/homepage-hero.webp")] min-[760px]:[background-position:center_40%]'
+        aria-labelledby="homepage-hero-title"
+      >
+        <div className="w-[min(100%,38rem)] pt-[min(18svh,9rem)] px-5 pb-16 min-[760px]:px-12 min-[1100px]:ml-[max(3rem,calc((100vw-72rem)/2))]">
+          <p className="m-0 text-[0.76rem] font-[850] tracking-[0.13em] uppercase text-[rgba(255,255,255,0.76)]">
+            Indumentaria deportiva
+          </p>
+          <h1
+            id="homepage-hero-title"
+            className="max-w-[13ch] m-0 mt-[0.95rem] text-[clamp(2.35rem,13vw,5.9rem)] leading-[0.96] tracking-[0]"
+          >
             Rendimiento, comodidad y diseño para todos los días.
           </h1>
-          <Link className="homepage-hero__cta" href="/coleccion">
+          <Link className={heroCtaClass} href="/coleccion">
             <span>Ver colección</span>
             <ArrowRight aria-hidden="true" size={22} strokeWidth={2.2} />
           </Link>
         </div>
       </section>
 
-      <section className="homepage-section homepage-section--collection">
-        <div className="homepage-section__header">
-          <p className="homepage-kicker">Nueva colección</p>
-          <h2>Movimiento sin distracciones</h2>
+      <section className={`${sectionClass} bg-white`}>
+        <div className={sectionHeaderClass}>
+          <p className={`${kickerBaseClass} text-[#686868]`}>Nueva colección</p>
+          <h2 className={`${sectionH2BaseClass} text-[clamp(1.8rem,7vw,3.2rem)]`}>
+            Movimiento sin distracciones
+          </h2>
         </div>
 
         <ProductRail
@@ -53,16 +77,22 @@ export default function HomePage() {
           emptyCopy="Pronto vas a ver las prendas activas acá. Podés escribirnos para consultar disponibilidad."
         />
 
-        <Link className="homepage-text-link" href="/coleccion">
+        <Link className={textLinkLightClass} href="/coleccion">
           <span>Explorar colección</span>
           <ArrowRight aria-hidden="true" size={20} strokeWidth={2.1} />
         </Link>
       </section>
 
-      <section className="homepage-section homepage-section--supplements">
-        <div className="homepage-section__header">
-          <p className="homepage-kicker">Suplementos</p>
-          <h2>Energía, recuperación y rendimiento</h2>
+      <section className={`${sectionClass} bg-[#0c0c0c] text-[#f8f8f6]`}>
+        <div className={sectionHeaderClass}>
+          <p className={`${kickerBaseClass} text-[rgba(248,248,246,0.62)]`}>
+            Suplementos
+          </p>
+          <h2
+            className={`${sectionH2BaseClass} max-w-[17rem] text-[clamp(1.75rem,6vw,2.8rem)] text-[rgba(248,248,246,0.88)]`}
+          >
+            Energía, recuperación y rendimiento
+          </h2>
         </div>
 
         <ProductGrid
@@ -71,7 +101,7 @@ export default function HomePage() {
           emptyCopy="La tienda sigue disponible para consultas por contacto directo."
         />
 
-        <Link className="homepage-text-link homepage-text-link--dark" href="/suplementos">
+        <Link className={textLinkDarkClass} href="/suplementos">
           <span>Explorar suplementos</span>
           <ArrowRight aria-hidden="true" size={20} strokeWidth={2.1} />
         </Link>
