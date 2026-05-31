@@ -20,6 +20,9 @@ const priceFormatter = new Intl.NumberFormat("es-AR", {
   maximumFractionDigits: 0
 });
 
+const footerLinkClass =
+  "justify-self-start transition-colors duration-[180ms] ease-[ease] hover:text-[#111111]! hover:underline! hover:underline-offset-[0.18em]";
+
 export default function HomePage() {
   const featuredProducts = getHomepageFeaturedProducts();
 
@@ -130,19 +133,40 @@ export default function HomePage() {
         </div>
       </section>
 
-      <footer className="homepage-footer" aria-label="Enlaces de confianza">
-        <p>IRRUPTIVO</p>
-        <nav>
-          <Link href="/nosotros">Nosotros</Link>
-          <a href={contactLink.href} target="_blank" rel="noreferrer">
+      <footer
+        className="grid gap-[1.6rem] pt-10 px-5 pb-12 bg-[#f8f8f6] text-[#5f5f5f] min-[760px]:grid-cols-[1fr_auto] min-[760px]:items-start min-[760px]:px-12"
+        aria-label="Enlaces de confianza"
+      >
+        <p className="m-0 text-[1.05rem] font-[850] tracking-[0.13em]">IRRUPTIVO</p>
+        <nav className="grid grid-cols-2 gap-x-[1.25rem] gap-y-[0.75rem] text-[1rem] min-[760px]:grid-cols-[repeat(3,minmax(8rem,auto))]">
+          <Link className={footerLinkClass} href="/nosotros">
+            Nosotros
+          </Link>
+          <a
+            className={footerLinkClass}
+            href={contactLink.href}
+            target="_blank"
+            rel="noreferrer"
+          >
             Contacto
           </a>
-          <a href={instagramLink.href} target="_blank" rel="noreferrer">
+          <a
+            className={footerLinkClass}
+            href={instagramLink.href}
+            target="_blank"
+            rel="noreferrer"
+          >
             Instagram
           </a>
-          <Link href="/envios-y-cambios">Envíos y cambios</Link>
-          <Link href="/coleccion">Colección</Link>
-          <Link href="/suplementos">Suplementos</Link>
+          <Link className={footerLinkClass} href="/envios-y-cambios">
+            Envíos y cambios
+          </Link>
+          <Link className={footerLinkClass} href="/coleccion">
+            Colección
+          </Link>
+          <Link className={footerLinkClass} href="/suplementos">
+            Suplementos
+          </Link>
         </nav>
       </footer>
     </div>
