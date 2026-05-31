@@ -11,7 +11,7 @@ import {
   Truck
 } from "lucide-react";
 import Link from "next/link";
-import { type FormEvent, useCallback, useEffect, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
 import {
   refreshCartReviewAction,
@@ -19,7 +19,7 @@ import {
 } from "../../cart/actions";
 import { hydrateCart, serializeCart } from "../../cart/cart";
 import {
-  validateCheckoutAction,
+  createPendingOrderAction,
   type CheckoutFormValues
 } from "../../checkout/actions";
 import {
@@ -77,6 +77,7 @@ export function StorefrontCheckoutPage() {
   const [submitFeedback, setSubmitFeedback] = useState<SubmitFeedback | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const checkoutSubmissionKeyRef = useRef("");
 
   const refreshCart = useCallback(async (showLoadingState = false) => {
     if (showLoadingState) {
@@ -118,14 +119,15 @@ export function StorefrontCheckoutPage() {
 
     try {
       const formData = new FormData(event.currentTarget);
-      const result = await validateCheckoutAction({
+      const result = await createPendingOrderAction({
         rawCart: window.localStorage.getItem(CART_STORAGE_KEY),
-        checkout: getCheckoutFormValues(formData, selectedDeliveryMethod)
+        checkout: getCheckoutFormValues(formData, selectedDeliveryMethod),
+        idempotencyKey: getCheckoutSubmissionKey()
       });
 
       persistSerializedCart(result.serializedCart);
 
-      if (result.validation.status === "invalid") {
+      if (result.status === "invalid") {
         setFieldErrors(result.validation.errors);
         setSubmitFeedback({
           tone: "error",
@@ -133,12 +135,19 @@ export function StorefrontCheckoutPage() {
             ? "Revisá el carrito antes de continuar."
             : "Revisá los campos marcados."
         });
-      } else {
+      } else if (result.status === "created") {
         setFieldErrors({});
         setSubmitFeedback({
           tone: "success",
-          message:
-            "Datos validados. El pago con Mercado Pago se habilita en el próximo paso."
+          message: `Pedido ${result.order.orderNumber} creado. El pago con Mercado Pago queda listo para el próximo paso.`
+        });
+      } else {
+        setFieldErrors({
+          cart: [result.message]
+        });
+        setSubmitFeedback({
+          tone: "error",
+          message: result.message
         });
       }
 
@@ -146,11 +155,19 @@ export function StorefrontCheckoutPage() {
     } catch {
       setSubmitFeedback({
         tone: "error",
-        message: "No pudimos validar la compra. Volvé a intentar."
+        message: "No pudimos crear el pedido. Volvé a intentar."
       });
     } finally {
       setIsSubmitting(false);
     }
+  }
+
+  function getCheckoutSubmissionKey(): string {
+    if (!checkoutSubmissionKeyRef.current) {
+      checkoutSubmissionKeyRef.current = createCheckoutSubmissionKey();
+    }
+
+    return checkoutSubmissionKeyRef.current;
   }
 
   function handleDeliveryChange(method: DeliveryMethod) {
@@ -398,7 +415,7 @@ export function StorefrontCheckoutPage() {
                       size={19}
                       strokeWidth={2.2}
                     />
-                    <span>Validando</span>
+                    <span>Creando pedido</span>
                   </>
                 ) : (
                   <>
@@ -630,4 +647,12 @@ function persistSerializedCart(serializedCart: string) {
   }
 
   window.dispatchEvent(new Event("irruptivo:cart-updated"));
+}
+
+function createCheckoutSubmissionKey(): string {
+  if (globalThis.crypto?.randomUUID) {
+    return globalThis.crypto.randomUUID();
+  }
+
+  return `checkout-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
