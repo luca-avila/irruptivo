@@ -233,6 +233,7 @@
 }
 
 .optionLink[data-available="false"] {
+  cursor: not-allowed;
   opacity: 0.38;
 }
 

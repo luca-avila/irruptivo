@@ -130,8 +130,11 @@ export function StorefrontProductDetailPage({
                 {priceFormatter.format(selection.effectivePriceArs)}
               </p>
               <p className={styles.description}>{product.description}</p>
-              <span className={styles.availability} data-state={getAvailabilityState(selection)}>
-                {selection.availabilityLabel}
+              <span
+                className={styles.availability}
+                data-state={getAvailabilityState(product, selection)}
+              >
+                {getAvailabilityLabel(product, selection)}
               </span>
             </section>
 
@@ -257,11 +260,25 @@ function VariantSelectors({
                 optionValue: value
               });
 
+              if (!isAvailable) {
+                return (
+                  <span
+                    className={styles.optionLink}
+                    data-active={isActive}
+                    data-available="false"
+                    key={value}
+                    aria-disabled="true"
+                  >
+                    {value}
+                  </span>
+                );
+              }
+
               return (
                 <Link
                   className={styles.optionLink}
                   data-active={isActive}
-                  data-available={isAvailable}
+                  data-available="true"
                   scroll={false}
                   href={getOptionHref({
                     area,
@@ -481,9 +498,23 @@ function getOptionHref({
   return query ? `${basePath}?${query}` : basePath;
 }
 
-function getAvailabilityState(selection: ProductVariantSelectionView): string {
+function getAvailabilityLabel(
+  product: PublicProductDetailView,
+  selection: ProductVariantSelectionView
+): string {
   if (selection.status !== "selected") {
-    return "blocked";
+    return product.availabilityLabel;
+  }
+
+  return selection.availabilityLabel;
+}
+
+function getAvailabilityState(
+  product: PublicProductDetailView,
+  selection: ProductVariantSelectionView
+): string {
+  if (selection.status !== "selected") {
+    return product.isAvailable ? "available" : "out";
   }
 
   return selection.canAddToCart ? "available" : "out";
