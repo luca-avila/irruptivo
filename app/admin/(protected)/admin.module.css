@@ -561,6 +561,7 @@
   gap: 0.65rem;
 }
 
+.generalSection,
 .variantSection,
 .imageSection {
   display: grid;

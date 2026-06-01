@@ -62,11 +62,22 @@ export default async function EditProductPage({
         </section>
       ) : null}
 
-      <ProductForm
-        action={updateAdminProduct}
-        product={product}
-        submitLabel="Guardar cambios"
-      />
+      <section
+        className={styles.generalSection}
+        aria-labelledby="general-section-title"
+      >
+        <div className={styles.sectionHeader}>
+          <p className={styles.eyebrow}>Información general</p>
+          <h2 id="general-section-title">Datos del producto</h2>
+          <p>Estos campos aplican a todas las variantes del producto.</p>
+        </div>
+
+        <ProductForm
+          action={updateAdminProduct}
+          product={product}
+          submitLabel="Guardar cambios"
+        />
+      </section>
 
       <VariantManagement product={product} />
 
