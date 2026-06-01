@@ -4,6 +4,7 @@ import Link from "next/link";
 import { changeAdminProductStatus } from "../../../../src/admin/product-actions";
 import {
   listAdminProducts,
+  readAdminProductRecords,
   type ProductManagementErrorCode
 } from "../../../../src/admin/products";
 import { PRODUCT_STATUS } from "../../../../src/catalog/catalog";
@@ -24,7 +25,7 @@ export default async function AdminProductsPage({
     state: getFirstSearchParamValue(params?.estado),
     error: getFirstSearchParamValue(params?.error)
   });
-  const productList = listAdminProducts();
+  const productList = listAdminProducts(await readAdminProductRecords());
 
   return (
     <>

@@ -1,9 +1,9 @@
+import { Prisma } from "@prisma/client";
 import { z } from "zod";
 
 import {
   PRODUCT_AREA,
   PRODUCT_STATUS,
-  demoCatalogProducts,
   type CatalogProductImageRecord,
   type CatalogProductImageRenditionsRecord,
   type CatalogProductRecord,
@@ -12,6 +12,7 @@ import {
   type ProductStatus,
   type VariantOptionValues
 } from "../catalog/catalog";
+import { mapProductRowToRecord } from "../catalog/product-repository";
 import { getAvailableStock } from "../catalog/stock";
 import {
   createVariant as createCatalogVariant,
@@ -20,6 +21,7 @@ import {
   resolveUnitPrice,
   updateVariant as updateCatalogVariant
 } from "../catalog/variants";
+import { prisma } from "../db/client";
 import { type AvailabilityLabel } from "../domain/rules";
 
 export type ProductCreateInput = {
@@ -161,25 +163,123 @@ const variantInputSchema = z.object({
 
 type NormalizedVariantInput = z.infer<typeof variantInputSchema>;
 
-const mutableDemoCatalogProducts =
-  demoCatalogProducts as unknown as CatalogProductRecord[];
+export async function readAdminProductRecords(): Promise<CatalogProductRecord[]> {
+  const products = await prisma.product.findMany({
+    include: {
+      variants: {
+        orderBy: [
+          {
+            position: "asc"
+          },
+          {
+            id: "asc"
+          }
+        ]
+      },
+      images: {
+        orderBy: [
+          {
+            sortOrder: "asc"
+          },
+          {
+            id: "asc"
+          }
+        ]
+      }
+    },
+    orderBy: [
+      {
+        createdAt: "asc"
+      },
+      {
+        id: "asc"
+      }
+    ]
+  });
 
-export function readAdminProductRecords(): CatalogProductRecord[] {
-  return cloneProductRecords(mutableDemoCatalogProducts);
+  return products.map(mapProductRowToRecord);
 }
 
-export function saveAdminProductRecords(
+export async function saveAdminProductRecords(
   products: readonly CatalogProductRecord[]
-): void {
-  mutableDemoCatalogProducts.splice(
-    0,
-    mutableDemoCatalogProducts.length,
-    ...cloneProductRecords(products)
-  );
+): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    for (const product of products) {
+      await tx.product.upsert({
+        where: {
+          id: product.id
+        },
+        update: getProductPersistenceData(product),
+        create: {
+          id: product.id,
+          ...getProductPersistenceData(product)
+        }
+      });
+
+      await Promise.all(
+        product.variants.map((variant, position) =>
+          tx.productVariant.upsert({
+            where: {
+              id: variant.id
+            },
+            update: getVariantPersistenceData(product.id, variant, position),
+            create: {
+              id: variant.id,
+              ...getVariantPersistenceData(product.id, variant, position)
+            }
+          })
+        )
+      );
+
+      await Promise.all(
+        product.images.map((image) =>
+          tx.productImage.upsert({
+            where: {
+              id: image.id
+            },
+            update: getImagePersistenceData(product.id, image),
+            create: {
+              id: image.id,
+              ...getImagePersistenceData(product.id, image)
+            }
+          })
+        )
+      );
+    }
+  });
+}
+
+export function isDuplicateVariantSkuPersistenceError(error: unknown): boolean {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
+    return false;
+  }
+
+  if (error.code !== "P2002") {
+    return false;
+  }
+
+  const target = error.meta?.target;
+
+  if (Array.isArray(target)) {
+    return (
+      (target.includes("product_id") && target.includes("sku_normalized")) ||
+      (target.includes("productId") && target.includes("skuNormalized"))
+    );
+  }
+
+  if (typeof target === "string") {
+    return (
+      target === "product_variants_product_id_sku_normalized_key" ||
+      target.includes("product_id_sku_normalized") ||
+      target.includes("productId_skuNormalized")
+    );
+  }
+
+  return false;
 }
 
 export function listAdminProducts(
-  products: readonly CatalogProductRecord[] = readAdminProductRecords()
+  products: readonly CatalogProductRecord[]
 ): AdminProductListView {
   const productViews = [...products]
     .sort((first, second) => first.name.localeCompare(second.name, "es-AR"))
@@ -199,14 +299,14 @@ export function listAdminProducts(
 
 export function getAdminProductById(
   id: string,
-  products: readonly CatalogProductRecord[] = readAdminProductRecords()
+  products: readonly CatalogProductRecord[]
 ): CatalogProductRecord | null {
   return products.find((product) => product.id === id) ?? null;
 }
 
 export function createProduct(
   input: ProductCreateInput,
-  products: readonly CatalogProductRecord[] = readAdminProductRecords()
+  products: readonly CatalogProductRecord[]
 ): ProductManagementResult {
   const normalizedInput = normalizeProductInput(input);
 
@@ -242,7 +342,7 @@ export function createProduct(
 export function updateProduct(
   productId: string,
   input: ProductUpdateInput,
-  products: readonly CatalogProductRecord[] = readAdminProductRecords()
+  products: readonly CatalogProductRecord[]
 ): ProductManagementResult {
   const productIndex = products.findIndex((product) => product.id === productId);
 
@@ -282,7 +382,7 @@ export function updateProduct(
 export function setProductStatus(
   productId: string,
   status: ProductStatus,
-  products: readonly CatalogProductRecord[] = readAdminProductRecords()
+  products: readonly CatalogProductRecord[]
 ): ProductManagementResult {
   if (!isProductStatus(status)) {
     return getValidationError();
@@ -317,7 +417,7 @@ export function setProductStatus(
 export function addProductVariant(
   productId: string,
   input: ProductVariantInput,
-  products: readonly CatalogProductRecord[] = readAdminProductRecords()
+  products: readonly CatalogProductRecord[]
 ): ProductManagementResult {
   const productIndex = products.findIndex((product) => product.id === productId);
 
@@ -369,7 +469,7 @@ export function updateProductVariant(
   productId: string,
   variantId: string,
   input: ProductVariantInput,
-  products: readonly CatalogProductRecord[] = readAdminProductRecords()
+  products: readonly CatalogProductRecord[]
 ): ProductManagementResult {
   const productIndex = products.findIndex((product) => product.id === productId);
 
@@ -484,6 +584,60 @@ export function getAdminProductStatusLabel(status: ProductStatus): string {
   }
 
   return "Inactivo";
+}
+
+function getProductPersistenceData(product: CatalogProductRecord) {
+  return {
+    slug: product.slug,
+    name: product.name,
+    description: product.description,
+    area: product.area,
+    status: product.status,
+    basePriceArs: product.basePriceArs,
+    clothingSubcategory: product.clothingSubcategory ?? null,
+    supplementType: product.supplementType ?? null
+  };
+}
+
+function getVariantPersistenceData(
+  productId: string,
+  variant: CatalogProductVariantRecord,
+  position: number
+) {
+  const options = variant.options ?? {};
+
+  return {
+    productId,
+    sku: variant.sku,
+    skuNormalized: normalizeSku(variant.sku),
+    name: variant.name,
+    stock: variant.stock,
+    position,
+    priceOverrideArs: variant.priceOverrideArs ?? null,
+    optionColor: options.color ?? null,
+    optionSize: options.size ?? null,
+    optionFlavor: options.flavor ?? null,
+    optionWeight: options.weight ?? null,
+    optionPresentation: options.presentation ?? null
+  };
+}
+
+function getImagePersistenceData(
+  productId: string,
+  image: CatalogProductImageRecord
+) {
+  return {
+    productId,
+    path: image.path,
+    alt: image.alt,
+    sortOrder: image.sortOrder,
+    width: image.width ?? null,
+    height: image.height ?? null,
+    associatedColor: image.associatedColor ?? null,
+    variantId: image.variantId ?? null,
+    renditions: image.renditions ?? Prisma.DbNull,
+    deletedAt: image.deletedAt ? new Date(image.deletedAt) : null
+  };
 }
 
 function normalizeProductInput(

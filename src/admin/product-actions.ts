@@ -23,6 +23,7 @@ import {
 import {
   addProductVariant,
   createProduct,
+  isDuplicateVariantSkuPersistenceError,
   readAdminProductRecords,
   saveAdminProductRecords,
   setProductStatus,
@@ -37,6 +38,7 @@ const ADMIN_PRODUCTS_PATH = "/admin/productos";
 export async function createAdminProduct(formData: FormData): Promise<void> {
   await requireAdmin();
 
+  const products = await readAdminProductRecords();
   const result = createProduct(
     {
       name: readStringField(formData, "name"),
@@ -47,14 +49,17 @@ export async function createAdminProduct(formData: FormData): Promise<void> {
       basePriceArs: Number(readStringField(formData, "basePriceArs")),
       status: readStringField(formData, "status") as ProductStatus
     },
-    readAdminProductRecords()
+    products
   );
 
   if (!result.ok) {
     redirect(getCreateErrorRedirect(result.error.code));
   }
 
-  saveAdminProductRecords(result.products);
+  await saveAdminProductRecordsOrRedirect(
+    result.products,
+    getCreateErrorRedirect("duplicate_variant_sku")
+  );
   revalidateCatalogPaths(result.product);
 
   redirect(`${ADMIN_PRODUCTS_PATH}?estado=producto-creado`);
@@ -64,7 +69,7 @@ export async function updateAdminProduct(formData: FormData): Promise<void> {
   await requireAdmin();
 
   const productId = readStringField(formData, "productId");
-  const products = readAdminProductRecords();
+  const products = await readAdminProductRecords();
   const updateResult = updateProduct(
     productId,
     {
@@ -92,7 +97,10 @@ export async function updateAdminProduct(formData: FormData): Promise<void> {
     redirect(getEditErrorRedirect(productId, statusResult.error.code));
   }
 
-  saveAdminProductRecords(statusResult.products);
+  await saveAdminProductRecordsOrRedirect(
+    statusResult.products,
+    getEditErrorRedirect(productId, "duplicate_variant_sku")
+  );
   revalidateCatalogPaths(statusResult.product);
 
   redirect(
@@ -107,13 +115,17 @@ export async function changeAdminProductStatus(
 
   const productId = readStringField(formData, "productId");
   const status = readStringField(formData, "status") as ProductStatus;
-  const result = setProductStatus(productId, status, readAdminProductRecords());
+  const products = await readAdminProductRecords();
+  const result = setProductStatus(productId, status, products);
 
   if (!result.ok) {
     redirect(`${ADMIN_PRODUCTS_PATH}?error=${result.error.code}`);
   }
 
-  saveAdminProductRecords(result.products);
+  await saveAdminProductRecordsOrRedirect(
+    result.products,
+    `${ADMIN_PRODUCTS_PATH}?error=duplicate_variant_sku`
+  );
   revalidateCatalogPaths(result.product);
 
   const state =
@@ -128,17 +140,21 @@ export async function createAdminProductVariant(
   await requireAdmin();
 
   const productId = readStringField(formData, "productId");
+  const products = await readAdminProductRecords();
   const result = addProductVariant(
     productId,
     readVariantInput(formData),
-    readAdminProductRecords()
+    products
   );
 
   if (!result.ok) {
     redirect(getEditErrorRedirect(productId, result.error.code));
   }
 
-  saveAdminProductRecords(result.products);
+  await saveAdminProductRecordsOrRedirect(
+    result.products,
+    getEditErrorRedirect(productId, "duplicate_variant_sku")
+  );
   revalidateCatalogPaths(result.product);
 
   redirect(
@@ -153,18 +169,22 @@ export async function updateAdminProductVariant(
 
   const productId = readStringField(formData, "productId");
   const variantId = readStringField(formData, "variantId");
+  const products = await readAdminProductRecords();
   const result = updateProductVariant(
     productId,
     variantId,
     readVariantInput(formData),
-    readAdminProductRecords()
+    products
   );
 
   if (!result.ok) {
     redirect(getEditErrorRedirect(productId, result.error.code));
   }
 
-  saveAdminProductRecords(result.products);
+  await saveAdminProductRecordsOrRedirect(
+    result.products,
+    getEditErrorRedirect(productId, "duplicate_variant_sku")
+  );
   revalidateCatalogPaths(result.product);
 
   redirect(
@@ -178,7 +198,7 @@ export async function uploadAdminProductImage(formData: FormData): Promise<void>
   await requireAdmin();
 
   const productId = readStringField(formData, "productId");
-  const products = readAdminProductRecords();
+  const products = await readAdminProductRecords();
 
   if (!products.some((product) => product.id === productId)) {
     redirect(getEditErrorRedirect(productId, "not_found"));
@@ -215,7 +235,10 @@ export async function uploadAdminProductImage(formData: FormData): Promise<void>
     );
   }
 
-  saveAdminProductRecords(result.products);
+  await saveAdminProductRecordsOrRedirect(
+    result.products,
+    getEditErrorRedirect(productId, "duplicate_variant_sku")
+  );
   revalidateCatalogPaths(result.product);
 
   redirect(
@@ -233,17 +256,17 @@ export async function reorderAdminProductImages(
     .split(",")
     .map((imageId) => imageId.trim())
     .filter(Boolean);
-  const result = reorderProductImages(
-    productId,
-    orderedImageIds,
-    readAdminProductRecords()
-  );
+  const products = await readAdminProductRecords();
+  const result = reorderProductImages(productId, orderedImageIds, products);
 
   if (!result.ok) {
     redirect(getEditErrorRedirect(productId, result.error.code));
   }
 
-  saveAdminProductRecords(result.products);
+  await saveAdminProductRecordsOrRedirect(
+    result.products,
+    getEditErrorRedirect(productId, "duplicate_variant_sku")
+  );
   revalidateCatalogPaths(result.product);
 
   redirect(
@@ -260,22 +283,37 @@ export async function softDeleteAdminProductImage(
 
   const productId = readStringField(formData, "productId");
   const imageId = readStringField(formData, "imageId");
-  const result = softDeleteProductImage(
-    productId,
-    imageId,
-    readAdminProductRecords()
-  );
+  const products = await readAdminProductRecords();
+  const result = softDeleteProductImage(productId, imageId, products);
 
   if (!result.ok) {
     redirect(getEditErrorRedirect(productId, result.error.code));
   }
 
-  saveAdminProductRecords(result.products);
+  await saveAdminProductRecordsOrRedirect(
+    result.products,
+    getEditErrorRedirect(productId, "duplicate_variant_sku")
+  );
   revalidateCatalogPaths(result.product);
 
   redirect(
     `${ADMIN_PRODUCTS_PATH}/${encodeURIComponent(productId)}/editar?estado=imagen-eliminada`
   );
+}
+
+async function saveAdminProductRecordsOrRedirect(
+  products: readonly CatalogProductRecord[],
+  duplicateVariantSkuRedirect: string
+): Promise<void> {
+  try {
+    await saveAdminProductRecords(products);
+  } catch (error) {
+    if (isDuplicateVariantSkuPersistenceError(error)) {
+      redirect(duplicateVariantSkuRedirect);
+    }
+
+    throw error;
+  }
 }
 
 function readStringField(formData: FormData, name: string): string {

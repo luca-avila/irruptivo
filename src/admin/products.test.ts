@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -12,6 +13,7 @@ import {
   canPublishProduct,
   createProduct,
   getAdminProductVariantViews,
+  isDuplicateVariantSkuPersistenceError,
   setProductStatus,
   updateProduct,
   updateProductVariant,
@@ -414,5 +416,31 @@ describe("admin product management", () => {
       ok: false,
       error: { code: "duplicate_variant_sku" }
     });
+  });
+
+  it("recognizes database duplicate SKU conflicts for the action backstop", () => {
+    const duplicateSkuError = new Prisma.PrismaClientKnownRequestError(
+      "Unique constraint failed",
+      {
+        code: "P2002",
+        clientVersion: "test",
+        meta: {
+          target: ["product_id", "sku_normalized"]
+        }
+      }
+    );
+    const unrelatedUniqueError = new Prisma.PrismaClientKnownRequestError(
+      "Unique constraint failed",
+      {
+        code: "P2002",
+        clientVersion: "test",
+        meta: {
+          target: ["slug"]
+        }
+      }
+    );
+
+    expect(isDuplicateVariantSkuPersistenceError(duplicateSkuError)).toBe(true);
+    expect(isDuplicateVariantSkuPersistenceError(unrelatedUniqueError)).toBe(false);
   });
 });

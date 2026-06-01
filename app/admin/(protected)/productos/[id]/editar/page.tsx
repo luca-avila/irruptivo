@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { updateAdminProduct } from "../../../../../../src/admin/product-actions";
 import {
   getAdminProductById,
+  readAdminProductRecords,
   type ProductManagementErrorCode
 } from "../../../../../../src/admin/products";
 import { type ProductImageManagementErrorCode } from "../../../../../../src/catalog/product-images";
@@ -30,7 +31,10 @@ export default async function EditProductPage({
 }: EditProductPageProps) {
   const resolvedParams = await params;
   const resolvedSearchParams = await searchParams;
-  const product = getAdminProductById(decodeURIComponent(resolvedParams.id));
+  const product = getAdminProductById(
+    decodeURIComponent(resolvedParams.id),
+    await readAdminProductRecords()
+  );
 
   if (!product) {
     notFound();
