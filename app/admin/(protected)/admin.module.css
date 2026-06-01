@@ -570,23 +570,8 @@
 }
 
 .generalSection .formPanel {
-  border-color: rgba(255, 255, 255, 0.14);
-  background: #0c0c0c;
-  color: #f8f8f6;
-}
-
-.generalSection .field span {
-  color: #e9e6df;
-}
-
-.generalSection .formHint {
-  color: #b7b3aa;
-}
-
-.generalSection .primaryButton {
-  border-color: #f8f8f6;
-  background: #f8f8f6;
-  color: #111111;
+  border-color: rgba(17, 17, 17, 0.16);
+  background: #ece8df;
 }
 
 .sectionHeader {
