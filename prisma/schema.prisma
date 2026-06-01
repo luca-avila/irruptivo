@@ -1,0 +1,221 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ProductArea {
+  clothing
+  supplement
+}
+
+enum ProductStatus {
+  active
+  inactive
+}
+
+enum OrderStatus {
+  pending_payment
+  paid
+  payment_failed
+  expired
+  preparing
+  shipped
+  delivered
+  ready_for_pickup
+  picked_up
+}
+
+enum DeliveryMethod {
+  shipping
+  pickup
+}
+
+enum PaymentProvider {
+  mercado_pago
+}
+
+enum EmailDeliveryStatus {
+  sending
+  sent
+  configuration_missing
+  failed
+}
+
+model Product {
+  id                  String        @id
+  slug                String        @unique
+  name                String
+  description         String
+  area                ProductArea
+  status              ProductStatus @default(inactive)
+  basePriceArs        Int           @map("base_price_ars")
+  clothingSubcategory String?       @map("clothing_subcategory")
+  supplementType      String?       @map("supplement_type")
+  createdAt           DateTime      @default(now()) @map("created_at")
+  updatedAt           DateTime      @updatedAt @map("updated_at")
+  variants            ProductVariant[]
+  images              ProductImage[]
+  @@index([status, area])
+  @@map("products")
+}
+
+model ProductVariant {
+  id                 String   @id
+  productId          String   @map("product_id")
+  sku                String
+  skuNormalized      String   @map("sku_normalized")
+  name               String
+  stock              Int
+  priceOverrideArs   Int?     @map("price_override_ars")
+  optionColor        String?  @map("option_color")
+  optionSize         String?  @map("option_size")
+  optionFlavor       String?  @map("option_flavor")
+  optionWeight       String?  @map("option_weight")
+  optionPresentation String?  @map("option_presentation")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+  product            Product            @relation(fields: [productId], references: [id], onDelete: Cascade)
+  reservations       StockReservation[]
+  images             ProductImage[]
+  @@unique([productId, skuNormalized])
+  @@index([productId])
+  @@map("product_variants")
+}
+
+model ProductImage {
+  id              String    @id
+  productId       String    @map("product_id")
+  alt             String
+  sortOrder       Int       @map("sort_order")
+  width           Int?
+  height          Int?
+  associatedColor String?   @map("associated_color")
+  variantId       String?   @map("variant_id")
+  renditions      Json      // { card, detail, original }
+  deletedAt       DateTime? @map("deleted_at")
+  product         Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variant         ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  @@index([productId, sortOrder])
+  @@map("product_images")
+}
+
+model Order {
+  id                       String           @id
+  orderNumber              String           @unique @map("order_number")
+  guestAccessToken         String           @unique @map("guest_access_token")
+  idempotencyKey           String           @unique @map("idempotency_key")
+  status                   OrderStatus
+  createdAt                DateTime          @map("created_at")
+  contactFullName          String           @map("contact_full_name")
+  contactEmail             String           @map("contact_email")
+  contactPhone             String           @map("contact_phone")
+  deliveryMethod           DeliveryMethod   @map("delivery_method")
+  deliveryMethodLabel      String           @map("delivery_method_label")
+  deliveryNotes            String?          @map("delivery_notes")
+  shipAddressLine          String?          @map("ship_address_line")
+  shipCity                 String?          @map("ship_city")
+  shipProvince             String?          @map("ship_province")
+  shipPostalCode           String?          @map("ship_postal_code")
+  adminNotes               String?          @map("admin_notes")
+  subtotalArs              Int              @map("subtotal_ars")
+  deliveryCostArs          Int              @map("delivery_cost_ars")
+  totalArs                 Int              @map("total_ars")
+  paymentProvider          PaymentProvider? @map("payment_provider")
+  paymentPreferenceId      String?          @map("payment_preference_id")
+  paymentCheckoutUrl       String?          @map("payment_checkout_url")
+  paymentInitPoint         String?          @map("payment_init_point")
+  paymentSandboxInitPoint  String?          @map("payment_sandbox_init_point")
+  paymentExternalReference String?          @map("payment_external_reference")
+  paymentCreatedAt         DateTime?        @map("payment_created_at")
+  items                    OrderItem[]
+  reservations             StockReservation[]
+  statusHistory            OrderStatusHistory[]
+  paymentEvents            PaymentEvent[]
+  emailDelivery            EmailDelivery?
+  @@index([status, createdAt])
+  @@map("orders")
+}
+
+model OrderItem {
+  id                 String      @id @default(uuid())
+  orderId            String      @map("order_id")
+  productId          String      @map("product_id")   // snapshot ref, not FK
+  productName        String      @map("product_name")
+  productSlug        String      @map("product_slug")
+  productArea        ProductArea @map("product_area")
+  variantId          String      @map("variant_id")   // snapshot ref, not FK
+  variantName        String      @map("variant_name")
+  sku                String
+  optionColor        String?     @map("option_color")
+  optionSize         String?     @map("option_size")
+  optionFlavor       String?     @map("option_flavor")
+  optionWeight       String?     @map("option_weight")
+  optionPresentation String?     @map("option_presentation")
+  optionSummary      String      @map("option_summary")
+  quantity           Int
+  unitPriceArs       Int         @map("unit_price_ars")
+  lineTotalArs       Int         @map("line_total_ars")
+  order              Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  @@index([orderId])
+  @@map("order_items")
+}
+
+model OrderStatusHistory {
+  id         String       @id @default(uuid())
+  orderId    String       @map("order_id")
+  fromStatus OrderStatus? @map("from_status")
+  toStatus   OrderStatus  @map("to_status")
+  reason     String
+  actor      String
+  createdAt  DateTime     @default(now()) @map("created_at")
+  order      Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  @@index([orderId, createdAt])
+  @@map("order_status_history")
+}
+
+model StockReservation {
+  id         String    @id @default(uuid())
+  orderId    String    @map("order_id")
+  variantId  String    @map("variant_id")
+  quantity   Int
+  reservedAt DateTime  @map("reserved_at")
+  releasedAt DateTime? @map("released_at")
+  order      Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  variant    ProductVariant @relation(fields: [variantId], references: [id])
+  @@unique([orderId, variantId])
+  @@index([variantId, releasedAt])
+  @@map("stock_reservations")
+}
+
+model PaymentEvent {
+  id                String          @id @default(uuid())
+  provider          PaymentProvider
+  providerEventId   String          @map("provider_event_id")
+  providerPaymentId String          @map("provider_payment_id")
+  orderId           String?         @map("order_id")
+  type              String
+  action            String
+  providerStatus    String?         @map("provider_status")
+  processingResult  String          @map("processing_result")
+  receivedAt        DateTime        @map("received_at")
+  order             Order?          @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  @@unique([provider, providerEventId])
+  @@index([orderId, processingResult])
+  @@map("payment_events")
+}
+
+model EmailDelivery {
+  id                String              @id @default(uuid())
+  orderId           String              @unique @map("order_id")
+  recipientEmail    String              @map("recipient_email")
+  status            EmailDeliveryStatus
+  providerMessageId String?             @map("provider_message_id")
+  attemptedAt       DateTime            @map("attempted_at")
+  errorMessage      String?             @map("error_message")
+  order             Order               @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  @@map("email_deliveries")
+}
