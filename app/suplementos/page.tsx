@@ -1,8 +1,11 @@
 import { SlidersHorizontal } from "lucide-react";
 import Link from "next/link";
 
+import { loadCatalogProducts } from "../../src/catalog/product-repository";
 import { listSupplementProducts } from "../../src/catalog/supplements";
 import styles from "./page.module.css";
+
+export const dynamic = "force-dynamic";
 
 type SupplementsPageProps = {
   searchParams?: Promise<{
@@ -14,7 +17,9 @@ export default async function SupplementsPage({
   searchParams
 }: SupplementsPageProps) {
   const params = await searchParams;
+  const products = await loadCatalogProducts();
   const listing = listSupplementProducts({
+    products,
     selectedType: getFirstSearchParamValue(params?.tipo)
   });
 

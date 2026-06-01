@@ -8,6 +8,9 @@ import {
   type ProductSearchEmptyState,
   type ProductSearchResultView
 } from "../../src/catalog/catalog";
+import { loadCatalogProducts } from "../../src/catalog/product-repository";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Buscar productos | Irruptivo",
@@ -45,8 +48,10 @@ const availabilityBadgeClass =
 
 export default async function SearchPage({ searchParams }: SearchPageProps) {
   const params = await searchParams;
+  const products = await loadCatalogProducts();
   const search = searchActiveProductsByName(
-    getFirstSearchParamValue(params?.[searchParamName])
+    getFirstSearchParamValue(params?.[searchParamName]),
+    products
   );
 
   return (

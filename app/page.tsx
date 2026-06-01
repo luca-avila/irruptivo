@@ -11,8 +11,11 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { PRODUCT_AREA, type PublicProductCardView } from "../src/catalog/catalog";
+import { loadCatalogProducts } from "../src/catalog/product-repository";
 import { getHomepageFeaturedProducts } from "../src/storefront/homepage";
 import { contactLink, instagramLink } from "../src/storefront/navigation";
+
+export const dynamic = "force-dynamic";
 
 const priceFormatter = new Intl.NumberFormat("es-AR", {
   style: "currency",
@@ -37,8 +40,9 @@ const kickerBaseClass =
   "m-0 text-[0.76rem] font-[850] tracking-[0.13em] uppercase";
 const sectionH2BaseClass = "m-0 mt-[0.45rem] leading-[1.04] tracking-[0]";
 
-export default function HomePage() {
-  const featuredProducts = getHomepageFeaturedProducts();
+export default async function HomePage() {
+  const products = await loadCatalogProducts();
+  const featuredProducts = getHomepageFeaturedProducts(products);
 
   return (
     <div className="bg-[#f8f8f6]">

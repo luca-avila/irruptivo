@@ -9,7 +9,10 @@ import {
   type ProductListingEmptyState,
   type PublicProductCardView
 } from "../../src/catalog/catalog";
+import { loadCatalogProducts } from "../../src/catalog/product-repository";
 import styles from "./page.module.css";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Colección | Irruptivo",
@@ -34,9 +37,13 @@ export default async function CollectionPage({
 }: CollectionPageProps) {
   const params = await searchParams;
   const selectedSubcategory = getSearchParamValue(params?.categoria);
-  const listing = getClothingCollectionListing({
-    subcategory: selectedSubcategory
-  });
+  const products = await loadCatalogProducts();
+  const listing = getClothingCollectionListing(
+    {
+      subcategory: selectedSubcategory
+    },
+    products
+  );
 
   return (
     <section className={styles.collectionPage}>

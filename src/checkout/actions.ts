@@ -1,6 +1,6 @@
 "use server";
 
-import { demoCatalogProducts } from "../catalog/catalog";
+import { loadCatalogProducts } from "../catalog/product-repository";
 import {
   getCartCount,
   getCartSummary,
@@ -62,9 +62,10 @@ export async function validateCheckoutAction({
   checkout
 }: ValidateCheckoutActionInput): Promise<ValidateCheckoutActionResult> {
   const cart = hydrateCart(rawCart);
+  const products = await loadCatalogProducts();
   const cartValidation = validateCart({
     cart,
-    products: demoCatalogProducts
+    products
   });
   const cartSummary = getCartSummary(
     cartValidation.items
@@ -95,11 +96,12 @@ export async function createPendingOrderAction({
   idempotencyKey
 }: CreatePendingOrderActionInput): Promise<CreatePendingOrderActionResult> {
   const cart = hydrateCart(rawCart);
+  const products = await loadCatalogProducts();
   const result = await createCheckoutPaymentHandoff({
     idempotencyKey,
     cart,
     checkout,
-    products: demoCatalogProducts
+    products
   });
 
   if (result.status === "created") {

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { PRODUCT_AREA } from "../../../src/catalog/catalog";
+import { loadCatalogProducts } from "../../../src/catalog/product-repository";
 import { getProductDetailPageView } from "../../../src/catalog/product-detail";
 import {
   StorefrontProductDetailPage,
@@ -16,14 +17,18 @@ type SupplementProductDetailPageProps = {
   searchParams?: Promise<ProductDetailSearchParams>;
 };
 
+export const dynamic = "force-dynamic";
+
 export async function generateMetadata({
   params
 }: SupplementProductDetailPageProps): Promise<Metadata> {
   const { slug } = await params;
+  const products = await loadCatalogProducts();
   const view = getProductDetailPageView({
     area: PRODUCT_AREA.supplement,
     slug,
-    selectedOptions: {}
+    selectedOptions: {},
+    products
   });
 
   if (view.status === "active") {
@@ -46,10 +51,12 @@ export default async function SupplementProductDetailPage({
   const { slug } = await params;
   const resolvedSearchParams = await searchParams;
   const selectedOptions = getSelectedOptionsFromSearchParams(resolvedSearchParams);
+  const products = await loadCatalogProducts();
   const view = getProductDetailPageView({
     area: PRODUCT_AREA.supplement,
     slug,
-    selectedOptions
+    selectedOptions,
+    products
   });
 
   if (view.status === "not_found") {

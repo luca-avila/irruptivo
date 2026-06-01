@@ -2,12 +2,12 @@
 
 import {
   PRODUCT_AREA,
-  demoCatalogProducts,
   type CatalogProductImageRecord,
   type CatalogProductRecord,
   type CatalogProductVariantRecord,
   type VariantOptionValues
 } from "../catalog/catalog";
+import { loadCatalogProducts } from "../catalog/product-repository";
 import { getVariantAvailability } from "../catalog/variants";
 import {
   validateAddToCartSelection,
@@ -105,10 +105,11 @@ export async function validateAddToCartAction(
     };
   }
 
+  const products = await loadCatalogProducts();
   const validation = validateAddToCartSelection({
     productId,
     variantId,
-    products: demoCatalogProducts
+    products
   });
 
   if (validation.status === "invalid") {
@@ -132,9 +133,10 @@ export async function refreshCartReviewAction(
   rawCart: string | null
 ): Promise<CartReviewActionResult> {
   const cart = hydrateCart(rawCart);
+  const products = await loadCatalogProducts();
   const validation = validateCart({
     cart,
-    products: demoCatalogProducts
+    products
   });
   const reviewItems = getCartReviewItems(validation.items);
 
