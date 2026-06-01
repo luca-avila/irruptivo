@@ -1,5 +1,6 @@
 .shell {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   min-height: 100svh;
   background: #f3f1ec;
   color: #111111;
@@ -113,6 +114,7 @@
 
 .content {
   width: min(100%, 72rem);
+  min-width: 0;
   margin: 0 auto;
   padding: 1.25rem;
 }
@@ -771,10 +773,9 @@
 
 .filterBar {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
   margin-bottom: 1rem;
-  overflow-x: auto;
-  padding-bottom: 0.1rem;
 }
 
 .filterLink {
@@ -1034,7 +1035,7 @@
 
 @media (min-width: 48rem) {
   .shell {
-    grid-template-columns: 17rem 1fr;
+    grid-template-columns: 17rem minmax(0, 1fr);
   }
 
   .sidebar {
