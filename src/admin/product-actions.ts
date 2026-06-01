@@ -235,9 +235,15 @@ export async function uploadAdminProductImage(formData: FormData): Promise<void>
     );
   }
 
-  await saveAdminProductRecordsOrRedirect(
+  await saveUploadedProductImageRecordsOrRedirect(
     result.products,
-    getEditErrorRedirect(productId, "duplicate_variant_sku")
+    processedImage.image,
+    getEditErrorRedirect(productId, "duplicate_variant_sku"),
+    getEditErrorRedirect(
+      productId,
+      "image_processing_failed",
+      getImageFormStateParams(formData)
+    )
   );
   revalidateCatalogPaths(result.product);
 
@@ -313,6 +319,25 @@ async function saveAdminProductRecordsOrRedirect(
     }
 
     throw error;
+  }
+}
+
+async function saveUploadedProductImageRecordsOrRedirect(
+  products: readonly CatalogProductRecord[],
+  image: Parameters<typeof deleteProcessedProductImageFiles>[0],
+  duplicateVariantSkuRedirect: string,
+  imagePersistFailureRedirect: string
+): Promise<void> {
+  try {
+    await saveAdminProductRecords(products);
+  } catch (error) {
+    await deleteProcessedProductImageFiles(image);
+
+    if (isDuplicateVariantSkuPersistenceError(error)) {
+      redirect(duplicateVariantSkuRedirect);
+    }
+
+    redirect(imagePersistFailureRedirect);
   }
 }
 
