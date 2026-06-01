@@ -348,8 +348,8 @@
 .tableHeader,
 .tableRow {
   display: grid;
-  gap: 0.75rem;
-  padding: 0.9rem 1rem;
+  gap: 1rem;
+  padding: 1.1rem;
 }
 
 .tableHeader {
@@ -364,7 +364,7 @@
 }
 
 .tableRow + .tableRow {
-  border-top: 1px solid rgba(17, 17, 17, 0.08);
+  border-top: 0.55rem solid #f3f1ec;
 }
 
 .tableRow > div {
