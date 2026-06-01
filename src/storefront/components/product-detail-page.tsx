@@ -139,6 +139,7 @@ export function StorefrontProductDetailPage({
               area={area}
               basePath={basePath}
               groups={optionGroups}
+              product={product}
               selectedOptions={selectedOptions}
             />
 
@@ -220,11 +221,13 @@ function VariantSelectors({
   area,
   basePath,
   groups,
+  product,
   selectedOptions
 }: {
   area: ProductArea;
   basePath: string;
   groups: OptionGroup[];
+  product: PublicProductDetailView;
   selectedOptions: VariantOptionValues;
 }) {
   if (groups.length === 0) {
@@ -247,11 +250,18 @@ function VariantSelectors({
           <div className={styles.optionList}>
             {group.values.map((value) => {
               const isActive = selectedOptions[group.key] === value;
+              const isAvailable = isOptionAvailable({
+                product,
+                selectedOptions,
+                optionKey: group.key,
+                optionValue: value
+              });
 
               return (
                 <Link
                   className={styles.optionLink}
                   data-active={isActive}
+                  data-available={isAvailable}
                   scroll={false}
                   href={getOptionHref({
                     area,
@@ -407,6 +417,37 @@ function getUniqueOptionValues(
   }
 
   return values;
+}
+
+function isOptionAvailable({
+  product,
+  selectedOptions,
+  optionKey,
+  optionValue
+}: {
+  product: PublicProductDetailView;
+  selectedOptions: VariantOptionValues;
+  optionKey: keyof VariantOptionValues;
+  optionValue: string;
+}): boolean {
+  const nextOptions = {
+    ...selectedOptions,
+    [optionKey]: optionValue
+  };
+
+  return product.variants.some((variant) => {
+    if (!variant.isAvailable) {
+      return false;
+    }
+
+    return Object.entries(nextOptions).every(([key, value]) => {
+      if (!value) {
+        return true;
+      }
+
+      return variant.options[key as keyof VariantOptionValues] === value;
+    });
+  });
 }
 
 function getOptionHref({

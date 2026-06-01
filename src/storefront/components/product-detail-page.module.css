@@ -232,6 +232,10 @@
   color: #ffffff;
 }
 
+.optionLink[data-available="false"] {
+  opacity: 0.38;
+}
+
 .ctaArea {
   display: grid;
   gap: 0.55rem;
