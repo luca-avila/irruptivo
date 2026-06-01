@@ -31,10 +31,6 @@ const CART_ISSUE_CLASSIFICATION = {
   insufficient_stock: {
     severity: "notice",
     message: "Ajustamos la cantidad al stock disponible."
-  },
-  price_snapshot_expired: {
-    severity: "notice",
-    message: "Actualizamos el precio porque pasaron más de 24 horas."
   }
 } as const satisfies Record<
   string,
@@ -236,10 +232,6 @@ function validateCartItem({
       quantity: nextQuantity
     };
     issues.push(classifyCartIssue("insufficient_stock"));
-  }
-
-  if (priceRefresh.wasRefreshed) {
-    issues.push(classifyCartIssue("price_snapshot_expired"));
   }
 
   return {

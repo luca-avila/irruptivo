@@ -179,7 +179,7 @@ describe("cart invalid state validation", () => {
     });
   });
 
-  it("refreshes expired price snapshots to the current server price with a notice", () => {
+  it("refreshes expired price snapshots to the current server price without a notice", () => {
     const result = validateCart({
       cart: getCart([
         {
@@ -195,13 +195,7 @@ describe("cart invalid state validation", () => {
     expect(result.items[0]).toMatchObject({
       status: "refreshed",
       unitPriceArs: 26000,
-      issues: [
-        {
-          code: "price_snapshot_expired",
-          severity: "notice",
-          message: "Actualizamos el precio porque pasaron más de 24 horas."
-        }
-      ]
+      issues: []
     });
     expect(result.updatedCart.items[0]).toMatchObject({
       priceSnapshotArs: 26000,
@@ -253,9 +247,9 @@ describe("cart issue classification", () => {
       severity: "blocking",
       message: "Este producto ya no está disponible. Quitalo del carrito para seguir."
     });
-    expect(classifyCartIssue("price_snapshot_expired")).toMatchObject({
+    expect(classifyCartIssue("insufficient_stock")).toMatchObject({
       severity: "notice",
-      message: "Actualizamos el precio porque pasaron más de 24 horas."
+      message: "Ajustamos la cantidad al stock disponible."
     });
   });
 });
