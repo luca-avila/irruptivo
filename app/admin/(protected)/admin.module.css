@@ -169,6 +169,11 @@
   text-decoration: none;
 }
 
+.primaryButton:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .headerAction,
 .primaryButton {
   gap: 0.45rem;
@@ -569,11 +574,6 @@
   margin-top: 1.25rem;
 }
 
-.generalSection .formPanel {
-  border-color: rgba(17, 17, 17, 0.16);
-  background: #ece8df;
-}
-
 .sectionHeader {
   display: grid;
   gap: 0.45rem;
@@ -692,6 +692,40 @@
   color: #5f5b54;
   font-size: 0.86rem;
   line-height: 1.35;
+}
+
+.variantPreview {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  width: 100%;
+  margin: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.variantPreview > .variantCardHeader {
+  flex: 1;
+}
+
+.variantChevron {
+  flex-shrink: 0;
+  color: #5f5b54;
+  transition: transform 180ms ease;
+}
+
+.variantChevron[data-open="true"] {
+  transform: rotate(180deg);
+}
+
+.variantForm {
+  display: grid;
+  gap: 0.9rem;
 }
 
 .variantMeta {
