@@ -252,6 +252,7 @@ function VariantSelectors({
                 <Link
                   className={styles.optionLink}
                   data-active={isActive}
+                  scroll={false}
                   href={getOptionHref({
                     area,
                     basePath,
