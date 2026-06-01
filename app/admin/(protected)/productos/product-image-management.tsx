@@ -45,7 +45,6 @@ export function ProductImageManagement({
       <form
         className={styles.imageUploadPanel}
         action={uploadAdminProductImage}
-        encType="multipart/form-data"
       >
         <input type="hidden" name="productId" value={product.id} />
 
