@@ -10,7 +10,6 @@ import {
   type ProductImageManagementErrorCode
 } from "../catalog/product-images";
 import {
-  PRODUCT_STATUS,
   type CatalogProductRecord,
   type ProductArea,
   type ProductStatus
@@ -127,11 +126,6 @@ export async function changeAdminProductStatus(
     `${ADMIN_PRODUCTS_PATH}?error=duplicate_variant_sku`
   );
   revalidateCatalogPaths(result.product);
-
-  const state =
-    status === PRODUCT_STATUS.active ? "producto-activado" : "producto-desactivado";
-
-  redirect(`${ADMIN_PRODUCTS_PATH}?estado=${state}`);
 }
 
 export async function createAdminProductVariant(

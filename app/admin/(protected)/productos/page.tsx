@@ -198,6 +198,7 @@ function ProductMetric({
       href={filter === "todos" ? "/admin/productos" : `/admin/productos?filtro=${filter}`}
       data-active={isActive}
       aria-current={isActive ? "true" : undefined}
+      scroll={false}
     >
       <span>{label}</span>
       <strong>{value}</strong>
