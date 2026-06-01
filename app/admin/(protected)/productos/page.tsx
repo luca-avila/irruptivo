@@ -10,10 +10,13 @@ import {
 import { PRODUCT_STATUS } from "../../../../src/catalog/catalog";
 import styles from "../admin.module.css";
 
+type ProductFilter = "todos" | "activos" | "inactivos";
+
 type AdminProductsPageProps = {
   searchParams?: Promise<{
     estado?: string | string[];
     error?: string | string[];
+    filtro?: string | string[];
   }>;
 };
 
@@ -26,6 +29,20 @@ export default async function AdminProductsPage({
     error: getFirstSearchParamValue(params?.error)
   });
   const productList = listAdminProducts(await readAdminProductRecords());
+  const activeFilter = getActiveProductFilter(
+    getFirstSearchParamValue(params?.filtro)
+  );
+  const visibleProducts = productList.products.filter((product) => {
+    if (activeFilter === "activos") {
+      return product.status === PRODUCT_STATUS.active;
+    }
+
+    if (activeFilter === "inactivos") {
+      return product.status === PRODUCT_STATUS.inactive;
+    }
+
+    return true;
+  });
 
   return (
     <>
@@ -52,13 +69,43 @@ export default async function AdminProductsPage({
         </section>
       ) : null}
 
-      <section className={styles.metricGrid} aria-label="Resumen de productos">
-        <ProductMetric label="Total" value={productList.totalProductCount} />
-        <ProductMetric label="Activos" value={productList.activeProductCount} />
-        <ProductMetric label="Inactivos" value={productList.inactiveProductCount} />
+      <section className={styles.metricGrid} aria-label="Filtrar productos por estado">
+        <ProductMetric
+          label="Total"
+          value={productList.totalProductCount}
+          filter="todos"
+          activeFilter={activeFilter}
+        />
+        <ProductMetric
+          label="Activos"
+          value={productList.activeProductCount}
+          filter="activos"
+          activeFilter={activeFilter}
+        />
+        <ProductMetric
+          label="Inactivos"
+          value={productList.inactiveProductCount}
+          filter="inactivos"
+          activeFilter={activeFilter}
+        />
       </section>
 
-      {productList.products.length > 0 ? (
+      {productList.products.length === 0 ? (
+        <section className={styles.emptyPanel} aria-live="polite">
+          <CircleOff aria-hidden="true" size={24} strokeWidth={1.9} />
+          <h2>Todavía no hay productos cargados.</h2>
+          <p>Creá el primer producto base para preparar el catálogo.</p>
+          <Link className={styles.primaryButton} href="/admin/productos/nuevo">
+            Nuevo producto
+          </Link>
+        </section>
+      ) : visibleProducts.length === 0 ? (
+        <section className={styles.emptyPanel} aria-live="polite">
+          <CircleOff aria-hidden="true" size={24} strokeWidth={1.9} />
+          <h2>No hay productos {activeFilter} para mostrar.</h2>
+          <p>Probá con otro filtro o creá un producto nuevo.</p>
+        </section>
+      ) : (
         <section className={styles.tablePanel} aria-label="Listado de productos">
           <div className={styles.tableHeader}>
             <span>Producto</span>
@@ -68,7 +115,7 @@ export default async function AdminProductsPage({
             <span>Acciones</span>
           </div>
 
-          {productList.products.map((product) => {
+          {visibleProducts.map((product) => {
             const nextStatus =
               product.status === PRODUCT_STATUS.active
                 ? PRODUCT_STATUS.inactive
@@ -119,26 +166,42 @@ export default async function AdminProductsPage({
             );
           })}
         </section>
-      ) : (
-        <section className={styles.emptyPanel} aria-live="polite">
-          <CircleOff aria-hidden="true" size={24} strokeWidth={1.9} />
-          <h2>Todavía no hay productos cargados.</h2>
-          <p>Creá el primer producto base para preparar el catálogo.</p>
-          <Link className={styles.primaryButton} href="/admin/productos/nuevo">
-            Nuevo producto
-          </Link>
-        </section>
       )}
     </>
   );
 }
 
-function ProductMetric({ label, value }: { label: string; value: number }) {
+function getActiveProductFilter(value: string | null): ProductFilter {
+  if (value === "activos" || value === "inactivos") {
+    return value;
+  }
+
+  return "todos";
+}
+
+function ProductMetric({
+  label,
+  value,
+  filter,
+  activeFilter
+}: {
+  label: string;
+  value: number;
+  filter: ProductFilter;
+  activeFilter: ProductFilter;
+}) {
+  const isActive = activeFilter === filter;
+
   return (
-    <div className={styles.metric}>
+    <Link
+      className={styles.metric}
+      href={filter === "todos" ? "/admin/productos" : `/admin/productos?filtro=${filter}`}
+      data-active={isActive}
+      aria-current={isActive ? "true" : undefined}
+    >
       <span>{label}</span>
       <strong>{value}</strong>
-    </div>
+    </Link>
   );
 }
 
