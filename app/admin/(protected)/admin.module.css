@@ -521,6 +521,17 @@
   resize: vertical;
 }
 
+.noSpin {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.noSpin::-webkit-outer-spin-button,
+.noSpin::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
 .readOnlyField {
   display: grid;
   gap: 0.4rem;

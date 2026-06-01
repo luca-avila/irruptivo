@@ -113,10 +113,11 @@ function VariantForm({ product, variant }: VariantFormProps) {
         <label className={styles.field}>
           <span>Precio override opcional</span>
           <input
+            className={styles.noSpin}
             name="priceOverrideArs"
             type="number"
-            min="1000"
-            step="1000"
+            min="1"
+            step="1"
             inputMode="numeric"
             defaultValue={variant?.priceOverrideArs ?? ""}
             placeholder="Usar precio base"

@@ -50,10 +50,11 @@ export function ProductForm({ action, submitLabel, product }: ProductFormProps) 
         <label className={styles.field}>
           <span>Precio base</span>
           <input
+            className={styles.noSpin}
             name="basePriceArs"
             type="number"
-            min="1000"
-            step="1000"
+            min="1"
+            step="1"
             inputMode="numeric"
             defaultValue={product?.basePriceArs ?? ""}
             required
