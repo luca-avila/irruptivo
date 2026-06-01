@@ -28,8 +28,8 @@ export const contactLink = {
 } as const satisfies ExternalStorefrontLink;
 
 export const instagramLink = {
-  label: "@irruptivo",
-  href: process.env.NEXT_PUBLIC_INSTAGRAM_URL ?? "https://instagram.com/irruptivo"
+  label: "irruptivo.ar",
+  href: process.env.NEXT_PUBLIC_INSTAGRAM_URL ?? "https://instagram.com/irruptivo.ar"
 } as const satisfies ExternalStorefrontLink;
 
 export const searchRoute = {

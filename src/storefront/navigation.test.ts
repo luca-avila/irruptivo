@@ -36,7 +36,7 @@ describe("storefront navigation shell", () => {
     expect(contactLink.href).toMatch(/^https:\/\//);
 
     expect(instagramLink).toMatchObject({
-      label: "@irruptivo"
+      label: "irruptivo.ar"
     });
     expect(instagramLink.href).toMatch(/^https:\/\//);
   });

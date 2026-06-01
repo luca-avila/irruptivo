@@ -50,6 +50,8 @@ const menuBrandClass = "mb-6 text-[1.9rem] font-[500] tracking-[0.05em]";
 const menuLinksClass = "grid gap-3";
 const menuLinkClass =
   "flex items-center justify-between min-h-8 text-[rgba(255,255,255,0.82)]! text-[1.55rem] leading-[1.1] transition-colors duration-[160ms] ease-[ease] hover:text-white! aria-[current=page]:text-white! aria-[current=page]:font-[800] aria-[current=page]:after:content-[''] aria-[current=page]:after:w-2 aria-[current=page]:after:h-2 aria-[current=page]:after:rounded-full aria-[current=page]:after:bg-[var(--accent)]";
+const menuContactLinkClass =
+  "flex items-center gap-[0.55rem] min-h-8 text-[rgba(255,255,255,0.82)]! text-[1.55rem] leading-[1.1] transition-colors duration-[160ms] ease-[ease] hover:text-white!";
 const menuSocialClass = "flex justify-center mt-[2.1rem]";
 const instagramLinkClass =
   "inline-flex items-center gap-[0.55rem] text-[1.45rem] font-[700]";
@@ -150,7 +152,7 @@ export function StorefrontHeader() {
                     {route.label}
                   </Link>
                 ))}
-                <a className={menuLinkClass} href={contactLink.href} target="_blank" rel="noreferrer">
+                <a className={menuContactLinkClass} href={contactLink.href} target="_blank" rel="noreferrer">
                   <span>{contactLink.label}</span>
                   <MessageCircle aria-hidden="true" size={24} strokeWidth={1.9} />
                 </a>
