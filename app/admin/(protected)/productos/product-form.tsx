@@ -53,7 +53,7 @@ export function ProductForm({ action, submitLabel, product }: ProductFormProps) 
             name="basePriceArs"
             type="number"
             min="1"
-            step="1"
+            step="1000"
             inputMode="numeric"
             defaultValue={product?.basePriceArs ?? ""}
             required

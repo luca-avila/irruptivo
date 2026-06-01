@@ -116,7 +116,7 @@ function VariantForm({ product, variant }: VariantFormProps) {
             name="priceOverrideArs"
             type="number"
             min="1"
-            step="1"
+            step="1000"
             inputMode="numeric"
             defaultValue={variant?.priceOverrideArs ?? ""}
             placeholder="Usar precio base"
