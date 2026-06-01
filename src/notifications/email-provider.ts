@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 export type EmailRecipient = {
   email: string;
   name?: string;
@@ -349,4 +351,3 @@ function assertNonEmptyString(value: string, name: string): void {
     throw new RangeError(`${name} must be a non-empty string`);
   }
 }
-import { randomUUID } from "node:crypto";

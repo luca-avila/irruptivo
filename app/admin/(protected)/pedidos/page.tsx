@@ -7,6 +7,7 @@ import styles from "../admin.module.css";
 type AdminOrdersPageProps = {
   searchParams?: Promise<{
     vista?: string | string[];
+    error?: string | string[];
   }>;
 };
 
@@ -14,6 +15,9 @@ export default async function AdminOrdersPage({
   searchParams
 }: AdminOrdersPageProps) {
   const params = await searchParams;
+  const errorFeedback = getOrderListErrorMessage(
+    getFirstSearchParamValue(params?.error)
+  );
   const orderList = listAdminOrders({
     filter: getFirstSearchParamValue(params?.vista)
   });
@@ -32,6 +36,15 @@ export default async function AdminOrdersPage({
           </div>
         </div>
       </header>
+
+      {errorFeedback ? (
+        <section
+          className="mb-4 rounded-[8px] border border-[rgba(151,46,46,0.3)] bg-[#fff1ee] px-4 py-[0.85rem] font-[760] leading-[1.45] text-[#70251f]"
+          role="alert"
+        >
+          {errorFeedback}
+        </section>
+      ) : null}
 
       <section className={styles.metricGrid} aria-label="Resumen de pedidos">
         <OrderMetric label="Total" value={orderList.totalOrderCount} />
@@ -127,6 +140,25 @@ function getFilterHref(filterValue: string): string {
   return filterValue === "cola"
     ? "/admin/pedidos"
     : `/admin/pedidos?vista=${encodeURIComponent(filterValue)}`;
+}
+
+function getOrderListErrorMessage(error: string | null): string | null {
+  switch (error) {
+    case "accion-invalida":
+      return "La acción solicitada no existe. Usá un botón disponible desde el detalle del pedido.";
+    case "accion-no-disponible":
+      return "Esa acción no corresponde al estado o método de entrega actual.";
+    case "estado-pago-bloqueado":
+      return "El pedido no tiene un pago confirmado para avanzar en cumplimiento.";
+    case "estado-final":
+      return "Ese pedido ya no tiene pasos de cumplimiento disponibles.";
+    case "guardado-fallido":
+      return "No pudimos guardar el nuevo estado. Volvé a intentar.";
+    case "pedido-no-encontrado":
+      return "No encontramos el pedido para actualizar.";
+    default:
+      return null;
+  }
 }
 
 function getFirstSearchParamValue(value: string | string[] | undefined): string | null {
