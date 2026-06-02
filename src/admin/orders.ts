@@ -31,7 +31,9 @@ export type AdminOrderRepository = {
 
 export type AdminOrderProjectionOptions = {
   orderRepository?: AdminOrderRepository;
-  getManualReviewForOrder?: (orderId: string) => PaymentManualReviewState;
+  getManualReviewForOrder?: (
+    orderId: string
+  ) => Promise<PaymentManualReviewState>;
 };
 
 export type AdminOrderListInput = {
@@ -251,16 +253,25 @@ export async function listAdminOrders(
   }: AdminOrderProjectionOptions = {}
 ): Promise<AdminOrderListView> {
   const orders = await orderRepository.listOrders();
+  const manualReviews = await getManualReviewsByOrderId(
+    orders,
+    getManualReviewForOrder
+  );
   const activeFilter = getFilterDefinition(input.filter);
   const visibleOrders = orders
     .filter((order) => activeFilter.statuses.includes(order.status))
     .sort(sortOrdersByMostRecent)
-    .map((order) => getAdminOrderListItemView(order, getManualReviewForOrder));
+    .map((order) =>
+      getAdminOrderListItemView(
+        order,
+        manualReviews.get(order.id) ?? getNeutralManualReviewState()
+      )
+    );
   const queueOrderCount = orders.filter((order) =>
     DEFAULT_QUEUE_STATUSES.includes(order.status)
   ).length;
-  const manualReviewCount = orders.filter(
-    (order) => getManualReviewForOrder(order.id).required
+  const manualReviewCount = [...manualReviews.values()].filter(
+    (manualReview) => manualReview.required
   ).length;
 
   return {
@@ -295,15 +306,16 @@ export async function getAdminOrderDetail(
     return null;
   }
 
-  return getAdminOrderDetailView(order, getManualReviewForOrder(order.id));
+  return getAdminOrderDetailView(
+    order,
+    await getManualReviewForOrder(order.id)
+  );
 }
 
 function getAdminOrderListItemView(
   order: Order,
-  getManualReviewForOrder: (orderId: string) => PaymentManualReviewState
+  manualReview: PaymentManualReviewState
 ): AdminOrderListItemView {
-  const manualReview = getManualReviewForOrder(order.id);
-
   return {
     id: order.id,
     orderNumber: order.orderNumber,
@@ -317,6 +329,32 @@ function getAdminOrderListItemView(
     detailHref: `/admin/pedidos/${encodeURIComponent(order.id)}`,
     manualReviewRequired: manualReview.required,
     manualReviewLabel: manualReview.required ? manualReview.label : null
+  };
+}
+
+async function getManualReviewsByOrderId(
+  orders: readonly Order[],
+  getManualReviewForOrder: (
+    orderId: string
+  ) => Promise<PaymentManualReviewState>
+): Promise<Map<string, PaymentManualReviewState>> {
+  return new Map(
+    await Promise.all(
+      orders.map(async (order) => [
+        order.id,
+        await getManualReviewForOrder(order.id)
+      ] as const)
+    )
+  );
+}
+
+function getNeutralManualReviewState(): PaymentManualReviewState {
+  return {
+    required: false,
+    label: "Sin revisión manual",
+    description: "No hay pagos tardíos pendientes de revisión para este pedido.",
+    providerPaymentIds: [],
+    latestEventAt: null
   };
 }
 

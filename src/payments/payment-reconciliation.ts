@@ -1,4 +1,5 @@
 import { ORDER_STATUS, type OrderStatus } from "../domain/rules";
+import { prisma } from "../db/client";
 import {
   sendOrderConfirmationOnce,
   type OrderConfirmationEmailResult,
@@ -8,12 +9,16 @@ import { expirePendingPaymentOrders } from "../orders/order-expiration";
 import { type Order } from "../orders/order-creation";
 import {
   findOrderByIdInStore,
+  mapOrderRecordToOrder,
   updateOrderStatusInStore
 } from "../orders/order-store";
 import {
   PAYMENT_MANUAL_REVIEW_PROCESSING_RESULT,
+  findPaymentEventByIdentity,
   recordPaymentEventOnce,
-  type PaymentEventRecord
+  type PaymentEventIdentity,
+  type PaymentEventRecord,
+  type RecordPaymentEventOnceResult
 } from "./payment-events";
 import {
   fetchMercadoPagoPayment,
@@ -31,11 +36,34 @@ export type PaymentReconciliationOrderRepository = {
     reason?: string;
     actor?: string;
   }) => Promise<Order | null>;
+  markOrderPaidAndDecrementStock?: (input: {
+    orderId: string;
+    reason?: string;
+    actor?: string;
+  }) => Promise<ApprovedPaymentSettlementResult>;
 };
 
 export type MercadoPagoPaymentProvider = (
   providerPaymentId: string
 ) => Promise<MercadoPagoPayment | null>;
+
+export type PaymentEventRecorder = (
+  event: PaymentEventRecord
+) => Promise<RecordPaymentEventOnceResult>;
+
+export type PaymentEventFinder = (
+  identity: PaymentEventIdentity
+) => Promise<PaymentEventRecord | null>;
+
+export type ApprovedPaymentSettlementResult =
+  | {
+      status: "paid";
+      order: Order;
+    }
+  | {
+      status: "already_reconciled";
+      order: Order | null;
+    };
 
 export type PaymentReconciliationConfig = {
   accessToken?: string | null;
@@ -45,6 +73,8 @@ export type PaymentReconciliationConfig = {
 export type ReconcileMercadoPagoEventOptions = {
   paymentProvider?: MercadoPagoPaymentProvider;
   orderRepository?: PaymentReconciliationOrderRepository;
+  eventRecorder?: PaymentEventRecorder;
+  eventFinder?: PaymentEventFinder;
   confirmationEmailSender?: OrderConfirmationEmailSender;
   config?: PaymentReconciliationConfig;
   now?: Date | string;
@@ -91,7 +121,8 @@ export type PaymentReconciliationResult =
 
 const defaultOrderRepository: PaymentReconciliationOrderRepository = {
   findOrderById: findOrderByIdInStore,
-  updateOrderStatus: updateOrderStatusInStore
+  updateOrderStatus: updateOrderStatusInStore,
+  markOrderPaidAndDecrementStock: markOrderPaidAndDecrementStockInStore
 };
 
 export async function reconcileMercadoPagoEvent(
@@ -99,6 +130,8 @@ export async function reconcileMercadoPagoEvent(
   {
     paymentProvider,
     orderRepository = defaultOrderRepository,
+    eventRecorder = recordPaymentEventOnce,
+    eventFinder,
     confirmationEmailSender = sendOrderConfirmationOnce,
     config = {},
     now = new Date()
@@ -144,7 +177,26 @@ export async function reconcileMercadoPagoEvent(
       : {
           status: "unverified",
           providerPaymentId: payment.id
-        };
+      };
+  }
+
+  const providerEventId = getProviderEventId(notification, payment);
+  const findRecordedEvent =
+    eventFinder ??
+    (eventRecorder === recordPaymentEventOnce
+      ? findPaymentEventByIdentity
+      : async () => null);
+  const existingEvent = await findRecordedEvent({
+    provider: "mercado_pago",
+    providerEventId
+  });
+
+  if (existingEvent) {
+    return {
+      status: "duplicate",
+      orderId: existingEvent.orderId,
+      providerPaymentId: existingEvent.providerPaymentId
+    };
   }
 
   const providerStatus = mapMercadoPagoPaymentStatus(payment.status);
@@ -157,11 +209,12 @@ export async function reconcileMercadoPagoEvent(
     reconciledOrder.status,
     providerStatus
   );
-  const recordResult = recordPaymentEventOnce(
+  const recordResult = await eventRecorder(
     buildPaymentEventRecord({
       notification,
       payment,
       orderId: order.id,
+      providerEventId,
       processingResult,
       receivedAt: getDate(now, "now").toISOString()
     })
@@ -256,6 +309,35 @@ async function reconcileApprovedPayment({
     };
   }
 
+  if (orderRepository.markOrderPaidAndDecrementStock) {
+    const settlementResult =
+      await orderRepository.markOrderPaidAndDecrementStock({
+        orderId: order.id,
+        reason: "payment_approved"
+      });
+
+    if (settlementResult.status !== "paid") {
+      return {
+        status: "ignored",
+        reason: "already_reconciled",
+        providerPaymentId: payment.id
+      };
+    }
+
+    const confirmationEmail = await sendConfirmationEmailSafely(
+      confirmationEmailSender,
+      settlementResult.order
+    );
+
+    return {
+      status: "paid",
+      orderId: order.id,
+      providerPaymentId: payment.id,
+      orderStatus: ORDER_STATUS.paid,
+      confirmationEmail
+    };
+  }
+
   const updatedOrder = await orderRepository.updateOrderStatus({
     orderId: order.id,
     status: ORDER_STATUS.paid,
@@ -282,6 +364,110 @@ async function reconcileApprovedPayment({
       : ORDER_STATUS.paid,
     confirmationEmail
   };
+}
+
+async function markOrderPaidAndDecrementStockInStore({
+  orderId,
+  reason = "payment_approved",
+  actor = "system"
+}: {
+  orderId: string;
+  reason?: string;
+  actor?: string;
+}): Promise<ApprovedPaymentSettlementResult> {
+  const normalizedOrderId = orderId.trim();
+
+  if (!normalizedOrderId) {
+    return {
+      status: "already_reconciled",
+      order: null
+    };
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const existingOrder = await tx.order.findUnique({
+      where: {
+        id: normalizedOrderId
+      },
+      include: {
+        items: true
+      }
+    });
+
+    if (!existingOrder) {
+      return {
+        status: "already_reconciled",
+        order: null
+      };
+    }
+
+    if (existingOrder.status !== ORDER_STATUS.pendingPayment) {
+      return {
+        status: "already_reconciled",
+        order: mapOrderRecordToOrder(existingOrder)
+      };
+    }
+
+    await tx.order.update({
+      where: {
+        id: normalizedOrderId
+      },
+      data: {
+        status: ORDER_STATUS.paid
+      }
+    });
+
+    await tx.orderStatusHistory.create({
+      data: {
+        orderId: normalizedOrderId,
+        fromStatus: existingOrder.status,
+        toStatus: ORDER_STATUS.paid,
+        reason,
+        actor
+      }
+    });
+
+    for (const [variantId, quantity] of getVariantQuantityTotals(
+      existingOrder.items
+    )) {
+      await tx.$executeRaw`
+        UPDATE "product_variants"
+        SET "stock" = GREATEST("stock" - ${quantity}, 0),
+            "updated_at" = NOW()
+        WHERE "id" = ${variantId}
+      `;
+    }
+
+    const paidOrder = await tx.order.findUnique({
+      where: {
+        id: normalizedOrderId
+      },
+      include: {
+        items: true
+      }
+    });
+
+    if (!paidOrder) {
+      throw new Error("Paid order disappeared during payment settlement.");
+    }
+
+    return {
+      status: "paid",
+      order: mapOrderRecordToOrder(paidOrder)
+    };
+  });
+}
+
+function getVariantQuantityTotals(
+  items: readonly { variantId: string; quantity: number }[]
+): Map<string, number> {
+  const totals = new Map<string, number>();
+
+  for (const item of items) {
+    totals.set(item.variantId, (totals.get(item.variantId) ?? 0) + item.quantity);
+  }
+
+  return totals;
 }
 
 async function sendConfirmationEmailSafely(
@@ -427,18 +613,20 @@ function buildPaymentEventRecord({
   notification,
   payment,
   orderId,
+  providerEventId,
   processingResult,
   receivedAt
 }: {
   notification: MercadoPagoWebhookNotification;
   payment: MercadoPagoPayment;
   orderId: string;
+  providerEventId: string;
   processingResult: string;
   receivedAt: string;
 }): PaymentEventRecord {
   return {
     provider: "mercado_pago",
-    providerEventId: getProviderEventId(notification, payment),
+    providerEventId,
     providerPaymentId: payment.id,
     orderId,
     type: notification.type,

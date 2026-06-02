@@ -1,20 +1,18 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { DELIVERY_METHOD, ORDER_STATUS, type OrderStatus } from "../domain/rules";
 import { type Order } from "../orders/order-creation";
+import { type PaymentManualReviewState } from "../payments/payment-events";
 import {
-  recordPaymentEventOnce,
-  resetPaymentEventsForTests
-} from "../payments/payment-events";
-import { getAdminOrderDetail, listAdminOrders } from "./orders";
+  getAdminOrderDetail,
+  listAdminOrders,
+  type AdminOrderProjectionOptions,
+  type AdminOrderRepository
+} from "./orders";
 
 const now = "2026-05-30T12:00:00.000Z";
 
 describe("admin order projection", () => {
-  beforeEach(() => {
-    resetPaymentEventsForTests();
-  });
-
   it("shows only actionable fulfillment statuses in the default queue", async () => {
     const orders = [
       getOrder({ status: ORDER_STATUS.pendingPayment, orderNumber: "IRR-PENDING" }),
@@ -44,7 +42,7 @@ describe("admin order projection", () => {
 
     const view = await listAdminOrders(
       {},
-      { orderRepository: createOrderRepository(orders) }
+      getProjectionOptions(orders)
     );
 
     expect(view.activeFilterLabel).toBe("Cola activa");
@@ -74,7 +72,7 @@ describe("admin order projection", () => {
       getOrder({ status: ORDER_STATUS.pickedUp, orderNumber: "IRR-PICKED" })
     ];
     const repository = createOrderRepository(orders);
-    const view = await listAdminOrders({}, { orderRepository: repository });
+    const view = await listAdminOrders({}, getProjectionOptions(repository));
 
     expect(view.filters.map((filter) => filter.label)).toEqual([
       "Cola activa",
@@ -89,23 +87,23 @@ describe("admin order projection", () => {
     expect(JSON.stringify(view.filters)).not.toContain(ORDER_STATUS.pickedUp);
 
     expect(
-      (await listAdminOrders({ filter: "pago-pendiente" }, { orderRepository: repository }))
+      (await listAdminOrders({ filter: "pago-pendiente" }, getProjectionOptions(repository)))
         .orders
     ).toMatchObject([{ orderNumber: "IRR-PENDING" }]);
     expect(
-      (await listAdminOrders({ filter: "pago-rechazado" }, { orderRepository: repository }))
+      (await listAdminOrders({ filter: "pago-rechazado" }, getProjectionOptions(repository)))
         .orders
     ).toMatchObject([{ orderNumber: "IRR-FAILED" }]);
     expect(
-      (await listAdminOrders({ filter: "vencidos" }, { orderRepository: repository }))
+      (await listAdminOrders({ filter: "vencidos" }, getProjectionOptions(repository)))
         .orders
     ).toMatchObject([{ orderNumber: "IRR-EXPIRED" }]);
     expect(
-      (await listAdminOrders({ filter: "entregados" }, { orderRepository: repository }))
+      (await listAdminOrders({ filter: "entregados" }, getProjectionOptions(repository)))
         .orders
     ).toMatchObject([{ orderNumber: "IRR-DELIVERED" }]);
     expect(
-      (await listAdminOrders({ filter: "retirados" }, { orderRepository: repository }))
+      (await listAdminOrders({ filter: "retirados" }, getProjectionOptions(repository)))
         .orders
     ).toMatchObject([{ orderNumber: "IRR-PICKED" }]);
   });
@@ -135,9 +133,10 @@ describe("admin order projection", () => {
       ]
     });
 
-    const detail = await getAdminOrderDetail("order-001", {
-      orderRepository: createOrderRepository([order])
-    });
+    const detail = await getAdminOrderDetail(
+      "order-001",
+      getProjectionOptions([order])
+    );
 
     expect(detail).toMatchObject({
       orderNumber: "IRR-SNAPSHOT",
@@ -168,9 +167,10 @@ describe("admin order projection", () => {
   });
 
   it("marks financial fields as read-only in the detail view model", async () => {
-    const detail = await getAdminOrderDetail("order-001", {
-      orderRepository: createOrderRepository([getOrder({ status: ORDER_STATUS.paid })])
-    });
+    const detail = await getAdminOrderDetail(
+      "order-001",
+      getProjectionOptions([getOrder({ status: ORDER_STATUS.paid })])
+    );
 
     expect(detail?.financial.readOnlyLabel).toBe("Solo lectura");
     expect(detail?.financial.fields).toEqual([
@@ -181,23 +181,17 @@ describe("admin order projection", () => {
   });
 
   it("surfaces late expired-payment manual review without exposing internal states", async () => {
-    recordPaymentEventOnce({
-      provider: "mercado_pago",
-      providerEventId: "event-late-001",
-      providerPaymentId: "payment-late-001",
-      orderId: "order-001",
-      type: "payment",
-      action: "payment.updated",
-      providerStatus: "approved",
-      processingResult: "manual_review_required",
-      receivedAt: now
-    });
-
-    const detail = await getAdminOrderDetail("order-001", {
-      orderRepository: createOrderRepository([
-        getOrder({ status: ORDER_STATUS.expired })
-      ])
-    });
+    const detail = await getAdminOrderDetail(
+      "order-001",
+      getProjectionOptions([getOrder({ status: ORDER_STATUS.expired })], async () => ({
+        required: true,
+        label: "Revisión manual requerida",
+        description:
+          "Llegó un pago aprobado para un pedido con reserva vencida. Revisá el caso antes de preparar o devolver el pago.",
+        providerPaymentIds: ["payment-late-001"],
+        latestEventAt: now
+      }))
+    );
 
     expect(detail?.manualReview).toMatchObject({
       required: true,
@@ -210,22 +204,24 @@ describe("admin order projection", () => {
   });
 
   it("shows only the valid next fulfillment action for the delivery method", async () => {
-    const shippingDetail = await getAdminOrderDetail("order-001", {
-      orderRepository: createOrderRepository([
+    const shippingDetail = await getAdminOrderDetail(
+      "order-001",
+      getProjectionOptions([
         getOrder({
           deliveryMethod: DELIVERY_METHOD.shipping,
           status: ORDER_STATUS.preparing
         })
       ])
-    });
-    const pickupDetail = await getAdminOrderDetail("order-001", {
-      orderRepository: createOrderRepository([
+    );
+    const pickupDetail = await getAdminOrderDetail(
+      "order-001",
+      getProjectionOptions([
         getOrder({
           deliveryMethod: DELIVERY_METHOD.pickup,
           status: ORDER_STATUS.preparing
         })
       ])
-    });
+    );
 
     expect(shippingDetail?.fulfillment.actions).toEqual([
       {
@@ -252,11 +248,12 @@ describe("admin order projection", () => {
   });
 
   it("explains when fulfillment has no available admin action", async () => {
-    const detail = await getAdminOrderDetail("order-001", {
-      orderRepository: createOrderRepository([
+    const detail = await getAdminOrderDetail(
+      "order-001",
+      getProjectionOptions([
         getOrder({ status: ORDER_STATUS.delivered })
       ])
-    });
+    );
 
     expect(detail?.fulfillment.actions).toEqual([]);
     expect(detail?.fulfillment.unavailableReason).toBe(
@@ -265,11 +262,37 @@ describe("admin order projection", () => {
   });
 });
 
-function createOrderRepository(orders: readonly Order[]) {
+function createOrderRepository(orders: readonly Order[]): AdminOrderRepository {
   return {
     listOrders: async () => orders.map(cloneOrder),
     findOrderById: async (orderId: string) =>
       orders.find((order) => order.id === orderId) ?? null
+  };
+}
+
+function getProjectionOptions(
+  ordersOrRepository: readonly Order[] | AdminOrderRepository,
+  getManualReviewForOrder: (
+    orderId: string
+  ) => Promise<PaymentManualReviewState> = getNeutralManualReviewForOrder
+): AdminOrderProjectionOptions {
+  const orderRepository: AdminOrderRepository = Array.isArray(ordersOrRepository)
+    ? createOrderRepository(ordersOrRepository)
+    : (ordersOrRepository as AdminOrderRepository);
+
+  return {
+    orderRepository,
+    getManualReviewForOrder
+  };
+}
+
+async function getNeutralManualReviewForOrder(): Promise<PaymentManualReviewState> {
+  return {
+    required: false,
+    label: "Sin revisión manual",
+    description: "No hay pagos tardíos pendientes de revisión para este pedido.",
+    providerPaymentIds: [],
+    latestEventAt: null
   };
 }
 

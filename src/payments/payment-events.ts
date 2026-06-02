@@ -1,3 +1,7 @@
+import { type Prisma, type PaymentEvent as PaymentEventRow } from "@prisma/client";
+
+import { prisma, type PrismaClient } from "../db/client";
+
 export type PaymentEventProvider = "mercado_pago";
 
 export const PAYMENT_MANUAL_REVIEW_PROCESSING_RESULT =
@@ -38,48 +42,159 @@ export type PaymentManualReviewState = {
   latestEventAt: string | null;
 };
 
-const paymentEvents: PaymentEventRecord[] = [];
+export type PaymentEventWriteRow = Omit<PaymentEventRow, "id">;
 
-export function recordPaymentEventOnce(
+type PaymentEventPrismaClient = PrismaClient | Prisma.TransactionClient;
+
+export async function recordPaymentEventOnce(
   event: RecordPaymentEventInput
-): RecordPaymentEventOnceResult {
+): Promise<RecordPaymentEventOnceResult> {
   const normalizedEvent = normalizePaymentEventRecord(event);
-  const existingEvent = paymentEvents.find(
-    (candidateEvent) =>
-      candidateEvent.provider === normalizedEvent.provider &&
-      candidateEvent.providerEventId === normalizedEvent.providerEventId
-  );
 
-  if (existingEvent) {
+  try {
+    const createdEvent = await prisma.paymentEvent.create({
+      data: mapPaymentEventRecordToRow(normalizedEvent)
+    });
+
+    return {
+      status: "recorded",
+      event: mapPaymentEventRowToRecord(createdEvent)
+    };
+  } catch (error) {
+    if (!isUniqueConstraintError(error)) {
+      throw error;
+    }
+
+    const existingEvent = await readPaymentEventByIdentity(normalizedEvent);
+
+    if (!existingEvent) {
+      throw error;
+    }
+
     return {
       status: "duplicate",
-      event: clonePaymentEvent(existingEvent)
+      event: existingEvent
     };
   }
+}
 
-  paymentEvents.push(clonePaymentEvent(normalizedEvent));
+export async function hasProcessedPaymentEvent({
+  provider,
+  providerEventId
+}: PaymentEventIdentity): Promise<boolean> {
+  assertNonEmptyString(providerEventId, "providerEventId");
+
+  const event = await prisma.paymentEvent.findUnique({
+    where: {
+      provider_providerEventId: {
+        provider,
+        providerEventId: providerEventId.trim()
+      }
+    },
+    select: {
+      id: true
+    }
+  });
+
+  return Boolean(event);
+}
+
+export async function findPaymentEventByIdentity(
+  identity: PaymentEventIdentity
+): Promise<PaymentEventRecord | null> {
+  return readPaymentEventByIdentity(identity);
+}
+
+export async function getPaymentManualReviewForOrder(
+  orderId: string
+): Promise<PaymentManualReviewState> {
+  const normalizedOrderId = orderId.trim();
+
+  if (!normalizedOrderId) {
+    return getNeutralManualReviewState();
+  }
+
+  const reviewEvents = await prisma.paymentEvent.findMany({
+    where: {
+      orderId: normalizedOrderId,
+      processingResult: PAYMENT_MANUAL_REVIEW_PROCESSING_RESULT
+    },
+    orderBy: [
+      {
+        receivedAt: "asc"
+      },
+      {
+        id: "asc"
+      }
+    ]
+  });
+
+  return buildPaymentManualReviewState(
+    normalizedOrderId,
+    reviewEvents.map(mapPaymentEventRowToRecord)
+  );
+}
+
+export async function readPaymentEventsForTests(): Promise<PaymentEventRecord[]> {
+  const events = await prisma.paymentEvent.findMany({
+    orderBy: [
+      {
+        receivedAt: "asc"
+      },
+      {
+        id: "asc"
+      }
+    ]
+  });
+
+  return events.map(mapPaymentEventRowToRecord);
+}
+
+export async function resetPaymentEventsForTests(): Promise<void> {
+  await prisma.paymentEvent.deleteMany();
+}
+
+export function mapPaymentEventRowToRecord(
+  row: PaymentEventRow | PaymentEventWriteRow
+): PaymentEventRecord {
+  if (row.provider !== "mercado_pago") {
+    throw new RangeError("provider must be mercado_pago");
+  }
 
   return {
-    status: "recorded",
-    event: clonePaymentEvent(normalizedEvent)
+    provider: row.provider,
+    providerEventId: row.providerEventId,
+    providerPaymentId: row.providerPaymentId,
+    orderId: row.orderId,
+    type: row.type,
+    action: row.action,
+    providerStatus: row.providerStatus,
+    processingResult: row.processingResult,
+    receivedAt: row.receivedAt.toISOString()
   };
 }
 
-export function hasProcessedPaymentEvent({
-  provider,
-  providerEventId
-}: PaymentEventIdentity): boolean {
-  assertNonEmptyString(providerEventId, "providerEventId");
+export function mapPaymentEventRecordToRow(
+  event: RecordPaymentEventInput
+): PaymentEventWriteRow {
+  const normalizedEvent = normalizePaymentEventRecord(event);
 
-  return paymentEvents.some(
-    (event) =>
-      event.provider === provider && event.providerEventId === providerEventId
-  );
+  return {
+    provider: normalizedEvent.provider,
+    providerEventId: normalizedEvent.providerEventId,
+    providerPaymentId: normalizedEvent.providerPaymentId,
+    orderId: normalizedEvent.orderId,
+    type: normalizedEvent.type,
+    action: normalizedEvent.action,
+    providerStatus: normalizedEvent.providerStatus,
+    processingResult: normalizedEvent.processingResult,
+    receivedAt: new Date(normalizedEvent.receivedAt)
+  };
 }
 
-export function getPaymentManualReviewForOrder(
+export function buildPaymentManualReviewState(
   orderId: string,
-  events: readonly PaymentEventRecord[] = paymentEvents
+  events: readonly PaymentEventRecord[]
 ): PaymentManualReviewState {
   const normalizedOrderId = orderId.trim();
 
@@ -107,12 +222,20 @@ export function getPaymentManualReviewForOrder(
   };
 }
 
-export function readPaymentEventsForTests(): PaymentEventRecord[] {
-  return paymentEvents.map(clonePaymentEvent);
-}
+async function readPaymentEventByIdentity(
+  event: PaymentEventIdentity,
+  client: PaymentEventPrismaClient = prisma
+): Promise<PaymentEventRecord | null> {
+  const existingEvent = await client.paymentEvent.findUnique({
+    where: {
+      provider_providerEventId: {
+        provider: event.provider,
+        providerEventId: event.providerEventId.trim()
+      }
+    }
+  });
 
-export function resetPaymentEventsForTests(): void {
-  paymentEvents.splice(0, paymentEvents.length);
+  return existingEvent ? mapPaymentEventRowToRecord(existingEvent) : null;
 }
 
 function normalizePaymentEventRecord(
@@ -142,12 +265,6 @@ function normalizePaymentEventRecord(
     providerStatus: event.providerStatus?.trim() || null,
     processingResult: event.processingResult.trim(),
     receivedAt: new Date(event.receivedAt).toISOString()
-  };
-}
-
-function clonePaymentEvent(event: PaymentEventRecord): PaymentEventRecord {
-  return {
-    ...event
   };
 }
 
@@ -185,4 +302,17 @@ function assertNonEmptyString(value: string, name: string): void {
   if (value.trim().length === 0) {
     throw new RangeError(`${name} must be a non-empty string`);
   }
+}
+
+function isUniqueConstraintError(error: unknown): boolean {
+  return isPrismaKnownError(error, "P2002");
+}
+
+function isPrismaKnownError(error: unknown, code: string): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === code
+  );
 }

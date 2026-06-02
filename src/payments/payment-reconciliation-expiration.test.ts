@@ -1,30 +1,30 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { DELIVERY_METHOD, ORDER_STATUS, type OrderStatus } from "../domain/rules";
 import { type Order } from "../orders/order-creation";
 import {
-  getPaymentManualReviewForOrder,
-  resetPaymentEventsForTests
+  buildPaymentManualReviewState,
+  type PaymentEventRecord,
+  type RecordPaymentEventOnceResult
 } from "./payment-events";
 import {
   reconcileMercadoPagoEvent,
   type MercadoPagoPayment,
+  type PaymentEventRecorder,
   type PaymentReconciliationOrderRepository
 } from "./payment-reconciliation";
 
 const createdAt = "2026-05-30T12:00:00.000Z";
 
 describe("Mercado Pago reconciliation with pending-payment expiration", () => {
-  beforeEach(() => {
-    resetPaymentEventsForTests();
-  });
-
   it("keeps an already expired order out of automatic fulfillment after a late success", async () => {
     const repository = createOrderRepository(getOrder(ORDER_STATUS.expired));
+    const eventRecorder = createTestPaymentEventRecorder();
 
     const result = await reconcileMercadoPagoEvent(getNotification(), {
       paymentProvider: async () => getPayment({ status: "approved" }),
       orderRepository: repository,
+      eventRecorder: eventRecorder.record,
       now: createdAt
     });
 
@@ -35,7 +35,9 @@ describe("Mercado Pago reconciliation with pending-payment expiration", () => {
       orderStatus: ORDER_STATUS.expired
     });
     expect(repository.getOrder()?.status).toBe(ORDER_STATUS.expired);
-    expect(getPaymentManualReviewForOrder("order-001")).toMatchObject({
+    expect(
+      buildPaymentManualReviewState("order-001", eventRecorder.read())
+    ).toMatchObject({
       required: true,
       label: "Revisión manual requerida",
       providerPaymentIds: ["payment-001"],
@@ -45,10 +47,12 @@ describe("Mercado Pago reconciliation with pending-payment expiration", () => {
 
   it("expires a still-pending order before a late success can enter fulfillment", async () => {
     const repository = createOrderRepository(getOrder(ORDER_STATUS.pendingPayment));
+    const eventRecorder = createTestPaymentEventRecorder();
 
     const result = await reconcileMercadoPagoEvent(getNotification(), {
       paymentProvider: async () => getPayment({ status: "approved" }),
       orderRepository: repository,
+      eventRecorder: eventRecorder.record,
       now: "2026-05-30T12:31:00.000Z"
     });
 
@@ -60,13 +64,55 @@ describe("Mercado Pago reconciliation with pending-payment expiration", () => {
     });
     expect(repository.getOrder()?.status).toBe(ORDER_STATUS.expired);
     expect(repository.transitionCount).toBe(1);
-    expect(getPaymentManualReviewForOrder("order-001")).toMatchObject({
+    expect(
+      buildPaymentManualReviewState("order-001", eventRecorder.read())
+    ).toMatchObject({
       required: true,
       label: "Revisión manual requerida",
       providerPaymentIds: ["payment-001"]
     });
   });
 });
+
+function createTestPaymentEventRecorder(): {
+  record: PaymentEventRecorder;
+  read: () => PaymentEventRecord[];
+} {
+  const events: PaymentEventRecord[] = [];
+
+  return {
+    record: async (
+      event: PaymentEventRecord
+    ): Promise<RecordPaymentEventOnceResult> => {
+      const existingEvent = events.find(
+        (candidateEvent) =>
+          candidateEvent.provider === event.provider &&
+          candidateEvent.providerEventId === event.providerEventId
+      );
+
+      if (existingEvent) {
+        return {
+          status: "duplicate",
+          event: clonePaymentEvent(existingEvent)
+        };
+      }
+
+      events.push(clonePaymentEvent(event));
+
+      return {
+        status: "recorded",
+        event: clonePaymentEvent(event)
+      };
+    },
+    read: () => events.map(clonePaymentEvent)
+  };
+}
+
+function clonePaymentEvent(event: PaymentEventRecord): PaymentEventRecord {
+  return {
+    ...event
+  };
+}
 
 function getNotification() {
   return {

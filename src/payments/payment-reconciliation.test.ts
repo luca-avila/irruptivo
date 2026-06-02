@@ -7,12 +7,13 @@ import {
 } from "../notifications/order-confirmation-email";
 import { type Order } from "../orders/order-creation";
 import {
-  readPaymentEventsForTests,
-  resetPaymentEventsForTests
+  type PaymentEventRecord,
+  type RecordPaymentEventOnceResult
 } from "./payment-events";
 import {
   reconcileMercadoPagoEvent,
   type MercadoPagoPayment,
+  type PaymentEventRecorder,
   type PaymentReconciliationOrderRepository
 } from "./payment-reconciliation";
 
@@ -20,17 +21,18 @@ const now = "2026-05-30T12:00:00.000Z";
 
 describe("Mercado Pago payment reconciliation", () => {
   beforeEach(() => {
-    resetPaymentEventsForTests();
     resetOrderConfirmationEmailDeliveriesForTests();
   });
 
   it("moves a pending order to paid and sends confirmation email after verified server-side approved payment", async () => {
     const repository = createOrderRepository(getOrder(ORDER_STATUS.pendingPayment));
+    const eventRecorder = createTestPaymentEventRecorder();
     const confirmationEmails: Order[] = [];
 
     const result = await reconcileMercadoPagoEvent(getNotification(), {
       paymentProvider: async () => getPayment({ status: "approved" }),
       orderRepository: repository,
+      eventRecorder: eventRecorder.record,
       confirmationEmailSender: async (order) => {
         confirmationEmails.push(order);
 
@@ -61,7 +63,7 @@ describe("Mercado Pago payment reconciliation", () => {
       id: "order-001",
       status: ORDER_STATUS.paid
     });
-    expect(readPaymentEventsForTests()).toMatchObject([
+    expect(eventRecorder.read()).toMatchObject([
       {
         providerEventId: "event-001",
         providerPaymentId: "payment-001",
@@ -74,10 +76,12 @@ describe("Mercado Pago payment reconciliation", () => {
 
   it("moves a pending order to payment_failed after verified failure", async () => {
     const repository = createOrderRepository(getOrder(ORDER_STATUS.pendingPayment));
+    const eventRecorder = createTestPaymentEventRecorder();
 
     const result = await reconcileMercadoPagoEvent(getNotification(), {
       paymentProvider: async () => getPayment({ status: "rejected" }),
       orderRepository: repository,
+      eventRecorder: eventRecorder.record,
       now
     });
 
@@ -95,6 +99,7 @@ describe("Mercado Pago payment reconciliation", () => {
 
   it("does not repeat a paid transition for a duplicate success event", async () => {
     const repository = createOrderRepository(getOrder(ORDER_STATUS.pendingPayment));
+    const eventRecorder = createTestPaymentEventRecorder();
     const notification = getNotification();
     const confirmationEmails: Order[] = [];
     const confirmationEmailSender = async (
@@ -108,12 +113,14 @@ describe("Mercado Pago payment reconciliation", () => {
     await reconcileMercadoPagoEvent(notification, {
       paymentProvider: async () => getPayment({ status: "approved" }),
       orderRepository: repository,
+      eventRecorder: eventRecorder.record,
       confirmationEmailSender,
       now
     });
     const duplicateResult = await reconcileMercadoPagoEvent(notification, {
       paymentProvider: async () => getPayment({ status: "approved" }),
       orderRepository: repository,
+      eventRecorder: eventRecorder.record,
       confirmationEmailSender,
       now
     });
@@ -130,16 +137,19 @@ describe("Mercado Pago payment reconciliation", () => {
 
   it("does not repeat a failed transition for a duplicate failure event", async () => {
     const repository = createOrderRepository(getOrder(ORDER_STATUS.pendingPayment));
+    const eventRecorder = createTestPaymentEventRecorder();
     const notification = getNotification();
 
     await reconcileMercadoPagoEvent(notification, {
       paymentProvider: async () => getPayment({ status: "rejected" }),
       orderRepository: repository,
+      eventRecorder: eventRecorder.record,
       now
     });
     const duplicateResult = await reconcileMercadoPagoEvent(notification, {
       paymentProvider: async () => getPayment({ status: "rejected" }),
       orderRepository: repository,
+      eventRecorder: eventRecorder.record,
       now
     });
 
@@ -154,10 +164,12 @@ describe("Mercado Pago payment reconciliation", () => {
 
   it("does not mark an order paid when the provider payment cannot be verified", async () => {
     const repository = createOrderRepository(getOrder(ORDER_STATUS.pendingPayment));
+    const eventRecorder = createTestPaymentEventRecorder();
 
     const result = await reconcileMercadoPagoEvent(getNotification(), {
       paymentProvider: async () => null,
       orderRepository: repository,
+      eventRecorder: eventRecorder.record,
       now
     });
 
@@ -166,11 +178,12 @@ describe("Mercado Pago payment reconciliation", () => {
       providerPaymentId: "payment-001"
     });
     expect(repository.getOrder()?.status).toBe(ORDER_STATUS.pendingPayment);
-    expect(readPaymentEventsForTests()).toEqual([]);
+    expect(eventRecorder.read()).toEqual([]);
   });
 
   it("ignores unknown webhook topics without mutating the order", async () => {
     const repository = createOrderRepository(getOrder(ORDER_STATUS.pendingPayment));
+    const eventRecorder = createTestPaymentEventRecorder();
 
     const result = await reconcileMercadoPagoEvent(
       getNotification({
@@ -182,6 +195,7 @@ describe("Mercado Pago payment reconciliation", () => {
           throw new Error("Payment provider should not be called");
         },
         orderRepository: repository,
+        eventRecorder: eventRecorder.record,
         now
       }
     );
@@ -196,6 +210,7 @@ describe("Mercado Pago payment reconciliation", () => {
 
   it("does not let an earlier pending provider status block a later approved update for the same payment", async () => {
     const repository = createOrderRepository(getOrder(ORDER_STATUS.pendingPayment));
+    const eventRecorder = createTestPaymentEventRecorder();
     const notification = getNotification({
       id: "payment-001",
       dataId: "payment-001"
@@ -204,11 +219,13 @@ describe("Mercado Pago payment reconciliation", () => {
     const pendingResult = await reconcileMercadoPagoEvent(notification, {
       paymentProvider: async () => getPayment({ status: "pending" }),
       orderRepository: repository,
+      eventRecorder: eventRecorder.record,
       now
     });
     const approvedResult = await reconcileMercadoPagoEvent(notification, {
       paymentProvider: async () => getPayment({ status: "approved" }),
       orderRepository: repository,
+      eventRecorder: eventRecorder.record,
       now
     });
 
@@ -223,15 +240,17 @@ describe("Mercado Pago payment reconciliation", () => {
       providerPaymentId: "payment-001"
     });
     expect(repository.getOrder()?.status).toBe(ORDER_STATUS.paid);
-    expect(readPaymentEventsForTests()).toHaveLength(2);
+    expect(eventRecorder.read()).toHaveLength(2);
   });
 
   it("does not automatically mark an expired order paid after a late success", async () => {
     const repository = createOrderRepository(getOrder(ORDER_STATUS.expired));
+    const eventRecorder = createTestPaymentEventRecorder();
 
     const result = await reconcileMercadoPagoEvent(getNotification(), {
       paymentProvider: async () => getPayment({ status: "approved" }),
       orderRepository: repository,
+      eventRecorder: eventRecorder.record,
       now
     });
 
@@ -246,10 +265,12 @@ describe("Mercado Pago payment reconciliation", () => {
 
   it("surfaces confirmation email failure without rolling back the paid transition", async () => {
     const repository = createOrderRepository(getOrder(ORDER_STATUS.pendingPayment));
+    const eventRecorder = createTestPaymentEventRecorder();
 
     const result = await reconcileMercadoPagoEvent(getNotification(), {
       paymentProvider: async () => getPayment({ status: "approved" }),
       orderRepository: repository,
+      eventRecorder: eventRecorder.record,
       confirmationEmailSender: async (order) => ({
         status: "failed",
         orderId: order.id,
@@ -274,6 +295,46 @@ describe("Mercado Pago payment reconciliation", () => {
     expect(repository.getOrder()?.status).toBe(ORDER_STATUS.paid);
   });
 });
+
+function createTestPaymentEventRecorder(): {
+  record: PaymentEventRecorder;
+  read: () => PaymentEventRecord[];
+} {
+  const events: PaymentEventRecord[] = [];
+
+  return {
+    record: async (
+      event: PaymentEventRecord
+    ): Promise<RecordPaymentEventOnceResult> => {
+      const existingEvent = events.find(
+        (candidateEvent) =>
+          candidateEvent.provider === event.provider &&
+          candidateEvent.providerEventId === event.providerEventId
+      );
+
+      if (existingEvent) {
+        return {
+          status: "duplicate",
+          event: clonePaymentEvent(existingEvent)
+        };
+      }
+
+      events.push(clonePaymentEvent(event));
+
+      return {
+        status: "recorded",
+        event: clonePaymentEvent(event)
+      };
+    },
+    read: () => events.map(clonePaymentEvent)
+  };
+}
+
+function clonePaymentEvent(event: PaymentEventRecord): PaymentEventRecord {
+  return {
+    ...event
+  };
+}
 
 function getNotification({
   id = "event-001",
