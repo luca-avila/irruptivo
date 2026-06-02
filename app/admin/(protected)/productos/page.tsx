@@ -1,7 +1,6 @@
 import { ArrowRight, CircleOff, PackagePlus } from "lucide-react";
 import Link from "next/link";
 
-import { changeAdminProductStatus } from "../../../../src/admin/product-actions";
 import {
   listAdminProducts,
   readAdminProductRecords,
@@ -9,6 +8,7 @@ import {
 } from "../../../../src/admin/products";
 import { PRODUCT_STATUS } from "../../../../src/catalog/catalog";
 import styles from "../admin.module.css";
+import { ProductStatusToggle } from "./product-status-toggle";
 
 type ProductFilter = "todos" | "activos" | "inactivos";
 
@@ -154,13 +154,11 @@ export default async function AdminProductsPage({
                     <span>Editar</span>
                     <ArrowRight aria-hidden="true" size={17} strokeWidth={2.1} />
                   </Link>
-                  <form action={changeAdminProductStatus}>
-                    <input type="hidden" name="productId" value={product.id} />
-                    <input type="hidden" name="status" value={nextStatus} />
-                    <button className={styles.textButton} type="submit">
-                      {statusActionLabel}
-                    </button>
-                  </form>
+                  <ProductStatusToggle
+                    productId={product.id}
+                    nextStatus={nextStatus}
+                    label={statusActionLabel}
+                  />
                 </div>
               </article>
             );

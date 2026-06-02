@@ -115,33 +115,58 @@ export async function updateAdminProduct(formData: FormData): Promise<void> {
   );
 }
 
+export type ProductStatusActionState = {
+  toast: {
+    tone: "success" | "error";
+    message: string;
+    // Bumped on every run so the client re-triggers the toast even when the
+    // message text repeats.
+    token: number;
+  } | null;
+};
+
 export async function changeAdminProductStatus(
-  formData: FormData
-): Promise<void> {
+  productId: string,
+  status: ProductStatus
+): Promise<ProductStatusActionState> {
   await requireAdmin();
 
-  const productId = readStringField(formData, "productId");
-  const status = readStringField(formData, "status") as ProductStatus;
   const products = await readAdminProductRecords();
   const result = setProductStatus(productId, status, products);
 
   if (!result.ok) {
-    redirect(`${ADMIN_PRODUCTS_PATH}?error=${result.error.code}`);
+    return errorToastState(result.error.message);
   }
 
-  await saveAdminProductRecordsOrRedirect(
-    result.products,
-    `${ADMIN_PRODUCTS_PATH}?error=duplicate_variant_sku`
-  );
+  try {
+    await saveAdminProductRecords(result.products);
+  } catch (error) {
+    if (isDuplicateVariantSkuPersistenceError(error)) {
+      return errorToastState("Ya existe una variante/SKU con ese código.");
+    }
+
+    throw error;
+  }
+
+  // Revalidate the public catalog pages so they reflect the new status. The
+  // admin list itself is refreshed client-side via router.refresh(), and the
+  // result is surfaced as a toast instead of a top-of-page banner.
   revalidateCatalogPaths(result.product);
 
-  // Redirect so the list re-renders with the new status (button/pill flip) and
-  // shows the matching feedback banner.
-  const stateParam =
-    status === PRODUCT_STATUS.active
-      ? "producto-activado"
-      : "producto-desactivado";
-  redirect(`${ADMIN_PRODUCTS_PATH}?estado=${stateParam}`);
+  return {
+    toast: {
+      tone: "success",
+      message:
+        status === PRODUCT_STATUS.active
+          ? "Producto activado correctamente."
+          : "Producto desactivado correctamente.",
+      token: Date.now()
+    }
+  };
+}
+
+function errorToastState(message: string): ProductStatusActionState {
+  return { toast: { tone: "error", message, token: Date.now() } };
 }
 
 export async function createAdminProductVariant(
