@@ -54,14 +54,14 @@ describe("payment result presenter", () => {
     expect(view.nextSteps.join(" ")).toContain("verificación");
   });
 
-  it("maps an expired payment to stock-reservation-ended guidance", () => {
+  it("maps an expired payment to fresh-checkout guidance", () => {
     const view = getPaymentResultView(
       getPaymentResultOrder({ status: ORDER_STATUS.expired })
     );
 
     expect(view.state).toBe("expired");
     expect(view.statusLabel).toBe("Pago vencido");
-    expect(view.message).toContain("Terminó el tiempo de reserva de stock");
+    expect(view.message).toContain("Terminó el tiempo para completar el pago");
     expect(view.message).toContain("checkout nuevo");
   });
 

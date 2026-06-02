@@ -3,11 +3,6 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { DELIVERY_METHOD, ORDER_STATUS, type OrderStatus } from "../domain/rules";
 import { type Order } from "../orders/order-creation";
 import {
-  releaseReservedStockForOrder,
-  type StockReservationRecord,
-  type StockReservationReleaseResult
-} from "../orders/stock-reservation";
-import {
   getPaymentManualReviewForOrder,
   resetPaymentEventsForTests
 } from "./payment-events";
@@ -65,8 +60,6 @@ describe("Mercado Pago reconciliation with pending-payment expiration", () => {
     });
     expect(repository.getOrder()?.status).toBe(ORDER_STATUS.expired);
     expect(repository.transitionCount).toBe(1);
-    expect(repository.releaseCount).toBe(1);
-    expect(repository.getReservations()).toEqual([]);
     expect(getPaymentManualReviewForOrder("order-001")).toMatchObject({
       required: true,
       label: "Revisión manual requerida",
@@ -110,24 +103,10 @@ function getPayment({
 function createOrderRepository(order: Order | null): TestOrderRepository {
   let currentOrder = order ? cloneOrder(order) : null;
   let transitionCount = 0;
-  let releaseCount = 0;
-  let reservations: StockReservationRecord[] = order
-    ? [
-        {
-          orderId: order.id,
-          variantId: "tee-black-s",
-          quantity: 2,
-          reservedAt: createdAt
-        }
-      ]
-    : [];
 
   return {
     get transitionCount() {
       return transitionCount;
-    },
-    get releaseCount() {
-      return releaseCount;
     },
     findOrderById(orderId: string): Order | null {
       return currentOrder?.id === orderId ? cloneOrder(currentOrder) : null;
@@ -151,32 +130,15 @@ function createOrderRepository(order: Order | null): TestOrderRepository {
 
       return cloneOrder(currentOrder);
     },
-    releaseReservedStockForOrder(orderId: string): StockReservationReleaseResult {
-      releaseCount += 1;
-      const releaseResult = releaseReservedStockForOrder({
-        orderId,
-        reservations
-      });
-      reservations = releaseResult.remainingReservations;
-
-      return releaseResult;
-    },
     getOrder(): Order | null {
       return currentOrder ? cloneOrder(currentOrder) : null;
-    },
-    getReservations(): StockReservationRecord[] {
-      return reservations.map((reservation) => ({
-        ...reservation
-      }));
     }
   };
 }
 
 type TestOrderRepository = PaymentReconciliationOrderRepository & {
   readonly transitionCount: number;
-  readonly releaseCount: number;
   getOrder: () => Order | null;
-  getReservations: () => StockReservationRecord[];
 };
 
 function getOrder(status: OrderStatus): Order {

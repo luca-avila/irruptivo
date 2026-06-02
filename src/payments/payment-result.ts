@@ -127,12 +127,12 @@ function getStateView(order: PaymentResultOrder): Omit<
     case ORDER_STATUS.expired:
       return {
         state: "expired",
-        eyebrow: "Reserva vencida",
-        title: "La reserva del pedido venció",
+        eyebrow: "Pago vencido",
+        title: "El pedido pendiente venció",
         message:
-          "Terminó el tiempo de reserva de stock. Para comprar estos productos, volvé a la tienda e iniciá un checkout nuevo.",
+          "Terminó el tiempo para completar el pago. Para comprar estos productos, volvé a la tienda e iniciá un checkout nuevo.",
         nextSteps: [
-          "La reserva anterior ya no bloquea stock para este pedido.",
+          "El pedido anterior ya no sigue pendiente de pago.",
           "Armá una compra nueva para confirmar disponibilidad y precio actual."
         ],
         primaryAction: {

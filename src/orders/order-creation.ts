@@ -31,15 +31,6 @@ import {
   type CheckoutValidationErrors
 } from "../checkout/checkout";
 import { createGuestOrderAccessToken } from "./guest-access-token";
-import {
-  reserveStockForOrder,
-  type ReservableStockVariant,
-  type StockReservationRecord,
-  type StockUnavailableItem
-} from "./stock-reservation";
-
-const STOCK_RESERVATION_ERROR_MESSAGE =
-  "No pudimos reservar stock para uno o más productos. Revisá el carrito y volvé a intentar.";
 
 export type PendingOrderCheckoutInput = Omit<CheckoutInput, "cart">;
 
@@ -102,7 +93,6 @@ export type PendingOrderCreationInput = {
   cart: Cart;
   checkout: PendingOrderCheckoutInput;
   products: readonly CatalogProductRecord[];
-  existingReservations?: readonly StockReservationRecord[];
   orderId?: string;
   orderNumber?: string;
   guestAccessToken?: string;
@@ -113,7 +103,6 @@ export type PendingOrderCreationResult =
   | {
       status: "created";
       order: PendingOrder;
-      reservations: StockReservationRecord[];
       updatedCart: Cart;
     }
   | {
@@ -121,19 +110,12 @@ export type PendingOrderCreationResult =
       errors: CheckoutValidationErrors;
       summary: CheckoutSummary | null;
       updatedCart: Cart;
-    }
-  | {
-      status: "stock_unavailable";
-      message: string;
-      unavailableItems: StockUnavailableItem[];
-      updatedCart: Cart;
     };
 
 export function createPendingOrderFromCheckout({
   cart,
   checkout,
   products,
-  existingReservations = [],
   orderId = randomUUID(),
   orderNumber,
   guestAccessToken = createGuestOrderAccessToken(),
@@ -173,25 +155,6 @@ export function createPendingOrderFromCheckout({
   }
 
   const orderItems = getOrderItemSnapshots(cartValidation.items);
-  const reservationResult = reserveStockForOrder({
-    orderId,
-    items: orderItems.map((item) => ({
-      variantId: item.variantId,
-      quantity: item.quantity
-    })),
-    variants: getReservableVariants(products),
-    existingReservations,
-    reservedAt: creationDate
-  });
-
-  if (reservationResult.status === "insufficient_stock") {
-    return {
-      status: "stock_unavailable",
-      message: STOCK_RESERVATION_ERROR_MESSAGE,
-      unavailableItems: reservationResult.unavailableItems,
-      updatedCart: cloneCart(cartValidation.updatedCart)
-    };
-  }
 
   return {
     status: "created",
@@ -212,7 +175,6 @@ export function createPendingOrderFromCheckout({
       totalArs: checkoutValidation.summary.totalArs,
       paymentPreference: null
     },
-    reservations: reservationResult.reservations,
     updatedCart: cloneCart(cartValidation.updatedCart)
   };
 }
@@ -247,17 +209,6 @@ function getOrderItemSnapshots(
         lineTotalArs: item.lineTotalArs
       };
     });
-}
-
-function getReservableVariants(
-  products: readonly CatalogProductRecord[]
-): ReservableStockVariant[] {
-  return products.flatMap((product) =>
-    product.variants.map((variant) => ({
-      id: variant.id,
-      stock: variant.stock
-    }))
-  );
 }
 
 function snapshotDelivery(delivery: CheckoutDelivery): PendingOrderDeliverySnapshot {

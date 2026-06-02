@@ -43,7 +43,7 @@ const products = [
 ] satisfies CatalogProductRecord[];
 
 describe("pending order in-memory store", () => {
-  it("returns the existing pending order for a repeated idempotency key without reserving stock twice", () => {
+  it("returns the existing pending order for a repeated idempotency key without duplicating the order", () => {
     resetOrderStoreForTests();
 
     const firstResult = createPendingOrderInStore({
@@ -95,14 +95,6 @@ describe("pending order in-memory store", () => {
       isDuplicate: true
     });
     expect(store.orders).toHaveLength(1);
-    expect(store.reservations).toEqual([
-      {
-        orderId: "order-001",
-        variantId: "tee-black-s",
-        quantity: 2,
-        reservedAt: now
-      }
-    ]);
   });
 
   it("finds an order for payment result pages only with the matching guest token", () => {

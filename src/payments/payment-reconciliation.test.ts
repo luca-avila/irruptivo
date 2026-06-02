@@ -7,11 +7,6 @@ import {
 } from "../notifications/order-confirmation-email";
 import { type Order } from "../orders/order-creation";
 import {
-  releaseReservedStockForOrder,
-  type StockReservationRecord,
-  type StockReservationReleaseResult
-} from "../orders/stock-reservation";
-import {
   readPaymentEventsForTests,
   resetPaymentEventsForTests
 } from "./payment-events";
@@ -74,7 +69,7 @@ describe("Mercado Pago payment reconciliation", () => {
     ]);
   });
 
-  it("moves a pending order to payment_failed and releases reserved stock after verified failure", async () => {
+  it("moves a pending order to payment_failed after verified failure", async () => {
     const repository = createOrderRepository(getOrder(ORDER_STATUS.pendingPayment));
 
     const result = await reconcileMercadoPagoEvent(getNotification(), {
@@ -87,11 +82,9 @@ describe("Mercado Pago payment reconciliation", () => {
       status: "payment_failed",
       orderId: "order-001",
       providerPaymentId: "payment-001",
-      orderStatus: ORDER_STATUS.paymentFailed,
-      releasedReservationCount: 1
+      orderStatus: ORDER_STATUS.paymentFailed
     });
     expect(repository.getOrder()?.status).toBe(ORDER_STATUS.paymentFailed);
-    expect(repository.getReservations()).toEqual([]);
   });
 
   it("does not repeat a paid transition for a duplicate success event", async () => {
@@ -129,7 +122,7 @@ describe("Mercado Pago payment reconciliation", () => {
     expect(confirmationEmails).toHaveLength(1);
   });
 
-  it("does not release stock twice for a duplicate failure event", async () => {
+  it("does not repeat a failed transition for a duplicate failure event", async () => {
     const repository = createOrderRepository(getOrder(ORDER_STATUS.pendingPayment));
     const notification = getNotification();
 
@@ -149,8 +142,8 @@ describe("Mercado Pago payment reconciliation", () => {
       orderId: "order-001",
       providerPaymentId: "payment-001"
     });
-    expect(repository.releaseCount).toBe(1);
-    expect(repository.getReservations()).toEqual([]);
+    expect(repository.transitionCount).toBe(1);
+    expect(repository.getOrder()?.status).toBe(ORDER_STATUS.paymentFailed);
   });
 
   it("does not mark an order paid when the provider payment cannot be verified", async () => {
@@ -331,20 +324,9 @@ function getSentConfirmationEmailResult(
 
 function createOrderRepository(order: Order | null): TestOrderRepository {
   let currentOrder = order ? cloneOrder(order) : null;
-  let reservations: StockReservationRecord[] = order
-    ? [
-        {
-          orderId: order.id,
-          variantId: "tee-black-s",
-          quantity: 2,
-          reservedAt: now
-        }
-      ]
-    : [];
 
   return {
     transitionCount: 0,
-    releaseCount: 0,
     findOrderById(orderId: string): Order | null {
       return currentOrder?.id === orderId ? cloneOrder(currentOrder) : null;
     },
@@ -367,32 +349,15 @@ function createOrderRepository(order: Order | null): TestOrderRepository {
 
       return cloneOrder(currentOrder);
     },
-    releaseReservedStockForOrder(orderId: string): StockReservationReleaseResult {
-      this.releaseCount += 1;
-      const releaseResult = releaseReservedStockForOrder({
-        orderId,
-        reservations
-      });
-      reservations = releaseResult.remainingReservations;
-
-      return releaseResult;
-    },
     getOrder(): Order | null {
       return currentOrder ? cloneOrder(currentOrder) : null;
-    },
-    getReservations(): StockReservationRecord[] {
-      return reservations.map((reservation) => ({
-        ...reservation
-      }));
     }
   };
 }
 
 type TestOrderRepository = PaymentReconciliationOrderRepository & {
   transitionCount: number;
-  releaseCount: number;
   getOrder: () => Order | null;
-  getReservations: () => StockReservationRecord[];
 };
 
 function getOrder(status: OrderStatus): Order {

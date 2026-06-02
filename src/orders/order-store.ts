@@ -9,11 +9,6 @@ import {
   type PendingOrderCreationResult,
   type PendingOrderPaymentPreference
 } from "./order-creation";
-import {
-  releaseReservedStockForOrder,
-  type StockReservationRecord,
-  type StockReservationReleaseResult
-} from "./stock-reservation";
 
 type StoredPendingOrder = {
   idempotencyKey: string;
@@ -40,7 +35,6 @@ export type PendingOrderStoreCreationResult =
 
 export type OrderStoreSnapshot = {
   orders: Order[];
-  reservations: StockReservationRecord[];
 };
 
 export type PaymentReturnOrderLookupInput = {
@@ -56,7 +50,6 @@ export type UpdateOrderStatusInStoreInput = {
 export type UpdateOrderInStoreInput = Order;
 
 const pendingOrders: StoredPendingOrder[] = [];
-const stockReservations: StockReservationRecord[] = [];
 
 export function createPendingOrderInStore({
   idempotencyKey,
@@ -82,7 +75,6 @@ export function createPendingOrderInStore({
     return {
       status: "created",
       order: clonePendingOrder(existingOrder.order as PendingOrder),
-      reservations: [],
       updatedCart: cloneCart(existingOrder.updatedCart),
       isDuplicate: true
     };
@@ -92,7 +84,6 @@ export function createPendingOrderInStore({
     cart,
     checkout,
     products,
-    existingReservations: stockReservations,
     orderId,
     orderNumber,
     guestAccessToken,
@@ -108,18 +99,10 @@ export function createPendingOrderInStore({
     order: clonePendingOrder(result.order),
     updatedCart: cloneCart(result.updatedCart)
   });
-  stockReservations.push(
-    ...result.reservations.map((reservation) => ({
-      ...reservation
-    }))
-  );
 
   return {
     ...result,
     order: clonePendingOrder(result.order),
-    reservations: result.reservations.map((reservation) => ({
-      ...reservation
-    })),
     updatedCart: cloneCart(result.updatedCart),
     isDuplicate: false
   };
@@ -127,10 +110,7 @@ export function createPendingOrderInStore({
 
 export function readOrderStoreSnapshot(): OrderStoreSnapshot {
   return {
-    orders: pendingOrders.map((storedOrder) => cloneOrder(storedOrder.order)),
-    reservations: stockReservations.map((reservation) => ({
-      ...reservation
-    }))
+    orders: pendingOrders.map((storedOrder) => cloneOrder(storedOrder.order))
   };
 }
 
@@ -237,26 +217,8 @@ export function updateOrderInStore(order: UpdateOrderInStoreInput): Order | null
   return cloneOrder(storedOrder.order);
 }
 
-export function releaseReservedStockForOrderInStore(
-  orderId: string
-): StockReservationReleaseResult {
-  const releaseResult = releaseReservedStockForOrder({
-    orderId,
-    reservations: stockReservations
-  });
-
-  stockReservations.splice(
-    0,
-    stockReservations.length,
-    ...releaseResult.remainingReservations
-  );
-
-  return releaseResult;
-}
-
 export function resetOrderStoreForTests(): void {
   pendingOrders.splice(0, pendingOrders.length);
-  stockReservations.splice(0, stockReservations.length);
 }
 
 function clonePendingOrder(order: PendingOrder): PendingOrder {

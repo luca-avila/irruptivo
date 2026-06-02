@@ -81,7 +81,6 @@ model ProductVariant {
   createdAt          DateTime           @default(now()) @map("created_at")
   updatedAt          DateTime           @updatedAt @map("updated_at")
   product            Product            @relation(fields: [productId], references: [id], onDelete: Cascade)
-  reservations       StockReservation[]
   images             ProductImage[]
 
   @@unique([productId, skuNormalized])
@@ -137,7 +136,6 @@ model Order {
   paymentExternalReference String?              @map("payment_external_reference")
   paymentCreatedAt         DateTime?            @map("payment_created_at")
   items                    OrderItem[]
-  reservations             StockReservation[]
   statusHistory            OrderStatusHistory[]
   paymentEvents            PaymentEvent[]
   emailDelivery            EmailDelivery?
@@ -183,21 +181,6 @@ model OrderStatusHistory {
 
   @@index([orderId, createdAt])
   @@map("order_status_history")
-}
-
-model StockReservation {
-  id         String         @id @default(uuid())
-  orderId    String         @map("order_id")
-  variantId  String         @map("variant_id")
-  quantity   Int
-  reservedAt DateTime       @map("reserved_at")
-  releasedAt DateTime?      @map("released_at")
-  order      Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  variant    ProductVariant @relation(fields: [variantId], references: [id])
-
-  @@unique([orderId, variantId])
-  @@index([variantId, releasedAt])
-  @@map("stock_reservations")
 }
 
 model PaymentEvent {

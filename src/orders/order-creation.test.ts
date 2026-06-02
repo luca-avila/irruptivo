@@ -140,20 +140,6 @@ describe("pending order creation from checkout", () => {
         }
       ]
     });
-    expect(result.reservations).toEqual([
-      {
-        orderId: "order-001",
-        variantId: "tee-black-s",
-        quantity: 2,
-        reservedAt: now
-      },
-      {
-        orderId: "order-001",
-        variantId: "creatina-300g",
-        quantity: 1,
-        reservedAt: now
-      }
-    ]);
   });
 
   it("snapshots pickup totals with zero delivery cost", () => {
@@ -250,44 +236,6 @@ describe("pending order creation from checkout", () => {
     });
   });
 
-  it("blocks order creation when reserved stock leaves a variant unavailable", () => {
-    const result = createPendingOrderFromCheckout({
-      cart: getCart(),
-      checkout: {
-        fullName: "Luca Irruptivo",
-        email: "luca@example.com",
-        phone: "11 5555 5555",
-        deliveryMethod: DELIVERY_METHOD.pickup
-      },
-      products,
-      existingReservations: [
-        {
-          orderId: "order-001",
-          variantId: "tee-black-s",
-          quantity: 3,
-          reservedAt: now
-        }
-      ],
-      orderId: "order-002",
-      guestAccessToken: "guest-access-token-2",
-      now
-    });
-
-    expect(result).toEqual({
-      status: "stock_unavailable",
-      message:
-        "No pudimos reservar stock para uno o más productos. Revisá el carrito y volvé a intentar.",
-      unavailableItems: [
-        {
-          variantId: "tee-black-s",
-          requestedQuantity: 2,
-          availableStock: 1
-        }
-      ],
-      updatedCart: getCart()
-    });
-  });
-
   it("blocks order creation when cart or checkout data is invalid", () => {
     const result = createPendingOrderFromCheckout({
       cart: getCart({
@@ -322,7 +270,6 @@ describe("pending order creation from checkout", () => {
       }
     });
     expect(result).not.toHaveProperty("order");
-    expect(result).not.toHaveProperty("reservations");
   });
 
   it("generates a guest access token when one is not supplied", () => {

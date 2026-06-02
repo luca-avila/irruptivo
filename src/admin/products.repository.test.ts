@@ -280,7 +280,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     it("preserves image metadata when product edits pass through save", async (ctx) => {
       skipIfDatabaseUnavailable(ctx);
 
-      const product = createTestProduct("Image Preservation");
+      const product = createTestProduct("Image Metadata Keep");
       const withVariant = addProductVariant(
         product.id,
         {
@@ -335,7 +335,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       const edited = updateProduct(
         product.id,
         {
-          name: `${productNamePrefix} Image Preservation Updated`,
+          name: `${productNamePrefix} Image Metadata Keep Updated`,
           description: "Producto editado sin tocar imagenes.",
           area: PRODUCT_AREA.clothing,
           clothingSubcategory: "Remeras",

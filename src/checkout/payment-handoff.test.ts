@@ -132,14 +132,6 @@ describe("checkout payment handoff", () => {
           status: ORDER_STATUS.pendingPayment,
           paymentPreference: null
         }
-      ],
-      reservations: [
-        {
-          orderId: "order-002",
-          variantId: "tee-black-s",
-          quantity: 1,
-          reservedAt: now
-        }
       ]
     });
   });

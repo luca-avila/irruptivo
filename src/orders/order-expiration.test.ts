@@ -47,7 +47,7 @@ describe("pending payment expiration", () => {
     resetOrderStoreForTests();
   });
 
-  it("keeps a pending order active before the 30 minute reservation window ends", () => {
+  it("keeps a pending order active before the 30 minute payment window ends", () => {
     createStoredOrder();
 
     const result = expirePendingPaymentOrders({
@@ -65,19 +65,11 @@ describe("pending payment expiration", () => {
           id: "order-001",
           status: ORDER_STATUS.pendingPayment
         }
-      ],
-      reservations: [
-        {
-          orderId: "order-001",
-          variantId: "tee-black-s",
-          quantity: 2,
-          reservedAt: createdAt
-        }
       ]
     });
   });
 
-  it("expires a pending order at the 30 minute threshold and releases reserved stock", () => {
+  it("expires a pending order at the 30 minute threshold", () => {
     createStoredOrder();
 
     const result = expirePendingPaymentOrders({
@@ -89,9 +81,7 @@ describe("pending payment expiration", () => {
         {
           orderId: "order-001",
           orderNumber: "IRR-000001",
-          expiredAt: "2026-05-30T12:30:00.000Z",
-          releasedReservationCount: 1,
-          releaseStatus: "released"
+          expiredAt: "2026-05-30T12:30:00.000Z"
         }
       ],
       checkedOrderCount: 1,
@@ -103,12 +93,11 @@ describe("pending payment expiration", () => {
           id: "order-001",
           status: ORDER_STATUS.expired
         }
-      ],
-      reservations: []
+      ]
     });
   });
 
-  it("is safe to run repeatedly without releasing stock more than once", () => {
+  it("is safe to run repeatedly without expiring the same order more than once", () => {
     createStoredOrder();
 
     const firstResult = expirePendingPaymentOrders({
@@ -130,8 +119,7 @@ describe("pending payment expiration", () => {
           id: "order-001",
           status: ORDER_STATUS.expired
         }
-      ],
-      reservations: []
+      ]
     });
   });
 });

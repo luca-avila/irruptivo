@@ -88,15 +88,6 @@ export async function createCheckoutPaymentHandoff({
     };
   }
 
-  if (orderResult.status === "stock_unavailable") {
-    return {
-      status: "error",
-      message: orderResult.message,
-      isRetryable: true,
-      updatedCart: cloneCart(orderResult.updatedCart)
-    };
-  }
-
   if (orderResult.order.paymentPreference) {
     return {
       status: "created",

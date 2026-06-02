@@ -8,10 +8,8 @@ import { expirePendingPaymentOrders } from "../orders/order-expiration";
 import { type Order } from "../orders/order-creation";
 import {
   findOrderByIdInStore,
-  releaseReservedStockForOrderInStore,
   updateOrderStatusInStore
 } from "../orders/order-store";
-import { type StockReservationReleaseResult } from "../orders/stock-reservation";
 import {
   PAYMENT_MANUAL_REVIEW_PROCESSING_RESULT,
   recordPaymentEventOnce,
@@ -31,9 +29,6 @@ export type PaymentReconciliationOrderRepository = {
     orderId: string;
     status: OrderStatus;
   }) => Order | null;
-  releaseReservedStockForOrder: (
-    orderId: string
-  ) => StockReservationReleaseResult;
 };
 
 export type MercadoPagoPaymentProvider = (
@@ -66,7 +61,6 @@ export type PaymentReconciliationResult =
       orderId: string;
       providerPaymentId: string;
       orderStatus: typeof ORDER_STATUS.paymentFailed;
-      releasedReservationCount: number;
     }
   | {
       status: "duplicate";
@@ -95,8 +89,7 @@ export type PaymentReconciliationResult =
 
 const defaultOrderRepository: PaymentReconciliationOrderRepository = {
   findOrderById: findOrderByIdInStore,
-  updateOrderStatus: updateOrderStatusInStore,
-  releaseReservedStockForOrder: releaseReservedStockForOrderInStore
+  updateOrderStatus: updateOrderStatusInStore
 };
 
 export async function reconcileMercadoPagoEvent(
@@ -217,9 +210,7 @@ function expirePendingPaymentOrderIfNeeded({
     now,
     orderRepository: {
       listOrders: () => [order],
-      updateOrderStatus: (input) => orderRepository.updateOrderStatus(input),
-      releaseReservedStockForOrder: (orderId) =>
-        orderRepository.releaseReservedStockForOrder(orderId)
+      updateOrderStatus: (input) => orderRepository.updateOrderStatus(input)
     }
   });
 
@@ -327,7 +318,6 @@ function reconcileFailedPayment({
     orderId: order.id,
     status: ORDER_STATUS.paymentFailed
   });
-  const releaseResult = orderRepository.releaseReservedStockForOrder(order.id);
 
   return {
     status: "payment_failed",
@@ -336,8 +326,7 @@ function reconcileFailedPayment({
     orderStatus:
       updatedOrder?.status === ORDER_STATUS.paymentFailed
         ? updatedOrder.status
-        : ORDER_STATUS.paymentFailed,
-    releasedReservationCount: releaseResult.releasedReservations.length
+        : ORDER_STATUS.paymentFailed
   };
 }
 

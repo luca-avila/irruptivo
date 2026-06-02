@@ -2,10 +2,8 @@ import { ORDER_STATUS, type OrderStatus } from "../domain/rules";
 import { type Order } from "./order-creation";
 import {
   readOrderStoreSnapshot,
-  releaseReservedStockForOrderInStore,
   updateOrderStatusInStore
 } from "./order-store";
-import { type StockReservationReleaseResult } from "./stock-reservation";
 
 const PENDING_PAYMENT_EXPIRATION_MS = 30 * 60 * 1000;
 
@@ -15,17 +13,12 @@ export type PendingPaymentExpirationOrderRepository = {
     orderId: string;
     status: OrderStatus;
   }) => Order | null;
-  releaseReservedStockForOrder: (
-    orderId: string
-  ) => StockReservationReleaseResult;
 };
 
 export type ExpiredPendingPaymentOrder = {
   orderId: string;
   orderNumber: string;
   expiredAt: string;
-  releasedReservationCount: number;
-  releaseStatus: StockReservationReleaseResult["status"];
 };
 
 export type ExpirePendingPaymentOrdersResult = {
@@ -41,8 +34,7 @@ export type ExpirePendingPaymentOrdersOptions = {
 
 const defaultOrderRepository: PendingPaymentExpirationOrderRepository = {
   listOrders: () => readOrderStoreSnapshot().orders,
-  updateOrderStatus: updateOrderStatusInStore,
-  releaseReservedStockForOrder: releaseReservedStockForOrderInStore
+  updateOrderStatus: updateOrderStatusInStore
 };
 
 export function expirePendingPaymentOrders({
@@ -68,14 +60,10 @@ export function expirePendingPaymentOrders({
       continue;
     }
 
-    const releaseResult = orderRepository.releaseReservedStockForOrder(order.id);
-
     expiredOrders.push({
       orderId: order.id,
       orderNumber: order.orderNumber,
-      expiredAt,
-      releasedReservationCount: releaseResult.releasedReservations.length,
-      releaseStatus: releaseResult.status
+      expiredAt
     });
   }
 
