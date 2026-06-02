@@ -710,10 +710,11 @@ function getVariantOptionSummary(
   area: ProductArea,
   options: VariantOptionValues | undefined
 ): string {
-  const optionKeys: (keyof VariantOptionValues)[] =
+  const optionKeys = (
     area === PRODUCT_AREA.clothing
       ? ["color", "size"]
-      : ["flavor", "weight", "presentation"];
+      : ["flavor", "weight", "presentation"]
+  ) as (keyof VariantOptionValues)[];
   const optionValues = optionKeys
     .map((optionKey) => options?.[optionKey])
     .filter((value): value is string => Boolean(value));

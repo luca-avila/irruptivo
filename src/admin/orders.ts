@@ -173,14 +173,14 @@ type AdminOrderFilterDefinition = {
   emptyState: AdminOrderEmptyState;
 };
 
-const DEFAULT_QUEUE_STATUSES: readonly OrderStatus[] = [
+const DEFAULT_QUEUE_STATUSES = [
   ORDER_STATUS.paid,
   ORDER_STATUS.preparing,
   ORDER_STATUS.readyForPickup,
   ORDER_STATUS.shipped
-] as const;
+] as readonly OrderStatus[];
 
-const ADMIN_ORDER_FILTERS: readonly AdminOrderFilterDefinition[] = [
+const ADMIN_ORDER_FILTERS = [
   {
     label: "Cola activa",
     value: "cola",
@@ -236,7 +236,7 @@ const ADMIN_ORDER_FILTERS: readonly AdminOrderFilterDefinition[] = [
       description: "El historial de retiros finalizados va a aparecer en este filtro."
     }
   }
-] as const;
+] as readonly AdminOrderFilterDefinition[];
 
 const DEFAULT_FILTER = ADMIN_ORDER_FILTERS[0];
 

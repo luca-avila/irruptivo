@@ -3,7 +3,6 @@ import { getVariantAvailability, resolveUnitPrice } from "./variants";
 import {
   PRODUCT_AREA,
   PRODUCT_STATUS,
-  demoCatalogProducts,
   getProductDetailView,
   type CatalogProductRecord,
   type CatalogProductVariantRecord,
@@ -51,7 +50,7 @@ type ProductDetailPageInput = {
   area: ProductArea;
   slug: string;
   selectedOptions: VariantOptionValues;
-  products?: readonly CatalogProductRecord[];
+  products: readonly CatalogProductRecord[];
 };
 
 export function resolveSelectedVariant(
@@ -97,7 +96,7 @@ export function getProductDetailPageView({
   area,
   slug,
   selectedOptions,
-  products = demoCatalogProducts
+  products
 }: ProductDetailPageInput): ProductDetailPageView {
   const product = products.find((candidate) => candidate.slug === slug);
 

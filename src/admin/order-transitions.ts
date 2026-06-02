@@ -75,7 +75,7 @@ type AdminFulfillmentTransitionDefinition = AdminAllowedFulfillmentTransition & 
   targetStatus: OrderStatus;
 };
 
-const ADMIN_FULFILLMENT_TRANSITIONS: readonly AdminFulfillmentTransitionDefinition[] = [
+const ADMIN_FULFILLMENT_TRANSITIONS = [
   {
     id: ADMIN_FULFILLMENT_TRANSITION_ACTION.prepare,
     targetStatus: ORDER_STATUS.preparing,
@@ -111,7 +111,7 @@ const ADMIN_FULFILLMENT_TRANSITIONS: readonly AdminFulfillmentTransitionDefiniti
     targetStatusLabel: getOrderStatusLabel(ORDER_STATUS.pickedUp),
     description: "Finaliza el camino de retiro local."
   }
-] as const;
+] as readonly AdminFulfillmentTransitionDefinition[];
 
 const defaultOrderRepository: AdminOrderTransitionRepository = {
   findOrderById: findOrderByIdInStore,

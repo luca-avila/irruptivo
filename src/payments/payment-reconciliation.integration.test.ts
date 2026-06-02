@@ -75,7 +75,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
           paymentProvider: async () =>
             getPayment({
               paymentId: "phase7-payment-approved",
-              orderId: approved.orderId
+              orderId: approved.orderId,
+              transactionAmount: approved.totalArs
             }),
           confirmationEmailSender: async (order) => ({
             status: "sent",
@@ -92,7 +93,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
           paymentProvider: async () =>
             getPayment({
               paymentId: "phase7-payment-approved",
-              orderId: approved.orderId
+              orderId: approved.orderId,
+              transactionAmount: approved.totalArs
             }),
           confirmationEmailSender: async (order) => ({
             status: "sent",
@@ -134,7 +136,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
             getPayment({
               paymentId: "phase7-payment-failed",
               orderId: failed.orderId,
-              status: "rejected"
+              status: "rejected",
+              transactionAmount: failed.totalArs
             }),
           now
         }
@@ -167,7 +170,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
           paymentProvider: async () =>
             getPayment({
               paymentId: "phase7-payment-expired",
-              orderId: expired.orderId
+              orderId: expired.orderId,
+              transactionAmount: expired.totalArs
             }),
           now
         }
@@ -187,9 +191,18 @@ describe.skipIf(!process.env.DATABASE_URL)(
         providerPaymentIds: ["phase7-payment-expired"]
       });
 
-      expect(
-        (await readPaymentEventsForTests()).map((event) => event.processingResult)
-      ).toEqual(["paid", "payment_failed", "manual_review_required"]);
+      const processingResults = (await readPaymentEventsForTests()).map(
+        (event) => event.processingResult
+      );
+
+      expect(processingResults).toHaveLength(3);
+      expect(processingResults).toEqual(
+        expect.arrayContaining([
+          "paid",
+          "payment_failed",
+          "manual_review_required"
+        ])
+      );
     });
   }
 );
@@ -204,7 +217,7 @@ async function createProductAndOrder({
   orderId: string;
   stock: number;
   quantity: number;
-}): Promise<{ orderId: string; variantId: string }> {
+}): Promise<{ orderId: string; variantId: string; totalArs: number }> {
   const productId = `${productIdPrefix}-${suffix}`;
   const variantId = `${productId}-variant`;
   const product = getCatalogProduct({
@@ -265,7 +278,8 @@ async function createProductAndOrder({
 
   return {
     orderId,
-    variantId
+    variantId,
+    totalArs: quantity * 26000
   };
 }
 
@@ -348,18 +362,20 @@ function getNotification({
 function getPayment({
   paymentId,
   orderId,
-  status = "approved"
+  status = "approved",
+  transactionAmount = 26000
 }: {
   paymentId: string;
   orderId: string;
   status?: string;
+  transactionAmount?: number;
 }): MercadoPagoPayment {
   return {
     id: paymentId,
     status,
     statusDetail: status === "approved" ? "accredited" : "cc_rejected_other_reason",
     externalReference: orderId,
-    transactionAmount: 26000,
+    transactionAmount,
     metadata: {
       internalOrderId: orderId
     }

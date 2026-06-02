@@ -16,7 +16,7 @@ export type HomepageFeaturedProducts = {
 };
 
 export function getHomepageFeaturedProducts(
-  products?: readonly CatalogProductRecord[]
+  products: readonly CatalogProductRecord[]
 ): HomepageFeaturedProducts {
   return {
     clothing: listProductsByArea(PRODUCT_AREA.clothing, products).slice(
@@ -32,9 +32,7 @@ export function getHomepageFeaturedProducts(
 
 function listProductsByArea(
   area: typeof PRODUCT_AREA.clothing | typeof PRODUCT_AREA.supplement,
-  products?: readonly CatalogProductRecord[]
+  products: readonly CatalogProductRecord[]
 ): PublicProductCardView[] {
-  return products === undefined
-    ? listActiveProductsByArea(area)
-    : listActiveProductsByArea(area, products);
+  return listActiveProductsByArea(area, products);
 }

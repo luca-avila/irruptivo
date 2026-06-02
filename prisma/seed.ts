@@ -1,11 +1,11 @@
 import { Prisma, PrismaClient } from "@prisma/client";
 
 import {
-  demoCatalogProducts,
   type CatalogProductImageRecord,
   type CatalogProductRecord,
   type CatalogProductVariantRecord
 } from "../src/catalog/catalog";
+import { demoCatalogProducts } from "../src/catalog/demo-catalog-data";
 
 const prisma = new PrismaClient();
 

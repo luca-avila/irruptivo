@@ -46,7 +46,7 @@ export async function expirePendingPaymentOrders({
   const currentDate = getDate(now, "now");
   const expiredAt = currentDate.toISOString();
   const orders = await orderRepository.listOrders();
-  const expiredOrders: ExpiredPendingPaymentOrder[] = [];
+  const expiredOrders = new Array<ExpiredPendingPaymentOrder>();
 
   for (const order of orders) {
     if (!shouldExpirePendingPaymentOrder(order, currentDate)) {

@@ -216,7 +216,7 @@ function validateCartItem({
     });
   }
 
-  const issues: CartIssueClassification[] = [];
+  const issues = new Array<CartIssueClassification>();
   const priceRefresh = refreshExpiredPriceSnapshot({
     cartItem,
     currentUnitPriceArs,

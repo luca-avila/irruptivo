@@ -3,8 +3,7 @@ import {
   PRODUCT_STATUS,
   getProductCardView,
   type CatalogProductRecord,
-  type PublicProductCardView,
-  demoCatalogProducts
+  type PublicProductCardView
 } from "./catalog";
 
 const SUPPLEMENT_FILTER_ALL = "todo";
@@ -16,7 +15,7 @@ const CANONICAL_SUPPLEMENT_TYPES = [
 ] as const;
 
 type SupplementListingInput = {
-  products?: readonly CatalogProductRecord[];
+  products: readonly CatalogProductRecord[];
   selectedType?: string | null;
 };
 
@@ -55,9 +54,9 @@ export type SupplementListingView = {
 };
 
 export function listSupplementProducts({
-  products = demoCatalogProducts,
+  products,
   selectedType = null
-}: SupplementListingInput = {}): SupplementListingView {
+}: SupplementListingInput): SupplementListingView {
   const activeSupplements = products.filter(
     (product) =>
       product.area === PRODUCT_AREA.supplement &&

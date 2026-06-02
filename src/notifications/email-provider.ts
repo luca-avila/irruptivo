@@ -63,6 +63,8 @@ const DEFAULT_FROM_NAME = "Irruptivo";
 const LOCAL_EMAIL_PROVIDER = "local";
 const HTTP_EMAIL_PROVIDER = "http";
 
+// Dev/demo-only transport outbox. Production email delivery state is persisted in
+// `email_deliveries`; this array exists only for local provider inspection/tests.
 const localEmailOutbox: LocalEmailOutboxRecord[] = [];
 
 export async function sendEmail(
