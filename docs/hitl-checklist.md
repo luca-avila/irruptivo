@@ -23,7 +23,7 @@
 
 These are business/content items. The app runs without them, but it will look unfinished.
 
-- [ ] **Real WhatsApp link**
+- [X] **Real WhatsApp link**
   - Action: Set `NEXT_PUBLIC_WHATSAPP_URL` to the real business WhatsApp link.
   - Why it matters: Storefront, payment, and order-status contact paths point to a
     placeholder (`wa.me/5490000000000`).
@@ -32,14 +32,14 @@ These are business/content items. The app runs without them, but it will look un
   - Owner: human
   - Blocking level: Demo (cosmetic, high visibility)
 
-- [ ] **Real Instagram link**
+- [X] **Real Instagram link**
   - Action: Set `NEXT_PUBLIC_INSTAGRAM_URL` to the real account.
   - Why it matters: Trust/contact links use placeholder `instagram.com/irruptivo`.
   - Files/env: `NEXT_PUBLIC_INSTAGRAM_URL`; `src/storefront/navigation.ts`.
   - Owner: human
   - Blocking level: Demo (cosmetic)
 
-- [ ] **Pickup location copy confirmation**
+- [X] **Pickup location copy confirmation**
   - Action: Confirm "Retiro en Benavidez/Zona Norte" is the real pickup area, or correct it.
   - Why it matters: Hardcoded customer-facing copy shown on trust pages and in the
     confirmation email.
@@ -48,7 +48,7 @@ These are business/content items. The app runs without them, but it will look un
   - Owner: human (decision) → agent (copy edit if it changes)
   - Blocking level: Demo
 
-- [ ] **Product images / placeholders**
+- [X] **Product images / placeholders**
   - Action: Upload real product images via admin, or accept the empty-state UI for demo.
   - Why it matters: The demo catalog references image renditions; without media on disk
     the storefront shows empty image states.
@@ -100,7 +100,7 @@ These are business/content items. The app runs without them, but it will look un
   - Owner: human
   - Blocking level: Production
 
-- [ ] **Admin credentials and session secret**
+- [X] **Admin credentials and session secret**
   - Action: Replace placeholders with a real admin username, strong password, and a random
     `ADMIN_SESSION_SECRET` of ≥32 chars.
   - Why it matters: `.env.example` ships `admin@example.com` / `change-me` /
@@ -128,16 +128,20 @@ These are business/content items. The app runs without them, but it will look un
   - Owner: human
   - Blocking level: Production (deliverability)
 
-- [ ] **Persistent media storage**
-  - Action: Point `IRRUPTIVO_MEDIA_ROOT` at writable persistent storage.
+- [X] **Persistent media storage**
+  - Action: Resolved for the Docker/VPS path — the `app` service mounts the named
+    `media_data` volume at `/var/lib/irruptivo/media` (matching `IRRUPTIVO_MEDIA_ROOT`),
+    so uploads persist across redeploys and the container `node` user owns the mount
+    (no host chown or runtime sudo). Remaining human task: back up the `media_data`
+    volume and monitor disk usage.
   - Why it matters: Default `/var/lib/irruptivo/media` must persist and be writable for
     uploads and rendition serving.
-  - Files/env: `IRRUPTIVO_MEDIA_ROOT`; `src/media/product-media.ts`,
-    `src/admin/product-image-processing.ts`.
-  - Owner: human
+  - Files/env: `IRRUPTIVO_MEDIA_ROOT`; `docker-compose.yml` (`media_data` volume),
+    `Dockerfile`; `src/media/product-media.ts`, `src/admin/product-image-processing.ts`.
+  - Owner: human (backups/monitoring) → agent (volume wiring, done)
   - Blocking level: Production
 
-- [ ] **Deployment target decision: VPS vs serverless**
+- [X] **Deployment target decision: VPS vs serverless**
   - Action: Decide VPS or serverless; the choice now mainly gates media storage and
     deployment operations.
   - Why it matters: Code has `.vercel.app` URL handling (implies serverless), but issue 023
@@ -162,7 +166,7 @@ These are business/content items. The app runs without them, but it will look un
 
 Safe to leave for later; none block demo or production.
 
-- [ ] **Dynamic shipping rates** — fixed ARS 5.000 / pickup ARS 0 is an intentional MVP rule.
+- [X] **Dynamic shipping rates** — fixed ARS 5.000 / pickup ARS 0 is an intentional MVP rule.
 - [ ] **Address validation** — simple Argentina address fields are sufficient for MVP.
 - [ ] **Media backup automation** — soft delete is implemented; backup/cleanup deferred.
 - [ ] **Analytics instrumentation** — listed as a future path in issue 028.
