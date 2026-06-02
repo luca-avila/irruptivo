@@ -68,7 +68,7 @@ export async function createCheckoutPaymentHandoff({
   now,
   paymentPreferenceOptions
 }: CreateCheckoutPaymentHandoffInput): Promise<CheckoutPaymentHandoffResult> {
-  const orderResult = createPendingOrderInStore({
+  const orderResult = await createPendingOrderInStore({
     idempotencyKey,
     cart,
     checkout,
@@ -112,7 +112,7 @@ export async function createCheckoutPaymentHandoff({
     };
   }
 
-  storePendingOrderPaymentPreference({
+  await storePendingOrderPaymentPreference({
     orderId: orderResult.order.id,
     paymentPreference: paymentPreferenceResult.preference
   });

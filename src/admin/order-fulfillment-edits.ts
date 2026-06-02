@@ -6,8 +6,8 @@ import {
 } from "../orders/order-store";
 
 export type AdminOrderFulfillmentEditRepository = {
-  findOrderById: (orderId: string) => Order | null;
-  updateOrder: (order: Order) => Order | null;
+  findOrderById: (orderId: string) => Promise<Order | null>;
+  updateOrder: (order: Order) => Promise<Order | null>;
 };
 
 export type AdminOrderFulfillmentEditOptions = {
@@ -125,19 +125,19 @@ export function canEditOrderField(field: string, order: Order): boolean {
   return false;
 }
 
-export function updateOrderFulfillmentFields(
+export async function updateOrderFulfillmentFields(
   { orderId, fields }: AdminOrderFulfillmentEditInput,
   {
     orderRepository = defaultOrderRepository
   }: AdminOrderFulfillmentEditOptions = {}
-): AdminOrderFulfillmentEditResult {
+): Promise<AdminOrderFulfillmentEditResult> {
   const normalizedOrderId = normalizeText(orderId);
 
   if (!normalizedOrderId) {
     return getError("not_found");
   }
 
-  const order = orderRepository.findOrderById(normalizedOrderId);
+  const order = await orderRepository.findOrderById(normalizedOrderId);
 
   if (!order) {
     return getError("not_found");
@@ -179,7 +179,7 @@ export function updateOrderFulfillmentFields(
     return addressValidation;
   }
 
-  const updatedOrder = orderRepository.updateOrder(nextOrder);
+  const updatedOrder = await orderRepository.updateOrder(nextOrder);
 
   if (!updatedOrder) {
     return getError("save_failed");

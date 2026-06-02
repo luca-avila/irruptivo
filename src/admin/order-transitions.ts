@@ -30,11 +30,13 @@ export type AdminAllowedFulfillmentTransition = {
 };
 
 export type AdminOrderTransitionRepository = {
-  findOrderById: (orderId: string) => Order | null;
+  findOrderById: (orderId: string) => Promise<Order | null>;
   updateOrderStatus: (input: {
     orderId: string;
     status: OrderStatus;
-  }) => Order | null;
+    reason?: string;
+    actor?: string;
+  }) => Promise<Order | null>;
 };
 
 export type TransitionOrderFulfillmentStatusInput = {
@@ -133,12 +135,12 @@ export function getAllowedAdminTransitions(
   ).map(toAllowedTransition);
 }
 
-export function transitionOrderFulfillmentStatus(
+export async function transitionOrderFulfillmentStatus(
   input: TransitionOrderFulfillmentStatusInput,
   {
     orderRepository = defaultOrderRepository
   }: TransitionOrderFulfillmentStatusOptions = {}
-): AdminOrderTransitionResult {
+): Promise<AdminOrderTransitionResult> {
   const normalizedOrderId = input.orderId.trim();
   const transition = getTransitionDefinition(input.actionId);
 
@@ -162,7 +164,7 @@ export function transitionOrderFulfillmentStatus(
     };
   }
 
-  const order = orderRepository.findOrderById(normalizedOrderId);
+  const order = await orderRepository.findOrderById(normalizedOrderId);
 
   if (!order) {
     return {
@@ -212,9 +214,11 @@ export function transitionOrderFulfillmentStatus(
     };
   }
 
-  const updatedOrder = orderRepository.updateOrderStatus({
+  const updatedOrder = await orderRepository.updateOrderStatus({
     orderId: order.id,
-    status: transition.targetStatus
+    status: transition.targetStatus,
+    reason: "admin_transition",
+    actor: "admin"
   });
 
   if (updatedOrder?.status !== transition.targetStatus) {

@@ -11,7 +11,7 @@ import {
 const now = "2026-05-30T12:00:00.000Z";
 
 describe("admin fulfillment transitions", () => {
-  it("moves shipping orders through the valid path in order", () => {
+  it("moves shipping orders through the valid path in order", async () => {
     const repository = createOrderRepository(
       getOrder({ deliveryMethod: DELIVERY_METHOD.shipping, status: ORDER_STATUS.paid })
     );
@@ -21,7 +21,7 @@ describe("admin fulfillment transitions", () => {
     ).toEqual(["Marcar en preparación"]);
 
     expect(
-      transitionOrderFulfillmentStatus(
+      await transitionOrderFulfillmentStatus(
         {
           orderId: "order-001",
           actionId: ADMIN_FULFILLMENT_TRANSITION_ACTION.prepare
@@ -30,7 +30,7 @@ describe("admin fulfillment transitions", () => {
       )
     ).toMatchObject({ ok: true, order: { status: ORDER_STATUS.preparing } });
     expect(
-      transitionOrderFulfillmentStatus(
+      await transitionOrderFulfillmentStatus(
         {
           orderId: "order-001",
           actionId: ADMIN_FULFILLMENT_TRANSITION_ACTION.markShipped
@@ -39,7 +39,7 @@ describe("admin fulfillment transitions", () => {
       )
     ).toMatchObject({ ok: true, order: { status: ORDER_STATUS.shipped } });
     expect(
-      transitionOrderFulfillmentStatus(
+      await transitionOrderFulfillmentStatus(
         {
           orderId: "order-001",
           actionId: ADMIN_FULFILLMENT_TRANSITION_ACTION.markDelivered
@@ -48,15 +48,19 @@ describe("admin fulfillment transitions", () => {
       )
     ).toMatchObject({ ok: true, order: { status: ORDER_STATUS.delivered } });
     expect(repository.transitionCount).toBe(3);
+    expect(repository.lastUpdate).toMatchObject({
+      reason: "admin_transition",
+      actor: "admin"
+    });
   });
 
-  it("moves pickup orders through the valid path in order", () => {
+  it("moves pickup orders through the valid path in order", async () => {
     const repository = createOrderRepository(
       getOrder({ deliveryMethod: DELIVERY_METHOD.pickup, status: ORDER_STATUS.paid })
     );
 
     expect(
-      transitionOrderFulfillmentStatus(
+      await transitionOrderFulfillmentStatus(
         {
           orderId: "order-001",
           actionId: ADMIN_FULFILLMENT_TRANSITION_ACTION.prepare
@@ -65,7 +69,7 @@ describe("admin fulfillment transitions", () => {
       )
     ).toMatchObject({ ok: true, order: { status: ORDER_STATUS.preparing } });
     expect(
-      transitionOrderFulfillmentStatus(
+      await transitionOrderFulfillmentStatus(
         {
           orderId: "order-001",
           actionId: ADMIN_FULFILLMENT_TRANSITION_ACTION.markReadyForPickup
@@ -77,7 +81,7 @@ describe("admin fulfillment transitions", () => {
       order: { status: ORDER_STATUS.readyForPickup }
     });
     expect(
-      transitionOrderFulfillmentStatus(
+      await transitionOrderFulfillmentStatus(
         {
           orderId: "order-001",
           actionId: ADMIN_FULFILLMENT_TRANSITION_ACTION.markPickedUp
@@ -88,9 +92,9 @@ describe("admin fulfillment transitions", () => {
     expect(repository.transitionCount).toBe(3);
   });
 
-  it("rejects skipped, backward, and cross delivery-method transitions", () => {
+  it("rejects skipped, backward, and cross delivery-method transitions", async () => {
     expect(
-      transitionOrderFulfillmentStatus(
+      await transitionOrderFulfillmentStatus(
         {
           orderId: "order-001",
           actionId: ADMIN_FULFILLMENT_TRANSITION_ACTION.markShipped
@@ -110,7 +114,7 @@ describe("admin fulfillment transitions", () => {
     });
 
     expect(
-      transitionOrderFulfillmentStatus(
+      await transitionOrderFulfillmentStatus(
         {
           orderId: "order-001",
           actionId: ADMIN_FULFILLMENT_TRANSITION_ACTION.prepare
@@ -130,7 +134,7 @@ describe("admin fulfillment transitions", () => {
     });
 
     expect(
-      transitionOrderFulfillmentStatus(
+      await transitionOrderFulfillmentStatus(
         {
           orderId: "order-001",
           actionId: ADMIN_FULFILLMENT_TRANSITION_ACTION.markReadyForPickup
@@ -150,7 +154,7 @@ describe("admin fulfillment transitions", () => {
     });
 
     expect(
-      transitionOrderFulfillmentStatus(
+      await transitionOrderFulfillmentStatus(
         {
           orderId: "order-001",
           actionId: ADMIN_FULFILLMENT_TRANSITION_ACTION.markShipped
@@ -174,33 +178,36 @@ describe("admin fulfillment transitions", () => {
     ORDER_STATUS.pendingPayment,
     ORDER_STATUS.paymentFailed,
     ORDER_STATUS.expired
-  ])("blocks admin movement from payment-controlled status %s", (status) => {
-    const repository = createOrderRepository(getOrder({ status }));
+  ])(
+    "blocks admin movement from payment-controlled status %s",
+    async (status) => {
+      const repository = createOrderRepository(getOrder({ status }));
 
-    expect(
-      transitionOrderFulfillmentStatus(
-        {
-          orderId: "order-001",
-          actionId: ADMIN_FULFILLMENT_TRANSITION_ACTION.prepare
-        },
-        { orderRepository: repository }
-      )
-    ).toMatchObject({
-      ok: false,
-      error: { code: "payment_status_locked" }
-    });
-    expect(repository.transitionCount).toBe(0);
-  });
+      expect(
+        await transitionOrderFulfillmentStatus(
+          {
+            orderId: "order-001",
+            actionId: ADMIN_FULFILLMENT_TRANSITION_ACTION.prepare
+          },
+          { orderRepository: repository }
+        )
+      ).toMatchObject({
+        ok: false,
+        error: { code: "payment_status_locked" }
+      });
+      expect(repository.transitionCount).toBe(0);
+    }
+  );
 
   it.each([ORDER_STATUS.delivered, ORDER_STATUS.pickedUp])(
     "has no forward MVP action for terminal status %s",
-    (status) => {
+    async (status) => {
       const order = getOrder({ status });
       const repository = createOrderRepository(order);
 
       expect(getAllowedAdminTransitions(order)).toEqual([]);
       expect(
-        transitionOrderFulfillmentStatus(
+        await transitionOrderFulfillmentStatus(
           {
             orderId: "order-001",
             actionId: ADMIN_FULFILLMENT_TRANSITION_ACTION.prepare
@@ -215,11 +222,11 @@ describe("admin fulfillment transitions", () => {
     }
   );
 
-  it("rejects unsupported actions without mutating the order", () => {
+  it("rejects unsupported actions without mutating the order", async () => {
     const repository = createOrderRepository(getOrder({ status: ORDER_STATUS.paid }));
 
     expect(
-      transitionOrderFulfillmentStatus(
+      await transitionOrderFulfillmentStatus(
         {
           orderId: "order-001",
           actionId: "paid"
@@ -238,25 +245,35 @@ describe("admin fulfillment transitions", () => {
 function createOrderRepository(initialOrder: Order) {
   let order = cloneOrder(initialOrder);
   let transitionCount = 0;
+  let lastUpdate:
+    | {
+        orderId: string;
+        status: OrderStatus;
+        reason?: string;
+        actor?: string;
+      }
+    | null = null;
 
   return {
-    findOrderById: (orderId: string) =>
-      order.id === orderId ? cloneOrder(order) : null,
-    updateOrderStatus: ({
-      orderId,
-      status
-    }: {
+    async findOrderById(orderId: string) {
+      return order.id === orderId ? cloneOrder(order) : null;
+    },
+    async updateOrderStatus(input: {
       orderId: string;
       status: OrderStatus;
-    }) => {
-      if (order.id !== orderId) {
+      reason?: string;
+      actor?: string;
+    }) {
+      lastUpdate = input;
+
+      if (order.id !== input.orderId) {
         return null;
       }
 
       transitionCount += 1;
       order = cloneOrder({
         ...order,
-        status
+        status: input.status
       });
 
       return cloneOrder(order);
@@ -264,6 +281,9 @@ function createOrderRepository(initialOrder: Order) {
     getOrder: () => cloneOrder(order),
     get transitionCount() {
       return transitionCount;
+    },
+    get lastUpdate() {
+      return lastUpdate;
     }
   };
 }
@@ -303,6 +323,7 @@ function getOrder({
           : null,
       notes: null
     },
+    adminNotes: null,
     items: [
       {
         productId: "training-tee",
@@ -317,14 +338,14 @@ function getOrder({
           size: "S"
         },
         optionSummary: "Negro / S",
-        quantity: 1,
+        quantity: 2,
         unitPriceArs: 26000,
-        lineTotalArs: 26000
+        lineTotalArs: 52000
       }
     ],
-    subtotalArs: 26000,
+    subtotalArs: 52000,
     deliveryCostArs: deliveryMethod === DELIVERY_METHOD.shipping ? 5000 : 0,
-    totalArs: deliveryMethod === DELIVERY_METHOD.shipping ? 31000 : 26000,
+    totalArs: deliveryMethod === DELIVERY_METHOD.shipping ? 57000 : 52000,
     paymentPreference: null
   };
 }

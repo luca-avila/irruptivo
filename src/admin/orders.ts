@@ -25,8 +25,8 @@ import {
 } from "./order-transitions";
 
 export type AdminOrderRepository = {
-  listOrders: () => readonly Order[];
-  findOrderById: (orderId: string) => Order | null;
+  listOrders: () => Promise<readonly Order[]>;
+  findOrderById: (orderId: string) => Promise<Order | null>;
 };
 
 export type AdminOrderProjectionOptions = {
@@ -239,18 +239,18 @@ const ADMIN_ORDER_FILTERS: readonly AdminOrderFilterDefinition[] = [
 const DEFAULT_FILTER = ADMIN_ORDER_FILTERS[0];
 
 const defaultOrderRepository: AdminOrderRepository = {
-  listOrders: () => readOrderStoreSnapshot().orders,
+  listOrders: async () => (await readOrderStoreSnapshot()).orders,
   findOrderById: findOrderByIdInStore
 };
 
-export function listAdminOrders(
+export async function listAdminOrders(
   input: AdminOrderListInput = {},
   {
     orderRepository = defaultOrderRepository,
     getManualReviewForOrder = getPaymentManualReviewForOrder
   }: AdminOrderProjectionOptions = {}
-): AdminOrderListView {
-  const orders = orderRepository.listOrders();
+): Promise<AdminOrderListView> {
+  const orders = await orderRepository.listOrders();
   const activeFilter = getFilterDefinition(input.filter);
   const visibleOrders = orders
     .filter((order) => activeFilter.statuses.includes(order.status))
@@ -276,20 +276,20 @@ export function listAdminOrders(
   };
 }
 
-export function getAdminOrderDetail(
+export async function getAdminOrderDetail(
   orderId: string,
   {
     orderRepository = defaultOrderRepository,
     getManualReviewForOrder = getPaymentManualReviewForOrder
   }: AdminOrderProjectionOptions = {}
-): AdminOrderDetailView | null {
+): Promise<AdminOrderDetailView | null> {
   const normalizedOrderId = orderId.trim();
 
   if (!normalizedOrderId) {
     return null;
   }
 
-  const order = orderRepository.findOrderById(normalizedOrderId);
+  const order = await orderRepository.findOrderById(normalizedOrderId);
 
   if (!order) {
     return null;

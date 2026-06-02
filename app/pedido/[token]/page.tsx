@@ -26,9 +26,9 @@ export default async function GuestOrderStatusRoute({
 }: GuestOrderStatusRouteProps) {
   const { token } = await params;
 
-  expirePendingPaymentOrders();
+  await expirePendingPaymentOrders();
 
-  const order = getGuestOrderStatusByToken(token);
+  const order = await getGuestOrderStatusByToken(token);
 
   return <StorefrontGuestOrderStatusPage order={order} />;
 }

@@ -14,6 +14,8 @@ import { getAdminOrderDetail } from "../../../../../src/admin/orders";
 import styles from "../../admin.module.css";
 import { OrderFulfillmentEditForm } from "./order-fulfillment-edit-form";
 
+export const dynamic = "force-dynamic";
+
 type AdminOrderDetailPageProps = {
   params: Promise<{
     id: string;
@@ -32,7 +34,7 @@ export default async function AdminOrderDetailPage({
   const resolvedSearchParams = await searchParams;
   const requestedState = getFirstSearchParamValue(resolvedSearchParams?.estado);
   const requestedError = getFirstSearchParamValue(resolvedSearchParams?.error);
-  const detail = getAdminOrderDetail(decodeURIComponent(resolvedParams.id));
+  const detail = await getAdminOrderDetail(decodeURIComponent(resolvedParams.id));
   const transitionFeedback = getTransitionFeedback({
     state: requestedState,
     error: isOrderFulfillmentEditErrorCode(requestedError) ? null : requestedError,

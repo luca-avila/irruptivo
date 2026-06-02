@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import {
   PRODUCT_AREA,
@@ -11,10 +11,7 @@ import {
   ORDER_STATUS,
   ORDER_STATUSES
 } from "../domain/rules";
-import {
-  createPendingOrderInStore,
-  resetOrderStoreForTests
-} from "./order-store";
+import { createPendingOrderFromCheckout } from "./order-creation";
 import {
   buildGuestOrderStatusPath,
   getGuestOrderStatusByToken,
@@ -50,25 +47,23 @@ const products = [
 ] satisfies CatalogProductRecord[];
 
 describe("guest order status access", () => {
-  beforeEach(() => {
-    resetOrderStoreForTests();
-  });
-
-  it("returns only the order that matches a valid guest access token", () => {
-    createStoredOrder({
+  it("returns only the order that matches a valid guest access token", async () => {
+    const orders = [
+      createStoredOrder({
       idempotencyKey: "checkout-submit-001",
       orderId: "order-001",
       orderNumber: "IRR-000001",
       guestAccessToken: "guest-token-001"
-    });
-    createStoredOrder({
+      }),
+      createStoredOrder({
       idempotencyKey: "checkout-submit-002",
       orderId: "order-002",
       orderNumber: "IRR-000002",
       guestAccessToken: "guest-token-002"
-    });
+      })
+    ];
 
-    const order = getGuestOrderStatusByToken(" guest-token-002 ");
+    const order = await getGuestOrderStatusByToken(" guest-token-002 ", orders);
 
     expect(order).toMatchObject({
       orderNumber: "IRR-000002",
@@ -96,28 +91,32 @@ describe("guest order status access", () => {
     expect(JSON.stringify(order)).not.toContain("guest-token-002");
   });
 
-  it("returns null for invalid or missing tokens without exposing order data", () => {
-    createStoredOrder({
+  it("returns null for invalid or missing tokens without exposing order data", async () => {
+    const orders = [
+      createStoredOrder({
       idempotencyKey: "checkout-submit-001",
       orderId: "order-001",
       orderNumber: "IRR-000001",
       guestAccessToken: "guest-token-001"
-    });
+      })
+    ];
 
-    expect(getGuestOrderStatusByToken("missing-token")).toBeNull();
-    expect(getGuestOrderStatusByToken("")).toBeNull();
-    expect(getGuestOrderStatusByToken(null)).toBeNull();
+    expect(await getGuestOrderStatusByToken("missing-token", orders)).toBeNull();
+    expect(await getGuestOrderStatusByToken("", orders)).toBeNull();
+    expect(await getGuestOrderStatusByToken(null, orders)).toBeNull();
   });
 
-  it("returns a detached read-only projection instead of mutable store data", () => {
-    createStoredOrder({
+  it("returns a detached read-only projection instead of mutable store data", async () => {
+    const orders = [
+      createStoredOrder({
       idempotencyKey: "checkout-submit-001",
       orderId: "order-001",
       orderNumber: "IRR-000001",
       guestAccessToken: "guest-token-001"
-    });
+      })
+    ];
 
-    const order = getGuestOrderStatusByToken("guest-token-001");
+    const order = await getGuestOrderStatusByToken("guest-token-001", orders);
 
     if (!order) {
       throw new Error("Expected guest order status projection.");
@@ -127,7 +126,7 @@ describe("guest order status access", () => {
     order.items[0].productName = "Producto cambiado";
     order.delivery.notes = "Nota cambiada";
 
-    expect(getGuestOrderStatusByToken("guest-token-001")).toMatchObject({
+    expect(await getGuestOrderStatusByToken("guest-token-001", orders)).toMatchObject({
       contact: {
         fullName: "Luca Irruptivo"
       },
@@ -142,8 +141,8 @@ describe("guest order status access", () => {
     });
   });
 
-  it("shows financial and item snapshots from the stored order, not current product data", () => {
-    createStoredOrder({
+  it("shows financial and item snapshots from the stored order, not current product data", async () => {
+    const orderSnapshot = createStoredOrder({
       idempotencyKey: "checkout-submit-001",
       orderId: "order-001",
       orderNumber: "IRR-000001",
@@ -151,7 +150,9 @@ describe("guest order status access", () => {
     });
     products[0].basePriceArs = 99999;
 
-    const order = getGuestOrderStatusByToken("guest-token-001");
+    const order = await getGuestOrderStatusByToken("guest-token-001", [
+      orderSnapshot
+    ]);
 
     expect(order).toMatchObject({
       items: [
@@ -221,8 +222,7 @@ function createStoredOrder({
   orderNumber: string;
   guestAccessToken: string;
 }) {
-  return createPendingOrderInStore({
-    idempotencyKey,
+  const result = createPendingOrderFromCheckout({
     cart: getCart(),
     checkout: {
       fullName: "Luca Irruptivo",
@@ -237,6 +237,12 @@ function createStoredOrder({
     guestAccessToken,
     now
   });
+
+  if (result.status !== "created") {
+    throw new Error(`Expected stored order ${idempotencyKey} to be valid.`);
+  }
+
+  return result.order;
 }
 
 function getCart(): Cart {

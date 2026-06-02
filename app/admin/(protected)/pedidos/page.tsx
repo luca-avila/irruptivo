@@ -4,6 +4,8 @@ import Link from "next/link";
 import { listAdminOrders } from "../../../../src/admin/orders";
 import styles from "../admin.module.css";
 
+export const dynamic = "force-dynamic";
+
 type AdminOrdersPageProps = {
   searchParams?: Promise<{
     vista?: string | string[];
@@ -18,7 +20,7 @@ export default async function AdminOrdersPage({
   const errorFeedback = getOrderListErrorMessage(
     getFirstSearchParamValue(params?.error)
   );
-  const orderList = listAdminOrders({
+  const orderList = await listAdminOrders({
     filter: getFirstSearchParamValue(params?.vista)
   });
 

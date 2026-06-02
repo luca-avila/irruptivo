@@ -15,7 +15,7 @@ describe("admin order projection", () => {
     resetPaymentEventsForTests();
   });
 
-  it("shows only actionable fulfillment statuses in the default queue", () => {
+  it("shows only actionable fulfillment statuses in the default queue", async () => {
     const orders = [
       getOrder({ status: ORDER_STATUS.pendingPayment, orderNumber: "IRR-PENDING" }),
       getOrder({
@@ -42,7 +42,7 @@ describe("admin order projection", () => {
       getOrder({ status: ORDER_STATUS.delivered, orderNumber: "IRR-DELIVERED" })
     ];
 
-    const view = listAdminOrders(
+    const view = await listAdminOrders(
       {},
       { orderRepository: createOrderRepository(orders) }
     );
@@ -65,7 +65,7 @@ describe("admin order projection", () => {
     expect(JSON.stringify(view.orders)).not.toContain(ORDER_STATUS.readyForPickup);
   });
 
-  it("exposes history filters for non-actionable statuses without raw status values", () => {
+  it("exposes history filters for non-actionable statuses without raw status values", async () => {
     const orders = [
       getOrder({ status: ORDER_STATUS.pendingPayment, orderNumber: "IRR-PENDING" }),
       getOrder({ status: ORDER_STATUS.paymentFailed, orderNumber: "IRR-FAILED" }),
@@ -74,7 +74,7 @@ describe("admin order projection", () => {
       getOrder({ status: ORDER_STATUS.pickedUp, orderNumber: "IRR-PICKED" })
     ];
     const repository = createOrderRepository(orders);
-    const view = listAdminOrders({}, { orderRepository: repository });
+    const view = await listAdminOrders({}, { orderRepository: repository });
 
     expect(view.filters.map((filter) => filter.label)).toEqual([
       "Cola activa",
@@ -89,28 +89,28 @@ describe("admin order projection", () => {
     expect(JSON.stringify(view.filters)).not.toContain(ORDER_STATUS.pickedUp);
 
     expect(
-      listAdminOrders({ filter: "pago-pendiente" }, { orderRepository: repository })
+      (await listAdminOrders({ filter: "pago-pendiente" }, { orderRepository: repository }))
         .orders
     ).toMatchObject([{ orderNumber: "IRR-PENDING" }]);
     expect(
-      listAdminOrders({ filter: "pago-rechazado" }, { orderRepository: repository })
+      (await listAdminOrders({ filter: "pago-rechazado" }, { orderRepository: repository }))
         .orders
     ).toMatchObject([{ orderNumber: "IRR-FAILED" }]);
     expect(
-      listAdminOrders({ filter: "vencidos" }, { orderRepository: repository })
+      (await listAdminOrders({ filter: "vencidos" }, { orderRepository: repository }))
         .orders
     ).toMatchObject([{ orderNumber: "IRR-EXPIRED" }]);
     expect(
-      listAdminOrders({ filter: "entregados" }, { orderRepository: repository })
+      (await listAdminOrders({ filter: "entregados" }, { orderRepository: repository }))
         .orders
     ).toMatchObject([{ orderNumber: "IRR-DELIVERED" }]);
     expect(
-      listAdminOrders({ filter: "retirados" }, { orderRepository: repository })
+      (await listAdminOrders({ filter: "retirados" }, { orderRepository: repository }))
         .orders
     ).toMatchObject([{ orderNumber: "IRR-PICKED" }]);
   });
 
-  it("builds order detail from immutable item snapshots", () => {
+  it("builds order detail from immutable item snapshots", async () => {
     const order = getOrder({
       status: ORDER_STATUS.paid,
       orderNumber: "IRR-SNAPSHOT",
@@ -135,7 +135,7 @@ describe("admin order projection", () => {
       ]
     });
 
-    const detail = getAdminOrderDetail("order-001", {
+    const detail = await getAdminOrderDetail("order-001", {
       orderRepository: createOrderRepository([order])
     });
 
@@ -167,8 +167,8 @@ describe("admin order projection", () => {
     });
   });
 
-  it("marks financial fields as read-only in the detail view model", () => {
-    const detail = getAdminOrderDetail("order-001", {
+  it("marks financial fields as read-only in the detail view model", async () => {
+    const detail = await getAdminOrderDetail("order-001", {
       orderRepository: createOrderRepository([getOrder({ status: ORDER_STATUS.paid })])
     });
 
@@ -180,7 +180,7 @@ describe("admin order projection", () => {
     ]);
   });
 
-  it("surfaces late expired-payment manual review without exposing internal states", () => {
+  it("surfaces late expired-payment manual review without exposing internal states", async () => {
     recordPaymentEventOnce({
       provider: "mercado_pago",
       providerEventId: "event-late-001",
@@ -193,7 +193,7 @@ describe("admin order projection", () => {
       receivedAt: now
     });
 
-    const detail = getAdminOrderDetail("order-001", {
+    const detail = await getAdminOrderDetail("order-001", {
       orderRepository: createOrderRepository([
         getOrder({ status: ORDER_STATUS.expired })
       ])
@@ -209,8 +209,8 @@ describe("admin order projection", () => {
     expect(JSON.stringify(detail)).not.toContain(ORDER_STATUS.pendingPayment);
   });
 
-  it("shows only the valid next fulfillment action for the delivery method", () => {
-    const shippingDetail = getAdminOrderDetail("order-001", {
+  it("shows only the valid next fulfillment action for the delivery method", async () => {
+    const shippingDetail = await getAdminOrderDetail("order-001", {
       orderRepository: createOrderRepository([
         getOrder({
           deliveryMethod: DELIVERY_METHOD.shipping,
@@ -218,7 +218,7 @@ describe("admin order projection", () => {
         })
       ])
     });
-    const pickupDetail = getAdminOrderDetail("order-001", {
+    const pickupDetail = await getAdminOrderDetail("order-001", {
       orderRepository: createOrderRepository([
         getOrder({
           deliveryMethod: DELIVERY_METHOD.pickup,
@@ -251,8 +251,8 @@ describe("admin order projection", () => {
     );
   });
 
-  it("explains when fulfillment has no available admin action", () => {
-    const detail = getAdminOrderDetail("order-001", {
+  it("explains when fulfillment has no available admin action", async () => {
+    const detail = await getAdminOrderDetail("order-001", {
       orderRepository: createOrderRepository([
         getOrder({ status: ORDER_STATUS.delivered })
       ])
@@ -267,8 +267,8 @@ describe("admin order projection", () => {
 
 function createOrderRepository(orders: readonly Order[]) {
   return {
-    listOrders: () => orders.map(cloneOrder),
-    findOrderById: (orderId: string) =>
+    listOrders: async () => orders.map(cloneOrder),
+    findOrderById: async (orderId: string) =>
       orders.find((order) => order.id === orderId) ?? null
   };
 }

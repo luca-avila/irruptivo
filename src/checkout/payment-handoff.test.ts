@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, type TestContext } from "vitest";
 
 import {
   PRODUCT_AREA,
@@ -7,6 +7,7 @@ import {
 } from "../catalog/catalog";
 import { type Cart } from "../cart/cart";
 import { DELIVERY_METHOD, ORDER_STATUS } from "../domain/rules";
+import { prisma } from "../db/client";
 import {
   readOrderStoreSnapshot,
   resetOrderStoreForTests
@@ -41,9 +42,13 @@ const products = [
   }
 ] satisfies CatalogProductRecord[];
 
-describe("checkout payment handoff", () => {
+describe.skipIf(!process.env.DATABASE_URL)("checkout payment handoff", () => {
+  beforeEach(async (ctx) => {
+    await skipIfDatabaseUnavailable(ctx);
+  });
+
   it("persists a Mercado Pago preference reference against the pending order", async () => {
-    resetOrderStoreForTests();
+    await resetOrderStoreForTests();
 
     const result = await createCheckoutPaymentHandoff({
       idempotencyKey: "checkout-submit-001",
@@ -81,7 +86,7 @@ describe("checkout payment handoff", () => {
         checkoutUrl: "https://www.mercadopago.com.ar/init/pref-123"
       }
     });
-    expect(readOrderStoreSnapshot().orders).toMatchObject([
+    expect((await readOrderStoreSnapshot()).orders).toMatchObject([
       {
         id: "order-001",
         status: ORDER_STATUS.pendingPayment,
@@ -95,7 +100,7 @@ describe("checkout payment handoff", () => {
   });
 
   it("leaves the order pending and returns a retryable Spanish error when preference creation fails", async () => {
-    resetOrderStoreForTests();
+    await resetOrderStoreForTests();
 
     const result = await createCheckoutPaymentHandoff({
       idempotencyKey: "checkout-submit-002",
@@ -125,7 +130,7 @@ describe("checkout payment handoff", () => {
       isRetryable: true,
       updatedCart: getCart()
     });
-    expect(readOrderStoreSnapshot()).toMatchObject({
+    expect(await readOrderStoreSnapshot()).toMatchObject({
       orders: [
         {
           id: "order-002",
@@ -159,4 +164,12 @@ function getCart(): Cart {
       }
     ]
   };
+}
+
+async function skipIfDatabaseUnavailable(ctx: TestContext): Promise<void> {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+  } catch {
+    ctx.skip("DATABASE_URL is set, but the database is not reachable.");
+  }
 }

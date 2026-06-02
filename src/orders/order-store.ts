@@ -1,6 +1,14 @@
+import { type Prisma } from "@prisma/client";
+
 import { type Cart } from "../cart/cart";
 import { type CatalogProductRecord } from "../catalog/catalog";
-import { type OrderStatus } from "../domain/rules";
+import {
+  DELIVERY_METHOD_LABEL,
+  ORDER_STATUSES,
+  type DeliveryMethodLabel,
+  type OrderStatus
+} from "../domain/rules";
+import { prisma, type PrismaClient } from "../db/client";
 import {
   createPendingOrderFromCheckout,
   type Order,
@@ -9,12 +17,6 @@ import {
   type PendingOrderCreationResult,
   type PendingOrderPaymentPreference
 } from "./order-creation";
-
-type StoredPendingOrder = {
-  idempotencyKey: string;
-  order: Order;
-  updatedCart: Cart;
-};
 
 export type CreatePendingOrderInStoreInput = {
   idempotencyKey: string;
@@ -45,13 +47,25 @@ export type PaymentReturnOrderLookupInput = {
 export type UpdateOrderStatusInStoreInput = {
   orderId: string;
   status: OrderStatus;
+  reason?: string;
+  actor?: string;
 };
 
 export type UpdateOrderInStoreInput = Order;
 
-const pendingOrders: StoredPendingOrder[] = [];
+export type OrderRecordWithItems = Prisma.OrderGetPayload<{
+  include: {
+    items: true;
+  };
+}>;
 
-export function createPendingOrderInStore({
+type OrderStorePrismaClient = PrismaClient | Prisma.TransactionClient;
+
+const orderWithItems = {
+  items: true
+} as const satisfies Prisma.OrderInclude;
+
+export async function createPendingOrderInStore({
   idempotencyKey,
   cart,
   checkout,
@@ -60,22 +74,20 @@ export function createPendingOrderInStore({
   orderNumber,
   guestAccessToken,
   now
-}: CreatePendingOrderInStoreInput): PendingOrderStoreCreationResult {
+}: CreatePendingOrderInStoreInput): Promise<PendingOrderStoreCreationResult> {
   const normalizedIdempotencyKey = idempotencyKey.trim();
 
   if (!normalizedIdempotencyKey) {
     throw new RangeError("idempotencyKey must be a non-empty string");
   }
 
-  const existingOrder = pendingOrders.find(
-    (storedOrder) => storedOrder.idempotencyKey === normalizedIdempotencyKey
-  );
+  const existingOrder = await findOrderByIdempotencyKey(normalizedIdempotencyKey);
 
   if (existingOrder) {
     return {
       status: "created",
-      order: clonePendingOrder(existingOrder.order as PendingOrder),
-      updatedCart: cloneCart(existingOrder.updatedCart),
+      order: clonePendingOrder(existingOrder as PendingOrder),
+      updatedCart: cloneCart(cart),
       isDuplicate: true
     };
   }
@@ -94,44 +106,101 @@ export function createPendingOrderInStore({
     return result;
   }
 
-  pendingOrders.push({
-    idempotencyKey: normalizedIdempotencyKey,
-    order: clonePendingOrder(result.order),
-    updatedCart: cloneCart(result.updatedCart)
+  try {
+    const createdOrder = await prisma.$transaction(async (tx) => {
+      await tx.order.create({
+        data: getOrderCreateInput({
+          order: result.order,
+          idempotencyKey: normalizedIdempotencyKey
+        })
+      });
+
+      await tx.orderItem.createMany({
+        data: result.order.items.map((item) => ({
+          orderId: result.order.id,
+          productId: item.productId,
+          productName: item.productName,
+          productSlug: item.productSlug,
+          productArea: item.productArea,
+          variantId: item.variantId,
+          variantName: item.variantName,
+          sku: item.sku,
+          optionColor: item.options.color ?? null,
+          optionSize: item.options.size ?? null,
+          optionFlavor: item.options.flavor ?? null,
+          optionWeight: item.options.weight ?? null,
+          optionPresentation: item.options.presentation ?? null,
+          optionSummary: item.optionSummary,
+          quantity: item.quantity,
+          unitPriceArs: item.unitPriceArs,
+          lineTotalArs: item.lineTotalArs
+        }))
+      });
+
+      await tx.orderStatusHistory.create({
+        data: {
+          orderId: result.order.id,
+          fromStatus: null,
+          toStatus: result.order.status,
+          reason: "checkout_created",
+          actor: "system"
+        }
+      });
+
+      return findOrderById(result.order.id, tx);
+    });
+
+    if (!createdOrder) {
+      throw new Error("Order creation transaction did not return the created order.");
+    }
+
+    return {
+      status: "created",
+      order: clonePendingOrder(createdOrder as PendingOrder),
+      updatedCart: cloneCart(result.updatedCart),
+      isDuplicate: false
+    };
+  } catch (error) {
+    if (!isUniqueConstraintError(error)) {
+      throw error;
+    }
+
+    const duplicateOrder = await findOrderByIdempotencyKey(normalizedIdempotencyKey);
+
+    if (!duplicateOrder) {
+      throw error;
+    }
+
+    return {
+      status: "created",
+      order: clonePendingOrder(duplicateOrder as PendingOrder),
+      updatedCart: cloneCart(cart),
+      isDuplicate: true
+    };
+  }
+}
+
+export async function readOrderStoreSnapshot(): Promise<OrderStoreSnapshot> {
+  const orders = await prisma.order.findMany({
+    include: orderWithItems,
+    orderBy: {
+      createdAt: "asc"
+    }
   });
 
   return {
-    ...result,
-    order: clonePendingOrder(result.order),
-    updatedCart: cloneCart(result.updatedCart),
-    isDuplicate: false
+    orders: orders.map(mapOrderRecordToOrder)
   };
 }
 
-export function readOrderStoreSnapshot(): OrderStoreSnapshot {
-  return {
-    orders: pendingOrders.map((storedOrder) => cloneOrder(storedOrder.order))
-  };
+export async function findOrderByIdInStore(orderId: string): Promise<Order | null> {
+  return findOrderById(orderId);
 }
 
-export function findOrderByIdInStore(orderId: string): Order | null {
-  const normalizedOrderId = orderId.trim();
-
-  if (!normalizedOrderId) {
-    return null;
-  }
-
-  const storedOrder = pendingOrders.find(
-    ({ order }) => order.id === normalizedOrderId
-  );
-
-  return storedOrder ? cloneOrder(storedOrder.order) : null;
-}
-
-export function findOrderForPaymentReturn({
+export async function findOrderForPaymentReturn({
   orderId,
   guestAccessToken
-}: PaymentReturnOrderLookupInput): PendingOrder | null {
+}: PaymentReturnOrderLookupInput): Promise<PendingOrder | null> {
   const normalizedOrderId = orderId?.trim() ?? "";
   const normalizedGuestAccessToken = guestAccessToken?.trim() ?? "";
 
@@ -139,86 +208,282 @@ export function findOrderForPaymentReturn({
     return null;
   }
 
-  const storedOrder = pendingOrders.find(
-    ({ order }) =>
-      order.id === normalizedOrderId &&
-      order.guestAccessToken === normalizedGuestAccessToken
-  );
+  const order = await prisma.order.findFirst({
+    where: {
+      id: normalizedOrderId,
+      guestAccessToken: normalizedGuestAccessToken
+    },
+    include: orderWithItems
+  });
 
-  return storedOrder ? clonePendingOrder(storedOrder.order as PendingOrder) : null;
+  return order ? clonePendingOrder(mapOrderRecordToOrder(order) as PendingOrder) : null;
 }
 
-export function storePendingOrderPaymentPreference({
+export async function storePendingOrderPaymentPreference({
   orderId,
   paymentPreference
 }: {
   orderId: string;
   paymentPreference: PendingOrderPaymentPreference;
-}): PendingOrder | null {
-  const storedOrder = pendingOrders.find(
-    (pendingOrder) => pendingOrder.order.id === orderId
-  );
-
-  if (!storedOrder) {
-    return null;
-  }
-
-  storedOrder.order = cloneOrder({
-    ...storedOrder.order,
-    paymentPreference: clonePaymentPreference(paymentPreference)
-  });
-
-  return clonePendingOrder(storedOrder.order as PendingOrder);
-}
-
-export function updateOrderStatusInStore({
-  orderId,
-  status
-}: UpdateOrderStatusInStoreInput): Order | null {
+}): Promise<PendingOrder | null> {
   const normalizedOrderId = orderId.trim();
 
   if (!normalizedOrderId) {
     return null;
   }
 
-  const storedOrder = pendingOrders.find(
-    ({ order }) => order.id === normalizedOrderId
-  );
+  const order = await prisma.order.update({
+    where: {
+      id: normalizedOrderId
+    },
+    data: {
+      paymentProvider: paymentPreference.provider,
+      paymentPreferenceId: paymentPreference.preferenceId,
+      paymentCheckoutUrl: paymentPreference.checkoutUrl,
+      paymentInitPoint: paymentPreference.initPoint,
+      paymentSandboxInitPoint: paymentPreference.sandboxInitPoint,
+      paymentExternalReference: paymentPreference.externalReference,
+      paymentCreatedAt: getDate(paymentPreference.createdAt, "payment.createdAt")
+    },
+    include: orderWithItems
+  }).catch((error: unknown) => {
+    if (isRecordNotFoundError(error)) {
+      return null;
+    }
 
-  if (!storedOrder) {
+    throw error;
+  });
+
+  return order ? clonePendingOrder(mapOrderRecordToOrder(order) as PendingOrder) : null;
+}
+
+export async function updateOrderStatusInStore({
+  orderId,
+  status,
+  reason = getDefaultStatusReason(status),
+  actor = "system"
+}: UpdateOrderStatusInStoreInput): Promise<Order | null> {
+  const normalizedOrderId = orderId.trim();
+
+  if (!normalizedOrderId) {
     return null;
   }
 
-  storedOrder.order = cloneOrder({
-    ...storedOrder.order,
-    status
-  });
+  return prisma.$transaction(async (tx) => {
+    const existingOrder = await tx.order.findUnique({
+      where: {
+        id: normalizedOrderId
+      },
+      select: {
+        status: true
+      }
+    });
 
-  return cloneOrder(storedOrder.order);
+    if (!existingOrder) {
+      return null;
+    }
+
+    await tx.order.update({
+      where: {
+        id: normalizedOrderId
+      },
+      data: {
+        status
+      }
+    });
+
+    await tx.orderStatusHistory.create({
+      data: {
+        orderId: normalizedOrderId,
+        fromStatus: existingOrder.status,
+        toStatus: status,
+        reason,
+        actor
+      }
+    });
+
+    return findOrderById(normalizedOrderId, tx);
+  });
 }
 
-export function updateOrderInStore(order: UpdateOrderInStoreInput): Order | null {
+export async function updateOrderInStore(
+  order: UpdateOrderInStoreInput
+): Promise<Order | null> {
   const normalizedOrderId = order.id.trim();
 
   if (!normalizedOrderId) {
     return null;
   }
 
-  const storedOrder = pendingOrders.find(
-    (pendingOrder) => pendingOrder.order.id === normalizedOrderId
-  );
+  const updatedOrder = await prisma.order.update({
+    where: {
+      id: normalizedOrderId
+    },
+    data: {
+      contactFullName: order.contact.fullName,
+      contactEmail: order.contact.email,
+      contactPhone: order.contact.phone,
+      deliveryNotes: order.delivery.notes,
+      shipAddressLine: order.delivery.shippingAddress?.addressLine ?? null,
+      shipCity: order.delivery.shippingAddress?.city ?? null,
+      shipProvince: order.delivery.shippingAddress?.province ?? null,
+      shipPostalCode: order.delivery.shippingAddress?.postalCode ?? null,
+      adminNotes: order.adminNotes ?? null
+    },
+    include: orderWithItems
+  }).catch((error: unknown) => {
+    if (isRecordNotFoundError(error)) {
+      return null;
+    }
 
-  if (!storedOrder) {
+    throw error;
+  });
+
+  return updatedOrder ? cloneOrder(mapOrderRecordToOrder(updatedOrder)) : null;
+}
+
+export async function resetOrderStoreForTests(): Promise<void> {
+  await prisma.$transaction([
+    prisma.orderStatusHistory.deleteMany(),
+    prisma.orderItem.deleteMany(),
+    prisma.order.deleteMany()
+  ]);
+}
+
+export function mapOrderRecordToOrder(record: OrderRecordWithItems): Order {
+  return cloneOrder({
+    id: record.id,
+    orderNumber: record.orderNumber,
+    status: toOrderStatus(record.status),
+    createdAt: record.createdAt.toISOString(),
+    guestAccessToken: record.guestAccessToken,
+    contact: {
+      fullName: record.contactFullName,
+      email: record.contactEmail,
+      phone: record.contactPhone
+    },
+    delivery: {
+      method: record.deliveryMethod,
+      methodLabel: toDeliveryMethodLabel(record.deliveryMethodLabel),
+      shippingAddress: record.shipAddressLine
+        ? {
+            addressLine: record.shipAddressLine,
+            city: record.shipCity ?? "",
+            province: record.shipProvince ?? "",
+            postalCode: record.shipPostalCode ?? ""
+          }
+        : null,
+      notes: record.deliveryNotes
+    },
+    adminNotes: record.adminNotes,
+    items: record.items.map((item) => ({
+      productId: item.productId,
+      productName: item.productName,
+      productSlug: item.productSlug,
+      productArea: item.productArea,
+      variantId: item.variantId,
+      variantName: item.variantName,
+      sku: item.sku,
+      options: {
+        ...(item.optionColor ? { color: item.optionColor } : {}),
+        ...(item.optionSize ? { size: item.optionSize } : {}),
+        ...(item.optionFlavor ? { flavor: item.optionFlavor } : {}),
+        ...(item.optionWeight ? { weight: item.optionWeight } : {}),
+        ...(item.optionPresentation
+          ? { presentation: item.optionPresentation }
+          : {})
+      },
+      optionSummary: item.optionSummary,
+      quantity: item.quantity,
+      unitPriceArs: item.unitPriceArs,
+      lineTotalArs: item.lineTotalArs
+    })),
+    subtotalArs: record.subtotalArs,
+    deliveryCostArs: record.deliveryCostArs,
+    totalArs: record.totalArs,
+    paymentPreference: record.paymentProvider
+      ? {
+          provider: record.paymentProvider,
+          preferenceId: record.paymentPreferenceId ?? "",
+          checkoutUrl: record.paymentCheckoutUrl ?? "",
+          initPoint: record.paymentInitPoint ?? "",
+          sandboxInitPoint: record.paymentSandboxInitPoint,
+          externalReference: record.paymentExternalReference ?? "",
+          createdAt: record.paymentCreatedAt?.toISOString() ?? ""
+        }
+      : null
+  });
+}
+
+async function findOrderById(
+  orderId: string,
+  client: OrderStorePrismaClient = prisma
+): Promise<Order | null> {
+  const normalizedOrderId = orderId.trim();
+
+  if (!normalizedOrderId) {
     return null;
   }
 
-  storedOrder.order = cloneOrder(order);
+  const order = await client.order.findUnique({
+    where: {
+      id: normalizedOrderId
+    },
+    include: orderWithItems
+  });
 
-  return cloneOrder(storedOrder.order);
+  return order ? cloneOrder(mapOrderRecordToOrder(order)) : null;
 }
 
-export function resetOrderStoreForTests(): void {
-  pendingOrders.splice(0, pendingOrders.length);
+async function findOrderByIdempotencyKey(
+  idempotencyKey: string
+): Promise<Order | null> {
+  const order = await prisma.order.findUnique({
+    where: {
+      idempotencyKey
+    },
+    include: orderWithItems
+  });
+
+  return order ? cloneOrder(mapOrderRecordToOrder(order)) : null;
+}
+
+function getOrderCreateInput({
+  order,
+  idempotencyKey
+}: {
+  order: PendingOrder;
+  idempotencyKey: string;
+}): Prisma.OrderCreateInput {
+  return {
+    id: order.id,
+    orderNumber: order.orderNumber,
+    guestAccessToken: order.guestAccessToken,
+    idempotencyKey,
+    status: order.status,
+    createdAt: getDate(order.createdAt, "order.createdAt"),
+    contactFullName: order.contact.fullName,
+    contactEmail: order.contact.email,
+    contactPhone: order.contact.phone,
+    deliveryMethod: order.delivery.method,
+    deliveryMethodLabel: order.delivery.methodLabel,
+    deliveryNotes: order.delivery.notes,
+    shipAddressLine: order.delivery.shippingAddress?.addressLine ?? null,
+    shipCity: order.delivery.shippingAddress?.city ?? null,
+    shipProvince: order.delivery.shippingAddress?.province ?? null,
+    shipPostalCode: order.delivery.shippingAddress?.postalCode ?? null,
+    adminNotes: order.adminNotes ?? null,
+    subtotalArs: order.subtotalArs,
+    deliveryCostArs: order.deliveryCostArs,
+    totalArs: order.totalArs,
+    paymentProvider: null,
+    paymentPreferenceId: null,
+    paymentCheckoutUrl: null,
+    paymentInitPoint: null,
+    paymentSandboxInitPoint: null,
+    paymentExternalReference: null,
+    paymentCreatedAt: null
+  };
 }
 
 function clonePendingOrder(order: PendingOrder): PendingOrder {
@@ -265,4 +530,53 @@ function cloneCart(cart: Cart): Cart {
       ...item
     }))
   };
+}
+
+function getDate(value: Date | string, name: string): Date {
+  const date = typeof value === "string" ? new Date(value) : value;
+
+  if (Number.isNaN(date.getTime())) {
+    throw new RangeError(`${name} must be a valid date`);
+  }
+
+  return date;
+}
+
+function getDefaultStatusReason(status: OrderStatus): string {
+  return `status_${status}`;
+}
+
+function toOrderStatus(status: string): OrderStatus {
+  if (!ORDER_STATUSES.includes(status as OrderStatus)) {
+    throw new RangeError(`Unknown order status "${status}".`);
+  }
+
+  return status as OrderStatus;
+}
+
+function toDeliveryMethodLabel(label: string): DeliveryMethodLabel {
+  const labels = Object.values(DELIVERY_METHOD_LABEL);
+
+  if (!labels.includes(label as DeliveryMethodLabel)) {
+    throw new RangeError(`Unknown delivery method label "${label}".`);
+  }
+
+  return label as DeliveryMethodLabel;
+}
+
+function isUniqueConstraintError(error: unknown): boolean {
+  return isPrismaKnownError(error, "P2002");
+}
+
+function isRecordNotFoundError(error: unknown): boolean {
+  return isPrismaKnownError(error, "P2025");
+}
+
+function isPrismaKnownError(error: unknown, code: string): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === code
+  );
 }

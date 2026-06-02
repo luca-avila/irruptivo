@@ -72,17 +72,18 @@ export type GuestOrderStatusSourceOrder = Omit<PendingOrder, "status"> & {
   status: OrderStatus;
 };
 
-export function getGuestOrderStatusByToken(
+export async function getGuestOrderStatusByToken(
   token: string | null | undefined,
-  orders: readonly GuestOrderStatusSourceOrder[] = readOrderStoreSnapshot().orders
-): GuestOrderStatusOrder | null {
+  orders?: readonly GuestOrderStatusSourceOrder[]
+): Promise<GuestOrderStatusOrder | null> {
   const normalizedToken = normalizeGuestOrderStatusToken(token);
 
   if (!normalizedToken) {
     return null;
   }
 
-  const order = orders.find(
+  const sourceOrders = orders ?? (await readOrderStoreSnapshot()).orders;
+  const order = sourceOrders.find(
     (candidateOrder) => candidateOrder.guestAccessToken === normalizedToken
   );
 

@@ -8,11 +8,13 @@ import {
 const PENDING_PAYMENT_EXPIRATION_MS = 30 * 60 * 1000;
 
 export type PendingPaymentExpirationOrderRepository = {
-  listOrders: () => readonly Order[];
+  listOrders: () => Promise<readonly Order[]>;
   updateOrderStatus: (input: {
     orderId: string;
     status: OrderStatus;
-  }) => Order | null;
+    reason?: string;
+    actor?: string;
+  }) => Promise<Order | null>;
 };
 
 export type ExpiredPendingPaymentOrder = {
@@ -33,17 +35,17 @@ export type ExpirePendingPaymentOrdersOptions = {
 };
 
 const defaultOrderRepository: PendingPaymentExpirationOrderRepository = {
-  listOrders: () => readOrderStoreSnapshot().orders,
+  listOrders: async () => (await readOrderStoreSnapshot()).orders,
   updateOrderStatus: updateOrderStatusInStore
 };
 
-export function expirePendingPaymentOrders({
+export async function expirePendingPaymentOrders({
   now = new Date(),
   orderRepository = defaultOrderRepository
-}: ExpirePendingPaymentOrdersOptions = {}): ExpirePendingPaymentOrdersResult {
+}: ExpirePendingPaymentOrdersOptions = {}): Promise<ExpirePendingPaymentOrdersResult> {
   const currentDate = getDate(now, "now");
   const expiredAt = currentDate.toISOString();
-  const orders = orderRepository.listOrders();
+  const orders = await orderRepository.listOrders();
   const expiredOrders: ExpiredPendingPaymentOrder[] = [];
 
   for (const order of orders) {
@@ -51,9 +53,10 @@ export function expirePendingPaymentOrders({
       continue;
     }
 
-    const updatedOrder = orderRepository.updateOrderStatus({
+    const updatedOrder = await orderRepository.updateOrderStatus({
       orderId: order.id,
-      status: ORDER_STATUS.expired
+      status: ORDER_STATUS.expired,
+      reason: "expired"
     });
 
     if (updatedOrder?.status !== ORDER_STATUS.expired) {

@@ -18,7 +18,7 @@ export async function transitionAdminOrderFulfillment(
 
   const orderId = readStringField(formData, "orderId");
   const actionId = readStringField(formData, "actionId");
-  const result = transitionOrderFulfillmentStatus({
+  const result = await transitionOrderFulfillmentStatus({
     orderId,
     actionId
   });

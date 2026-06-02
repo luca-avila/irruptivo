@@ -108,16 +108,18 @@ function createOrderRepository(order: Order | null): TestOrderRepository {
     get transitionCount() {
       return transitionCount;
     },
-    findOrderById(orderId: string): Order | null {
+    async findOrderById(orderId: string): Promise<Order | null> {
       return currentOrder?.id === orderId ? cloneOrder(currentOrder) : null;
     },
-    updateOrderStatus({
+    async updateOrderStatus({
       orderId,
       status
     }: {
       orderId: string;
       status: OrderStatus;
-    }): Order | null {
+      reason?: string;
+      actor?: string;
+    }): Promise<Order | null> {
       if (!currentOrder || currentOrder.id !== orderId) {
         return null;
       }

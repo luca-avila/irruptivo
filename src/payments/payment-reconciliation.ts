@@ -24,11 +24,13 @@ import {
 export type { MercadoPagoPayment } from "./mercado-pago-webhook";
 
 export type PaymentReconciliationOrderRepository = {
-  findOrderById: (orderId: string) => Order | null;
+  findOrderById: (orderId: string) => Promise<Order | null>;
   updateOrderStatus: (input: {
     orderId: string;
     status: OrderStatus;
-  }) => Order | null;
+    reason?: string;
+    actor?: string;
+  }) => Promise<Order | null>;
 };
 
 export type MercadoPagoPaymentProvider = (
@@ -130,7 +132,7 @@ export async function reconcileMercadoPagoEvent(
     };
   }
 
-  const order = orderRepository.findOrderById(orderId);
+  const order = await orderRepository.findOrderById(orderId);
 
   if (!order || !isPaymentForOrder(payment, order)) {
     return !order
@@ -146,7 +148,7 @@ export async function reconcileMercadoPagoEvent(
   }
 
   const providerStatus = mapMercadoPagoPaymentStatus(payment.status);
-  const reconciledOrder = expirePendingPaymentOrderIfNeeded({
+  const reconciledOrder = await expirePendingPaymentOrderIfNeeded({
     order,
     orderRepository,
     now
@@ -197,7 +199,7 @@ export async function reconcileMercadoPagoEvent(
   });
 }
 
-function expirePendingPaymentOrderIfNeeded({
+async function expirePendingPaymentOrderIfNeeded({
   order,
   orderRepository,
   now
@@ -205,11 +207,11 @@ function expirePendingPaymentOrderIfNeeded({
   order: Order;
   orderRepository: PaymentReconciliationOrderRepository;
   now: Date | string;
-}): Order {
-  const expirationResult = expirePendingPaymentOrders({
+}): Promise<Order> {
+  const expirationResult = await expirePendingPaymentOrders({
     now,
     orderRepository: {
-      listOrders: () => [order],
+      listOrders: async () => [order],
       updateOrderStatus: (input) => orderRepository.updateOrderStatus(input)
     }
   });
@@ -219,7 +221,7 @@ function expirePendingPaymentOrderIfNeeded({
   }
 
   return (
-    orderRepository.findOrderById(order.id) ?? {
+    (await orderRepository.findOrderById(order.id)) ?? {
       ...order,
       status: ORDER_STATUS.expired
     }
@@ -254,9 +256,10 @@ async function reconcileApprovedPayment({
     };
   }
 
-  const updatedOrder = orderRepository.updateOrderStatus({
+  const updatedOrder = await orderRepository.updateOrderStatus({
     orderId: order.id,
-    status: ORDER_STATUS.paid
+    status: ORDER_STATUS.paid,
+    reason: "payment_approved"
   });
   const paidOrder =
     updatedOrder?.status === ORDER_STATUS.paid
@@ -297,7 +300,7 @@ async function sendConfirmationEmailSafely(
   }
 }
 
-function reconcileFailedPayment({
+async function reconcileFailedPayment({
   order,
   payment,
   orderRepository
@@ -305,7 +308,7 @@ function reconcileFailedPayment({
   order: Order;
   payment: MercadoPagoPayment;
   orderRepository: PaymentReconciliationOrderRepository;
-}): PaymentReconciliationResult {
+}): Promise<PaymentReconciliationResult> {
   if (order.status !== ORDER_STATUS.pendingPayment) {
     return {
       status: "ignored",
@@ -314,9 +317,10 @@ function reconcileFailedPayment({
     };
   }
 
-  const updatedOrder = orderRepository.updateOrderStatus({
+  const updatedOrder = await orderRepository.updateOrderStatus({
     orderId: order.id,
-    status: ORDER_STATUS.paymentFailed
+    status: ORDER_STATUS.paymentFailed,
+    reason: "payment_failed"
   });
 
   return {

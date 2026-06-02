@@ -10,12 +10,12 @@ import {
 const now = "2026-05-30T12:00:00.000Z";
 
 describe("admin order fulfillment edits", () => {
-  it("allows contact field edits after payment", () => {
+  it("allows contact field edits after payment", async () => {
     const repository = createOrderRepository([
       getOrder({ status: ORDER_STATUS.paid })
     ]);
 
-    const result = updateOrderFulfillmentFields(
+    const result = await updateOrderFulfillmentFields(
       {
         orderId: "order-001",
         fields: {
@@ -39,7 +39,7 @@ describe("admin order fulfillment edits", () => {
     });
   });
 
-  it("allows shipping address and delivery notes only for shipping orders", () => {
+  it("allows shipping address and delivery notes only for shipping orders", async () => {
     const shippingOrder = getOrder({
       status: ORDER_STATUS.preparing,
       deliveryMethod: DELIVERY_METHOD.shipping
@@ -55,7 +55,7 @@ describe("admin order fulfillment edits", () => {
     expect(canEditOrderField("delivery.shippingAddress.addressLine", pickupOrder))
       .toBe(false);
 
-    const result = updateOrderFulfillmentFields(
+    const result = await updateOrderFulfillmentFields(
       {
         orderId: "order-001",
         fields: {
@@ -85,7 +85,7 @@ describe("admin order fulfillment edits", () => {
     });
   });
 
-  it("allows pickup coordination notes for pickup orders", () => {
+  it("allows pickup coordination notes for pickup orders", async () => {
     const repository = createOrderRepository([
       getOrder({
         status: ORDER_STATUS.readyForPickup,
@@ -93,7 +93,7 @@ describe("admin order fulfillment edits", () => {
       })
     ]);
 
-    const result = updateOrderFulfillmentFields(
+    const result = await updateOrderFulfillmentFields(
       {
         orderId: "order-001",
         fields: {
@@ -113,12 +113,12 @@ describe("admin order fulfillment edits", () => {
     });
   });
 
-  it("allows internal admin notes to be added or updated", () => {
+  it("allows internal admin notes to be added or updated", async () => {
     const repository = createOrderRepository([
       getOrder({ status: ORDER_STATUS.shipped, adminNotes: "Avisar al entregar" })
     ]);
 
-    const result = updateOrderFulfillmentFields(
+    const result = await updateOrderFulfillmentFields(
       {
         orderId: "order-001",
         fields: {
@@ -156,15 +156,15 @@ describe("admin order fulfillment edits", () => {
     }
   });
 
-  it("rejects invalid updates without partially mutating the order", () => {
+  it("rejects invalid updates without partially mutating the order", async () => {
     const order = getOrder({
       status: ORDER_STATUS.paid,
       adminNotes: "Nota original"
     });
     const repository = createOrderRepository([order]);
-    const before = repository.findOrderById("order-001");
+    const before = await repository.findOrderById("order-001");
 
-    const result = updateOrderFulfillmentFields(
+    const result = await updateOrderFulfillmentFields(
       {
         orderId: "order-001",
         fields: {
@@ -182,7 +182,7 @@ describe("admin order fulfillment edits", () => {
         field: "totalArs"
       }
     });
-    expect(repository.findOrderById("order-001")).toEqual(before);
+    expect(await repository.findOrderById("order-001")).toEqual(before);
   });
 });
 
@@ -190,9 +190,9 @@ function createOrderRepository(orders: readonly Order[]) {
   let storedOrders = orders.map(cloneOrder);
 
   return {
-    findOrderById: (orderId: string) =>
+    findOrderById: async (orderId: string) =>
       cloneOrder(storedOrders.find((order) => order.id === orderId) ?? null),
-    updateOrder: (order: Order) => {
+    updateOrder: async (order: Order) => {
       const orderIndex = storedOrders.findIndex(
         (storedOrder) => storedOrder.id === order.id
       );

@@ -15,7 +15,7 @@ export async function updateAdminOrderFulfillmentFields(
 
   const orderId = readStringField(formData, "orderId");
   const fields = readSubmittedFields(formData);
-  const result = updateOrderFulfillmentFields({
+  const result = await updateOrderFulfillmentFields({
     orderId,
     fields
   });

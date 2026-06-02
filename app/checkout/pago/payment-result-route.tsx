@@ -3,6 +3,8 @@ import { expirePendingPaymentOrders } from "../../../src/orders/order-expiration
 import { findOrderForPaymentReturn } from "../../../src/orders/order-store";
 import { getPaymentResultView } from "../../../src/payments/payment-result";
 
+export const dynamic = "force-dynamic";
+
 export type PaymentResultRoutePageProps = {
   searchParams?: Promise<{
     order?: string | string[];
@@ -15,9 +17,9 @@ export async function PaymentResultRoutePage({
 }: PaymentResultRoutePageProps) {
   const params = await searchParams;
 
-  expirePendingPaymentOrders();
+  await expirePendingPaymentOrders();
 
-  const order = findOrderForPaymentReturn({
+  const order = await findOrderForPaymentReturn({
     orderId: firstParam(params?.order),
     guestAccessToken: firstParam(params?.token)
   });

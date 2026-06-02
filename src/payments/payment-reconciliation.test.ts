@@ -53,6 +53,9 @@ describe("Mercado Pago payment reconciliation", () => {
     });
     expect(repository.getOrder()?.status).toBe(ORDER_STATUS.paid);
     expect(repository.transitionCount).toBe(1);
+    expect(repository.lastUpdate).toMatchObject({
+      reason: "payment_approved"
+    });
     expect(confirmationEmails).toHaveLength(1);
     expect(confirmationEmails[0]).toMatchObject({
       id: "order-001",
@@ -85,6 +88,9 @@ describe("Mercado Pago payment reconciliation", () => {
       orderStatus: ORDER_STATUS.paymentFailed
     });
     expect(repository.getOrder()?.status).toBe(ORDER_STATUS.paymentFailed);
+    expect(repository.lastUpdate).toMatchObject({
+      reason: "payment_failed"
+    });
   });
 
   it("does not repeat a paid transition for a duplicate success event", async () => {
@@ -327,21 +333,24 @@ function createOrderRepository(order: Order | null): TestOrderRepository {
 
   return {
     transitionCount: 0,
-    findOrderById(orderId: string): Order | null {
+    lastUpdate: null,
+    async findOrderById(orderId: string): Promise<Order | null> {
       return currentOrder?.id === orderId ? cloneOrder(currentOrder) : null;
     },
-    updateOrderStatus({
-      orderId,
-      status
-    }: {
+    async updateOrderStatus(input: {
       orderId: string;
       status: OrderStatus;
-    }): Order | null {
+      reason?: string;
+      actor?: string;
+    }): Promise<Order | null> {
+      const { orderId, status } = input;
+
       if (!currentOrder || currentOrder.id !== orderId) {
         return null;
       }
 
       this.transitionCount += 1;
+      this.lastUpdate = input;
       currentOrder = {
         ...currentOrder,
         status
@@ -357,6 +366,12 @@ function createOrderRepository(order: Order | null): TestOrderRepository {
 
 type TestOrderRepository = PaymentReconciliationOrderRepository & {
   transitionCount: number;
+  lastUpdate: {
+    orderId: string;
+    status: OrderStatus;
+    reason?: string;
+    actor?: string;
+  } | null;
   getOrder: () => Order | null;
 };
 
