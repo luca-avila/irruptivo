@@ -1,6 +1,7 @@
 services:
   postgres:
     image: postgres:16
+    restart: unless-stopped
     ports:
       - "5432:5432"
     environment:
@@ -9,6 +10,48 @@ services:
       POSTGRES_DB: irruptivo
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U irruptivo -d irruptivo"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # One-shot: apply pending Prisma migrations, then exit. The app waits for this.
+  migrate:
+    build:
+      context: .
+      target: deps
+    command: ["npx", "prisma", "migrate", "deploy"]
+    environment:
+      DATABASE_URL: postgresql://irruptivo:irruptivo@postgres:5432/irruptivo?schema=public
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  app:
+    build:
+      context: .
+      target: runner
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    # Secrets (admin creds, Mercado Pago, email). Create a .env from .env.example.
+    env_file:
+      - .env
+    # These override .env so they point at the in-network DB and the persisted volume.
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://irruptivo:irruptivo@postgres:5432/irruptivo?schema=public
+      IRRUPTIVO_MEDIA_ROOT: /var/lib/irruptivo/media
+    volumes:
+      - media_data:/var/lib/irruptivo/media
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
 volumes:
   postgres_data:
+  media_data:

@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ["sharp"]
+  output: "standalone",
+  serverExternalPackages: ["sharp", "@prisma/client"]
 };
 
 export default nextConfig;
