@@ -76,6 +76,7 @@
 }
 
 .navLink:focus-visible,
+.storeLink:focus-visible,
 .logoutButton:focus-visible,
 .actionLink:focus-visible,
 .headerAction:focus-visible,
@@ -89,6 +90,28 @@
 .field select:focus-visible {
   outline: 2px solid #c7f23a;
   outline-offset: 2px;
+}
+
+.sidebarFooter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.storeLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  min-height: 2.55rem;
+  padding: 0 0.85rem;
+  border: 1px solid #c7f23a;
+  border-radius: 8px;
+  background: #c7f23a;
+  color: #111111;
+  font-size: 0.9rem;
+  font-weight: 750;
 }
 
 .logoutForm {

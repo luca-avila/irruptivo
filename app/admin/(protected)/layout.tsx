@@ -1,4 +1,10 @@
-import { ClipboardList, LayoutDashboard, LogOut, Package } from "lucide-react";
+import {
+  ClipboardList,
+  LayoutDashboard,
+  LogOut,
+  Package,
+  Store
+} from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
@@ -67,12 +73,19 @@ export default async function ProtectedAdminLayout({
           })}
         </nav>
 
-        <form className={styles.logoutForm} action={logoutAdmin}>
-          <button className={styles.logoutButton} type="submit">
-            <LogOut aria-hidden="true" size={18} strokeWidth={2} />
-            <span>Cerrar sesión</span>
-          </button>
-        </form>
+        <div className={styles.sidebarFooter}>
+          <Link className={styles.storeLink} href="/">
+            <Store aria-hidden="true" size={18} strokeWidth={2} />
+            <span>Volver a la tienda</span>
+          </Link>
+
+          <form className={styles.logoutForm} action={logoutAdmin}>
+            <button className={styles.logoutButton} type="submit">
+              <LogOut aria-hidden="true" size={18} strokeWidth={2} />
+              <span>Cerrar sesión</span>
+            </button>
+          </form>
+        </div>
       </aside>
 
       <div className={styles.content}>{children}</div>
