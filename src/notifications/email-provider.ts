@@ -59,9 +59,17 @@ type NormalizedHttpEmailProviderConfig = {
   fromName: string;
 };
 
+type NormalizedResendEmailProviderConfig = {
+  providerToken: string;
+  fromEmail: string;
+  fromName: string;
+};
+
 const DEFAULT_FROM_NAME = "Irruptivo";
 const LOCAL_EMAIL_PROVIDER = "local";
 const HTTP_EMAIL_PROVIDER = "http";
+const RESEND_EMAIL_PROVIDER = "resend";
+const RESEND_EMAIL_ENDPOINT = "https://api.resend.com/emails";
 
 // Dev/demo-only transport outbox. Production email delivery state is persisted in
 // `email_deliveries`; this array exists only for local provider inspection/tests.
@@ -76,6 +84,22 @@ export async function sendEmail(
   }: SendEmailOptions = {}
 ): Promise<EmailSendResult> {
   const normalizedMessage = normalizeEmailMessage(message);
+
+  if (isResendEmailProvider(config)) {
+    const normalizedConfig = normalizeResendEmailProviderConfig(config);
+
+    if (normalizedConfig.status === "configured") {
+      return sendResendEmail(normalizedMessage, normalizedConfig.config, fetcher);
+    }
+
+    return {
+      status: "configuration_missing",
+      provider: RESEND_EMAIL_PROVIDER,
+      message: getMissingConfigMessage(normalizedConfig.missingConfig),
+      missingConfig: normalizedConfig.missingConfig
+    };
+  }
+
   const normalizedConfig = normalizeHttpEmailProviderConfig(config);
 
   if (normalizedConfig.status === "configured") {
@@ -113,6 +137,51 @@ export function readLocalEmailOutboxForTests(): LocalEmailOutboxRecord[] {
 
 export function resetLocalEmailOutboxForTests(): void {
   localEmailOutbox.splice(0, localEmailOutbox.length);
+}
+
+async function sendResendEmail(
+  message: EmailMessage,
+  config: NormalizedResendEmailProviderConfig,
+  fetcher: typeof fetch
+): Promise<EmailSendResult> {
+  const response = await fetcher(RESEND_EMAIL_ENDPOINT, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${config.providerToken}`
+    },
+    body: JSON.stringify({
+      from: formatEmailAddress({
+        email: config.fromEmail,
+        name: config.fromName
+      }),
+      to: [message.to.email],
+      subject: message.subject,
+      ...(message.html ? { html: message.html } : {}),
+      text: message.text,
+      ...(message.replyTo
+        ? {
+            reply_to: formatEmailAddress(message.replyTo)
+          }
+        : {})
+    })
+  }).catch(() => null);
+
+  if (!response?.ok) {
+    return {
+      status: "failed",
+      provider: RESEND_EMAIL_PROVIDER,
+      message: "No pudimos enviar el email transaccional con Resend."
+    };
+  }
+
+  const responseBody: unknown = await response.json().catch(() => null);
+
+  return {
+    status: "sent",
+    provider: RESEND_EMAIL_PROVIDER,
+    messageId: readProviderMessageId(responseBody) ?? randomUUID()
+  };
 }
 
 async function sendHttpEmail(
@@ -172,6 +241,42 @@ function sendLocalEmail(
   };
 }
 
+function normalizeResendEmailProviderConfig(config: EmailProviderConfig):
+  | {
+      status: "configured";
+      config: NormalizedResendEmailProviderConfig;
+      missingConfig: [];
+    }
+  | {
+      status: "missing";
+      missingConfig: string[];
+    } {
+  const providerToken = config.providerToken?.trim() ?? "";
+  const fromEmail = config.fromEmail?.trim() ?? "";
+  const fromName = config.fromName?.trim() || DEFAULT_FROM_NAME;
+  const missingConfig = [
+    providerToken ? null : "IRRUPTIVO_EMAIL_PROVIDER_TOKEN",
+    fromEmail ? null : "IRRUPTIVO_EMAIL_FROM_EMAIL"
+  ].filter((key): key is string => Boolean(key));
+
+  if (!providerToken || !fromEmail) {
+    return {
+      status: "missing",
+      missingConfig
+    };
+  }
+
+  return {
+    status: "configured",
+    config: {
+      providerToken,
+      fromEmail,
+      fromName
+    },
+    missingConfig: []
+  };
+}
+
 function normalizeHttpEmailProviderConfig(config: EmailProviderConfig):
   | {
       status: "configured";
@@ -218,11 +323,15 @@ function shouldUseLocalEmailProvider(config: EmailProviderConfig): boolean {
     return true;
   }
 
-  if (provider === HTTP_EMAIL_PROVIDER) {
+  if (provider === HTTP_EMAIL_PROVIDER || provider === RESEND_EMAIL_PROVIDER) {
     return false;
   }
 
   return config.nodeEnv !== "production";
+}
+
+function isResendEmailProvider(config: EmailProviderConfig): boolean {
+  return config.provider?.trim().toLowerCase() === RESEND_EMAIL_PROVIDER;
 }
 
 function normalizeEmailMessage(message: EmailMessage): EmailMessage {
@@ -290,6 +399,12 @@ function readProviderMessageId(value: unknown): string | null {
 
 function readOptionalString(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function formatEmailAddress(recipient: EmailRecipient): string {
+  return recipient.name
+    ? `${recipient.name} <${recipient.email}>`
+    : recipient.email;
 }
 
 function normalizeAbsoluteUrl(value: string | null | undefined): string | null {

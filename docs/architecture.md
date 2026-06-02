@@ -145,10 +145,13 @@ implementado; backup/cleanup del volumen es tarea humana pendiente.
 
 ## Notificaciones por email
 
-`notifications/email-provider.ts` es un adaptador agnóstico de proveedor (HTTP) con un
-**outbox local** para dev/demo. En producción requiere configurar un proveedor HTTP
-(p. ej. Resend) y verificar el dominio remitente (SPF/DKIM). El estado de envío se persiste
-en `email_deliveries`. Pendiente para producción — ver [`hitl-checklist.md`](./hitl-checklist.md).
+`notifications/email-provider.ts` es un adaptador agnóstico con **outbox local** para
+dev/demo, un modo HTTP genérico y un modo de producción `resend`. Resend usa
+`https://api.resend.com/emails` con `IRRUPTIVO_EMAIL_PROVIDER_TOKEN` y el remitente
+`IRRUPTIVO_EMAIL_FROM_EMAIL` / `IRRUPTIVO_EMAIL_FROM_NAME`; `IRRUPTIVO_EMAIL_PROVIDER_URL`
+sólo aplica al modo `http`. El estado de envío se persiste en `email_deliveries`.
+Pendiente para producción: verificar el dominio remitente en Resend (SPF/DKIM) — ver
+[`hitl-checklist.md`](./hitl-checklist.md).
 
 ## Deploy
 

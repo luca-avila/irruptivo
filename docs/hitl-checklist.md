@@ -110,14 +110,15 @@ These are business/content items. The app runs without them, but it will look un
   - Owner: human
   - Blocking level: Production
 
-- [ ] **Email provider decision**
-  - Action: Choose an HTTP email provider and set the email env vars. Recommended: Resend.
+- [X] **Email provider decision**
+  - Action: Resend chosen and integrated as the production transactional email provider.
   - Why it matters: The adapter is provider-agnostic with a local outbox fallback; a real
     provider is required to send confirmation emails in production.
-  - Files/env: `IRRUPTIVO_EMAIL_PROVIDER=http`, `IRRUPTIVO_EMAIL_PROVIDER_URL`,
-    `IRRUPTIVO_EMAIL_PROVIDER_TOKEN`, `IRRUPTIVO_EMAIL_FROM_EMAIL`,
-    `IRRUPTIVO_EMAIL_FROM_NAME`; `src/notifications/email-provider.ts`.
-  - Owner: human (choice) → agent (mapping if payload differs)
+  - Files/env: `IRRUPTIVO_EMAIL_PROVIDER=resend`, `IRRUPTIVO_EMAIL_PROVIDER_TOKEN`,
+    `IRRUPTIVO_EMAIL_FROM_EMAIL`, `IRRUPTIVO_EMAIL_FROM_NAME`;
+    `IRRUPTIVO_EMAIL_PROVIDER_URL` is not used in resend mode.
+    `src/notifications/email-provider.ts`.
+  - Owner: agent (integration done) → human (production credentials)
   - Blocking level: Production
 
 - [ ] **Email sender-domain DNS verification**
@@ -181,7 +182,7 @@ Safe to leave for later; none block demo or production.
 |---|---|---|---|---|---|---|
 | Deployment target | VPS / Serverless (Vercel) | VPS | Before infra setup | No | Yes | Gates media and deploy operations. PostgreSQL persistence is implemented. |
 | Persistence layer | PostgreSQL + Prisma implemented | Keep current DB path | Done | No | No | Business state persists across restart; no stock reservation/hold system remains. |
-| Email provider | Resend / SendGrid / Postmark / Mailgun | Resend | Before production (start DNS early) | No | Yes | Generic HTTP adapter; verify payload shape matches chosen provider. |
+| Email provider | Resend chosen | Resend | Done | No | No | Resend mode implemented; production credentials still need to be set. |
 | Media storage | VPS filesystem / object storage (S3/R2) | VPS filesystem | With deployment target | No | Yes | Filesystem requires VPS; serverless requires object storage. |
 | Pickup location copy | Confirm Benavidez/Zona Norte / edit | Confirm as-is | Before demo | Yes | No | Hardcoded in trust pages + email. |
 | MP credential mode for demo | Sandbox (`TEST-`) / skip MP | Sandbox `TEST-` | Before demo | No | No | Live token routes to production; `TEST-` auto-routes to sandbox. |
@@ -198,11 +199,10 @@ In order:
    `payment-result-page.tsx`.
 2. **Make the deployment-target decision (VPS vs serverless).** This unblocks media and
    deploy operations.
-3. **Start email sender-domain DNS verification** in parallel — it has the longest lead time,
-   even before the provider is finalized.
+3. **Start Resend sender-domain DNS verification** in parallel — it has the longest lead time.
 4. **Mercado Pago production setup:** live credentials, webhook secret, public
    `MERCADO_PAGO_NOTIFICATION_URL`, real `IRRUPTIVO_APP_URL`; then run one end-to-end
    purchase test.
-5. **Set and verify all production env vars**, then finalize the email provider integration.
+5. **Set and verify all production env vars**, including Resend credentials and sender.
 6. **Leave deferred items** (dynamic shipping, address validation, backups, analytics,
    advanced/marketing email) for post-MVP.

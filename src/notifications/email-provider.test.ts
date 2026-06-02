@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   readLocalEmailOutboxForTests,
@@ -15,6 +15,14 @@ const message = {
   subject: "Confirmación de compra IRR-000001 - Irruptivo",
   text: "Recibimos tu pago confirmado.",
   html: "<p>Recibimos tu pago confirmado.</p>"
+} satisfies EmailMessage;
+
+const messageWithReplyTo = {
+  ...message,
+  replyTo: {
+    email: "soporte@irruptivo.com",
+    name: "Soporte Irruptivo"
+  }
 } satisfies EmailMessage;
 
 describe("email provider adapter", () => {
@@ -57,6 +65,119 @@ describe("email provider adapter", () => {
         "Falta configurar IRRUPTIVO_EMAIL_PROVIDER_URL, IRRUPTIVO_EMAIL_PROVIDER_TOKEN e IRRUPTIVO_EMAIL_FROM_EMAIL para enviar emails transaccionales en producción.",
       missingConfig: [
         "IRRUPTIVO_EMAIL_PROVIDER_URL",
+        "IRRUPTIVO_EMAIL_PROVIDER_TOKEN",
+        "IRRUPTIVO_EMAIL_FROM_EMAIL"
+      ]
+    });
+    expect(readLocalEmailOutboxForTests()).toEqual([]);
+  });
+
+  it("keeps sending through the generic HTTP provider when configured", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () => {
+      return new Response(JSON.stringify({ messageId: "http-email-123" }), {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json"
+        }
+      });
+    });
+
+    const result = await sendEmail(message, {
+      config: {
+        provider: "http",
+        providerUrl: "https://email-provider.example/send",
+        providerToken: "http_secret",
+        fromEmail: "ventas@irruptivo.com",
+        fromName: "Irruptivo",
+        nodeEnv: "production"
+      },
+      fetcher
+    });
+
+    expect(result).toEqual({
+      status: "sent",
+      provider: "http",
+      messageId: "http-email-123"
+    });
+    expect(fetcher).toHaveBeenCalledExactlyOnceWith(
+      "https://email-provider.example/send",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer http_secret"
+        },
+        body: JSON.stringify({
+          from: {
+            email: "ventas@irruptivo.com",
+            name: "Irruptivo"
+          },
+          ...message
+        })
+      }
+    );
+  });
+
+  it("sends production email through Resend with Resend API payload shape", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () => {
+      return new Response(JSON.stringify({ id: "resend-email-123" }), {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json"
+        }
+      });
+    });
+
+    const result = await sendEmail(messageWithReplyTo, {
+      config: {
+        provider: "resend",
+        providerToken: "re_secret",
+        fromEmail: "ventas@irruptivo.com",
+        fromName: "Irruptivo",
+        nodeEnv: "production"
+      },
+      fetcher
+    });
+
+    expect(result).toEqual({
+      status: "sent",
+      provider: "resend",
+      messageId: "resend-email-123"
+    });
+    expect(fetcher).toHaveBeenCalledExactlyOnceWith(
+      "https://api.resend.com/emails",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer re_secret"
+        },
+        body: JSON.stringify({
+          from: "Irruptivo <ventas@irruptivo.com>",
+          to: ["luca@example.com"],
+          subject: "Confirmación de compra IRR-000001 - Irruptivo",
+          html: "<p>Recibimos tu pago confirmado.</p>",
+          text: "Recibimos tu pago confirmado.",
+          reply_to: "Soporte Irruptivo <soporte@irruptivo.com>"
+        })
+      }
+    );
+  });
+
+  it("surfaces missing Resend production configuration without requiring provider URL", async () => {
+    const result = await sendEmail(message, {
+      config: {
+        provider: "resend",
+        nodeEnv: "production"
+      }
+    });
+
+    expect(result).toEqual({
+      status: "configuration_missing",
+      provider: "resend",
+      message:
+        "Falta configurar IRRUPTIVO_EMAIL_PROVIDER_TOKEN e IRRUPTIVO_EMAIL_FROM_EMAIL para enviar emails transaccionales en producción.",
+      missingConfig: [
         "IRRUPTIVO_EMAIL_PROVIDER_TOKEN",
         "IRRUPTIVO_EMAIL_FROM_EMAIL"
       ]
