@@ -134,6 +134,14 @@ export async function changeAdminProductStatus(
     `${ADMIN_PRODUCTS_PATH}?error=duplicate_variant_sku`
   );
   revalidateCatalogPaths(result.product);
+
+  // Redirect so the list re-renders with the new status (button/pill flip) and
+  // shows the matching feedback banner.
+  const stateParam =
+    status === PRODUCT_STATUS.active
+      ? "producto-activado"
+      : "producto-desactivado";
+  redirect(`${ADMIN_PRODUCTS_PATH}?estado=${stateParam}`);
 }
 
 export async function createAdminProductVariant(
