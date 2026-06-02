@@ -7,13 +7,13 @@ import {
   RotateCcw,
   ShieldCheck,
   ShoppingBag,
-  Truck
+  Truck,
 } from "lucide-react";
 import Link from "next/link";
 
 import {
   type PaymentResultState,
-  type PaymentResultView
+  type PaymentResultView,
 } from "../../payments/payment-result";
 import styles from "./payment-result-page.module.css";
 
@@ -25,11 +25,11 @@ const stateIcons = {
   success: CheckCircle2,
   failure: AlertCircle,
   pending: Clock3,
-  expired: RotateCcw
+  expired: RotateCcw,
 } as const satisfies Record<PaymentResultState, typeof CheckCircle2>;
 
 export function StorefrontPaymentResultPage({
-  view
+  view,
 }: StorefrontPaymentResultPageProps) {
   if (!view) {
     return <PaymentResultNotFound />;
@@ -45,8 +45,13 @@ export function StorefrontPaymentResultPage({
           <span>Volver a la tienda</span>
         </Link>
 
-        <section className={styles.panel} aria-labelledby="payment-result-title">
-          <div className={`${styles.statusIcon} ${styles[`${view.state}Icon`]}`}>
+        <section
+          className={styles.panel}
+          aria-labelledby="payment-result-title"
+        >
+          <div
+            className={`${styles.statusIcon} ${styles[`${view.state}Icon`]}`}
+          >
             <StatusIcon aria-hidden="true" size={28} strokeWidth={2.1} />
           </div>
 
@@ -75,7 +80,10 @@ export function StorefrontPaymentResultPage({
             </div>
           </dl>
 
-          <section className={styles.nextSteps} aria-labelledby="next-steps-title">
+          <section
+            className={styles.nextSteps}
+            aria-labelledby="next-steps-title"
+          >
             <div className={styles.sectionTitleRow}>
               <Truck aria-hidden="true" size={19} strokeWidth={2.1} />
               <h2 id="next-steps-title">Próximos pasos</h2>
@@ -89,23 +97,35 @@ export function StorefrontPaymentResultPage({
 
           <div className={styles.actions}>
             {view.guestStatusAction ? (
-              <Link className={styles.primaryAction} href={view.guestStatusAction.href}>
+              <Link
+                className={styles.primaryAction}
+                href={view.guestStatusAction.href}
+              >
                 <ShieldCheck aria-hidden="true" size={18} strokeWidth={2.1} />
                 <span>{view.guestStatusAction.label}</span>
               </Link>
             ) : (
-              <Link className={styles.primaryAction} href={view.primaryAction.href}>
+              <Link
+                className={styles.primaryAction}
+                href={view.primaryAction.href}
+              >
                 <ShoppingBag aria-hidden="true" size={18} strokeWidth={2.1} />
                 <span>{view.primaryAction.label}</span>
               </Link>
             )}
             {view.guestStatusAction ? (
-              <Link className={styles.secondaryAction} href={view.primaryAction.href}>
+              <Link
+                className={styles.secondaryAction}
+                href={view.primaryAction.href}
+              >
                 <ShoppingBag aria-hidden="true" size={18} strokeWidth={2.1} />
                 <span>{view.primaryAction.label}</span>
               </Link>
             ) : null}
-            <a className={styles.secondaryAction} href={view.supportAction.href}>
+            <a
+              className={styles.secondaryAction}
+              href={view.supportAction.href}
+            >
               <MessageCircle aria-hidden="true" size={18} strokeWidth={2.1} />
               <span>{view.supportAction.label}</span>
               <ExternalLink aria-hidden="true" size={15} strokeWidth={2.1} />
@@ -138,7 +158,7 @@ function PaymentResultNotFound() {
             </Link>
             <a
               className={styles.secondaryAction}
-              href="https://wa.me/5490000000000"
+              href="https://wa.me/5491164176557"
             >
               <MessageCircle aria-hidden="true" size={18} strokeWidth={2.1} />
               <span>Escribir por WhatsApp</span>
