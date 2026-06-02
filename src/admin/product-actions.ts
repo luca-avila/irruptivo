@@ -10,6 +10,7 @@ import {
   type ProductImageManagementErrorCode
 } from "../catalog/product-images";
 import {
+  PRODUCT_STATUS,
   type CatalogProductRecord,
   type ProductArea,
   type ProductStatus
@@ -46,7 +47,9 @@ export async function createAdminProduct(formData: FormData): Promise<void> {
       clothingSubcategory: readStringField(formData, "clothingSubcategory"),
       supplementType: readStringField(formData, "supplementType"),
       basePriceArs: Number(readStringField(formData, "basePriceArs")),
-      status: readStringField(formData, "status") as ProductStatus
+      // A brand-new product has no variants yet, so it can only be created
+      // inactive. It gets activated from the edit page once a variant exists.
+      status: PRODUCT_STATUS.inactive
     },
     products
   );
@@ -61,7 +64,12 @@ export async function createAdminProduct(formData: FormData): Promise<void> {
   );
   revalidateCatalogPaths(result.product);
 
-  redirect(`${ADMIN_PRODUCTS_PATH}?estado=producto-creado`);
+  // Send the admin straight to the edit page to add variants and images.
+  redirect(
+    `${ADMIN_PRODUCTS_PATH}/${encodeURIComponent(
+      result.product.id
+    )}/editar?estado=producto-creado`
+  );
 }
 
 export async function updateAdminProduct(formData: FormData): Promise<void> {

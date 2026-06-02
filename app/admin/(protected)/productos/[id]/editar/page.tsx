@@ -109,6 +109,14 @@ function getProductFeedbackMessage({
     };
   }
 
+  if (state === "producto-creado") {
+    return {
+      tone: "success",
+      message:
+        "Producto creado (inactivo). Agregá al menos una variante/SKU y sus imágenes; después cambiá el estado a Activo para publicarlo."
+    };
+  }
+
   if (state === "producto-actualizado") {
     return { tone: "success", message: "Producto actualizado correctamente." };
   }

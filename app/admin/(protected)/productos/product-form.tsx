@@ -1,15 +1,12 @@
 import Link from "next/link";
 
 import {
-  PRODUCT_AREA,
   PRODUCT_STATUS,
   type CatalogProductRecord
 } from "../../../../src/catalog/catalog";
-import {
-  getAdminProductAreaLabel,
-  getAdminProductStatusLabel
-} from "../../../../src/admin/products";
+import { getAdminProductStatusLabel } from "../../../../src/admin/products";
 import styles from "../admin.module.css";
+import { ProductCategoryFields } from "./product-category-fields";
 
 type ProductFormProps = {
   action: (formData: FormData) => void | Promise<void>;
@@ -18,7 +15,7 @@ type ProductFormProps = {
 };
 
 export function ProductForm({ action, submitLabel, product }: ProductFormProps) {
-  const selectedArea = product?.area ?? PRODUCT_AREA.clothing;
+  const selectedArea = product?.area ?? "clothing";
   const selectedStatus = product?.status ?? PRODUCT_STATUS.inactive;
 
   return (
@@ -73,19 +70,13 @@ export function ProductForm({ action, submitLabel, product }: ProductFormProps) 
         />
       </label>
 
-      <div className={styles.formGrid}>
-        <label className={styles.field}>
-          <span>Área</span>
-          <select name="area" defaultValue={selectedArea} required>
-            <option value={PRODUCT_AREA.clothing}>
-              {getAdminProductAreaLabel(PRODUCT_AREA.clothing)}
-            </option>
-            <option value={PRODUCT_AREA.supplement}>
-              {getAdminProductAreaLabel(PRODUCT_AREA.supplement)}
-            </option>
-          </select>
-        </label>
+      <ProductCategoryFields
+        initialArea={selectedArea}
+        initialClothingSubcategory={product?.clothingSubcategory ?? ""}
+        initialSupplementType={product?.supplementType ?? ""}
+      />
 
+      {product ? (
         <label className={styles.field}>
           <span>Estado</span>
           <select name="status" defaultValue={selectedStatus} required>
@@ -97,32 +88,12 @@ export function ProductForm({ action, submitLabel, product }: ProductFormProps) 
             </option>
           </select>
         </label>
-      </div>
-
-      <div className={styles.formGrid}>
-        <label className={styles.field}>
-          <span>Subcategoría de indumentaria</span>
-          <input
-            name="clothingSubcategory"
-            type="text"
-            defaultValue={product?.clothingSubcategory ?? ""}
-            maxLength={60}
-          />
-        </label>
-
-        <label className={styles.field}>
-          <span>Tipo de suplemento</span>
-          <input
-            name="supplementType"
-            type="text"
-            defaultValue={product?.supplementType ?? ""}
-            maxLength={60}
-          />
-        </label>
-      </div>
+      ) : null}
 
       <p className={styles.formHint}>
-        Para activar un producto tiene que existir al menos una variante/SKU.
+        {product
+          ? "Para activar un producto tiene que existir al menos una variante/SKU."
+          : "El producto se crea inactivo. Después de crearlo vas a poder cargar variantes e imágenes, y recién ahí activarlo."}
       </p>
 
       <div className={styles.formActions}>
