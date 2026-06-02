@@ -7,6 +7,7 @@ import {
   type CatalogProductVariantRecord,
   type VariantOptionValues
 } from "../catalog/catalog";
+import { getPublicImageSet } from "../catalog/product-images";
 import { loadCatalogProducts } from "../catalog/product-repository";
 import { getVariantAvailability } from "../catalog/variants";
 import {
@@ -202,10 +203,10 @@ function getProductHref(product: CatalogProductRecord): string {
 function getPrimaryImage(
   images: readonly CatalogProductImageRecord[]
 ): CartReviewImage | null {
-  const image = [...images].sort(
-    (first, second) =>
-      first.sortOrder - second.sortOrder || first.id.localeCompare(second.id)
-  )[0];
+  // Reuse the public image set so the cart thumbnail resolves to a servable
+  // /media URL (matching grid/carousel) and skips soft-deleted images, instead
+  // of leaking the raw relative storage path.
+  const [image] = getPublicImageSet(images, { usage: "card" });
 
   return image
     ? {
