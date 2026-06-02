@@ -252,6 +252,41 @@ export async function reconcileMercadoPagoEvent(
   });
 }
 
+/**
+ * Reconciles a payment using only its provider id, for the buyer's return to
+ * the success page. The payment id comes from Mercado Pago's redirect params,
+ * but the status, order ownership, and amount are all verified server-side
+ * against the Mercado Pago API (the same checks as the webhook path), so the
+ * redirect params act only as a trigger and cannot be forged into a
+ * confirmation. Idempotent with the webhook via the order-level paid guard.
+ */
+export async function reconcileMercadoPagoPaymentById(
+  providerPaymentId: string,
+  options: ReconcileMercadoPagoEventOptions = {}
+): Promise<PaymentReconciliationResult> {
+  const paymentId = providerPaymentId.trim();
+
+  if (!paymentId) {
+    return {
+      status: "ignored",
+      reason: "unsupported_event",
+      providerPaymentId: ""
+    };
+  }
+
+  return reconcileMercadoPagoEvent(
+    {
+      id: paymentId,
+      liveMode: null,
+      type: "payment",
+      action: "payment.updated",
+      dataId: paymentId,
+      dateCreated: null
+    },
+    options
+  );
+}
+
 async function expirePendingPaymentOrderIfNeeded({
   order,
   orderRepository,

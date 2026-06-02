@@ -11,6 +11,7 @@ import {
 } from "./payment-events";
 import {
   reconcileMercadoPagoEvent,
+  reconcileMercadoPagoPaymentById,
   type MercadoPagoPayment,
   type PaymentEventRecorder,
   type PaymentReconciliationOrderRepository
@@ -288,6 +289,56 @@ describe("Mercado Pago payment reconciliation", () => {
       }
     });
     expect(repository.getOrder()?.status).toBe(ORDER_STATUS.paid);
+  });
+
+  it("reconciles to paid from only a payment id on the buyer's return", async () => {
+    const repository = createOrderRepository(getOrder(ORDER_STATUS.pendingPayment));
+    const eventRecorder = createTestPaymentEventRecorder();
+    const fetchedPaymentIds: string[] = [];
+
+    const result = await reconcileMercadoPagoPaymentById("payment-001", {
+      paymentProvider: async (providerPaymentId) => {
+        fetchedPaymentIds.push(providerPaymentId);
+
+        return getPayment({ status: "approved" });
+      },
+      orderRepository: repository,
+      eventRecorder: eventRecorder.record,
+      confirmationEmailSender: async (order) =>
+        getSentConfirmationEmailResult(order),
+      now
+    });
+
+    expect(fetchedPaymentIds).toEqual(["payment-001"]);
+    expect(result).toMatchObject({
+      status: "paid",
+      orderId: "order-001",
+      providerPaymentId: "payment-001",
+      orderStatus: ORDER_STATUS.paid
+    });
+    expect(repository.getOrder()?.status).toBe(ORDER_STATUS.paid);
+  });
+
+  it("ignores an empty payment id on return without touching the order or the API", async () => {
+    const repository = createOrderRepository(getOrder(ORDER_STATUS.pendingPayment));
+    let providerCalls = 0;
+
+    const result = await reconcileMercadoPagoPaymentById("   ", {
+      paymentProvider: async () => {
+        providerCalls += 1;
+
+        return getPayment({ status: "approved" });
+      },
+      orderRepository: repository,
+      now
+    });
+
+    expect(providerCalls).toBe(0);
+    expect(result).toMatchObject({
+      status: "ignored",
+      reason: "unsupported_event"
+    });
+    expect(repository.getOrder()?.status).toBe(ORDER_STATUS.pendingPayment);
   });
 });
 
