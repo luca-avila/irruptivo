@@ -1,8 +1,7 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { DELIVERY_METHOD, ORDER_STATUS, type OrderStatus } from "../domain/rules";
 import {
-  resetOrderConfirmationEmailDeliveriesForTests,
   type OrderConfirmationEmailResult
 } from "../notifications/order-confirmation-email";
 import { type Order } from "../orders/order-creation";
@@ -20,10 +19,6 @@ import {
 const now = "2026-05-30T12:00:00.000Z";
 
 describe("Mercado Pago payment reconciliation", () => {
-  beforeEach(() => {
-    resetOrderConfirmationEmailDeliveriesForTests();
-  });
-
   it("moves a pending order to paid and sends confirmation email after verified server-side approved payment", async () => {
     const repository = createOrderRepository(getOrder(ORDER_STATUS.pendingPayment));
     const eventRecorder = createTestPaymentEventRecorder();

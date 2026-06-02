@@ -1,3 +1,6 @@
+import { type EmailDelivery as EmailDeliveryRow } from "@prisma/client";
+
+import { prisma } from "../db/client";
 import {
   DELIVERY_METHOD,
   ORDER_STATUS,
@@ -76,16 +79,24 @@ type OrderConfirmationEmailConfig = {
   whatsappUrl?: string | null;
 };
 
+export type OrderConfirmationEmailDeliveryWriteRow = Omit<
+  EmailDeliveryRow,
+  "id"
+>;
+
 const SUPPORT_WHATSAPP_URL = "https://wa.me/5490000000000";
+const orderConfirmationEmailDeliveryStatuses = [
+  "sending",
+  "sent",
+  "configuration_missing",
+  "failed"
+] as const satisfies readonly OrderConfirmationEmailDeliveryStatus[];
 
 const priceFormatter = new Intl.NumberFormat("es-AR", {
   style: "currency",
   currency: "ARS",
   maximumFractionDigits: 0
 });
-
-const orderConfirmationEmailDeliveries: OrderConfirmationEmailDeliveryRecord[] =
-  [];
 
 export async function sendOrderConfirmationOnce(
   order: Order,
@@ -115,29 +126,24 @@ export async function sendOrderConfirmationOnce(
   }
 
   const recipientEmail = order.contact.email;
-  const existingDelivery = orderConfirmationEmailDeliveries.find(
-    (delivery) => delivery.orderId === order.id
-  );
-
-  if (existingDelivery) {
-    return {
-      status: "duplicate",
-      orderId: order.id,
-      recipientEmail,
-      previousStatus: existingDelivery.status
-    };
-  }
-
   const attemptedAt = getDate(now, "now").toISOString();
-  const deliveryRecord: OrderConfirmationEmailDeliveryRecord = {
+  const claim = await claimOrderConfirmationEmailDelivery({
     orderId: order.id,
     recipientEmail,
     status: "sending",
     providerMessageId: null,
     attemptedAt,
     errorMessage: null
-  };
-  orderConfirmationEmailDeliveries.push(deliveryRecord);
+  });
+
+  if (claim.status === "duplicate") {
+    return {
+      status: "duplicate",
+      orderId: order.id,
+      recipientEmail: claim.delivery.recipientEmail,
+      previousStatus: claim.delivery.status
+    };
+  }
 
   const message = buildOrderConfirmationEmailMessage({
     order,
@@ -147,8 +153,12 @@ export async function sendOrderConfirmationOnce(
   const sendResult = await sendEmailSafely(emailProvider, message);
 
   if (sendResult.status === "sent") {
-    deliveryRecord.status = "sent";
-    deliveryRecord.providerMessageId = sendResult.messageId;
+    await updateOrderConfirmationEmailDelivery({
+      orderId: order.id,
+      status: "sent",
+      providerMessageId: sendResult.messageId,
+      errorMessage: null
+    });
 
     return {
       status: "sent",
@@ -158,8 +168,12 @@ export async function sendOrderConfirmationOnce(
     };
   }
 
-  deliveryRecord.status = sendResult.status;
-  deliveryRecord.errorMessage = sendResult.message;
+  await updateOrderConfirmationEmailDelivery({
+    orderId: order.id,
+    status: sendResult.status,
+    providerMessageId: null,
+    errorMessage: sendResult.message
+  });
 
   return {
     status: sendResult.status,
@@ -169,17 +183,54 @@ export async function sendOrderConfirmationOnce(
   };
 }
 
-export function readOrderConfirmationEmailDeliveriesForTests(): OrderConfirmationEmailDeliveryRecord[] {
-  return orderConfirmationEmailDeliveries.map((delivery) => ({
-    ...delivery
-  }));
+export async function readOrderConfirmationEmailDeliveriesForTests(): Promise<
+  OrderConfirmationEmailDeliveryRecord[]
+> {
+  const deliveries = await prisma.emailDelivery.findMany({
+    orderBy: [
+      {
+        attemptedAt: "asc"
+      },
+      {
+        id: "asc"
+      }
+    ]
+  });
+
+  return deliveries.map(mapOrderConfirmationEmailDeliveryRowToRecord);
 }
 
-export function resetOrderConfirmationEmailDeliveriesForTests(): void {
-  orderConfirmationEmailDeliveries.splice(
-    0,
-    orderConfirmationEmailDeliveries.length
-  );
+export async function resetOrderConfirmationEmailDeliveriesForTests(): Promise<void> {
+  await prisma.emailDelivery.deleteMany();
+}
+
+export function mapOrderConfirmationEmailDeliveryRowToRecord(
+  row: EmailDeliveryRow | OrderConfirmationEmailDeliveryWriteRow
+): OrderConfirmationEmailDeliveryRecord {
+  return {
+    orderId: row.orderId,
+    recipientEmail: row.recipientEmail,
+    status: toOrderConfirmationEmailDeliveryStatus(row.status),
+    providerMessageId: row.providerMessageId,
+    attemptedAt: row.attemptedAt.toISOString(),
+    errorMessage: row.errorMessage
+  };
+}
+
+export function mapOrderConfirmationEmailDeliveryRecordToRow(
+  delivery: OrderConfirmationEmailDeliveryRecord
+): OrderConfirmationEmailDeliveryWriteRow {
+  return {
+    orderId: assertNonEmptyString(delivery.orderId, "orderId"),
+    recipientEmail: assertNonEmptyString(
+      delivery.recipientEmail,
+      "recipientEmail"
+    ),
+    status: toOrderConfirmationEmailDeliveryStatus(delivery.status),
+    providerMessageId: delivery.providerMessageId?.trim() || null,
+    attemptedAt: getDate(delivery.attemptedAt, "attemptedAt"),
+    errorMessage: delivery.errorMessage?.trim() || null
+  };
 }
 
 function readOrderConfirmationEmailConfig(
@@ -195,7 +246,7 @@ function readOrderConfirmationEmailConfig(
   };
 }
 
-function buildOrderConfirmationEmailMessage({
+export function buildOrderConfirmationEmailMessage({
   order,
   guestStatusUrl,
   whatsappUrl
@@ -229,6 +280,92 @@ function buildOrderConfirmationEmailMessage({
   };
 }
 
+async function claimOrderConfirmationEmailDelivery(
+  delivery: OrderConfirmationEmailDeliveryRecord
+): Promise<
+  | {
+      status: "claimed";
+      delivery: OrderConfirmationEmailDeliveryRecord;
+    }
+  | {
+      status: "duplicate";
+      delivery: OrderConfirmationEmailDeliveryRecord;
+    }
+> {
+  const normalizedDelivery = mapOrderConfirmationEmailDeliveryRecordToRow(delivery);
+
+  try {
+    const createdDelivery = await prisma.emailDelivery.create({
+      data: normalizedDelivery
+    });
+
+    return {
+      status: "claimed",
+      delivery: mapOrderConfirmationEmailDeliveryRowToRecord(createdDelivery)
+    };
+  } catch (error) {
+    if (!isUniqueConstraintError(error)) {
+      throw error;
+    }
+
+    const existingDelivery = await readOrderConfirmationEmailDeliveryByOrderId(
+      delivery.orderId
+    );
+
+    if (!existingDelivery) {
+      throw error;
+    }
+
+    return {
+      status: "duplicate",
+      delivery: existingDelivery
+    };
+  }
+}
+
+async function updateOrderConfirmationEmailDelivery({
+  orderId,
+  status,
+  providerMessageId,
+  errorMessage
+}: {
+  orderId: string;
+  status: OrderConfirmationEmailDeliveryStatus;
+  providerMessageId: string | null;
+  errorMessage: string | null;
+}): Promise<OrderConfirmationEmailDeliveryRecord> {
+  const updatedDelivery = await prisma.emailDelivery.update({
+    where: {
+      orderId
+    },
+    data: {
+      status,
+      providerMessageId,
+      errorMessage
+    }
+  });
+
+  return mapOrderConfirmationEmailDeliveryRowToRecord(updatedDelivery);
+}
+
+async function readOrderConfirmationEmailDeliveryByOrderId(
+  orderId: string
+): Promise<OrderConfirmationEmailDeliveryRecord | null> {
+  const normalizedOrderId = orderId.trim();
+
+  if (!normalizedOrderId) {
+    return null;
+  }
+
+  const delivery = await prisma.emailDelivery.findUnique({
+    where: {
+      orderId: normalizedOrderId
+    }
+  });
+
+  return delivery ? mapOrderConfirmationEmailDeliveryRowToRecord(delivery) : null;
+}
+
 async function sendEmailSafely(
   emailProvider: (message: EmailMessage) => Promise<EmailSendResult>,
   message: EmailMessage
@@ -244,7 +381,10 @@ async function sendEmailSafely(
   }
 }
 
-function getGuestStatusUrl(statusPath: string, appUrl: string | null | undefined): string {
+export function getGuestStatusUrl(
+  statusPath: string,
+  appUrl: string | null | undefined
+): string {
   const normalizedAppUrl = normalizeAbsoluteUrl(appUrl);
 
   return normalizedAppUrl ? new URL(statusPath, normalizedAppUrl).toString() : statusPath;
@@ -309,4 +449,41 @@ function getDate(value: Date | string, name: string): Date {
   }
 
   return date;
+}
+
+function assertNonEmptyString(value: string, name: string): string {
+  const trimmedValue = value.trim();
+
+  if (!trimmedValue) {
+    throw new RangeError(`${name} must be a non-empty string`);
+  }
+
+  return trimmedValue;
+}
+
+function toOrderConfirmationEmailDeliveryStatus(
+  status: string
+): OrderConfirmationEmailDeliveryStatus {
+  if (
+    !orderConfirmationEmailDeliveryStatuses.includes(
+      status as OrderConfirmationEmailDeliveryStatus
+    )
+  ) {
+    throw new RangeError(`Unknown email delivery status "${status}".`);
+  }
+
+  return status as OrderConfirmationEmailDeliveryStatus;
+}
+
+function isUniqueConstraintError(error: unknown): boolean {
+  return isPrismaKnownError(error, "P2002");
+}
+
+function isPrismaKnownError(error: unknown, code: string): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === code
+  );
 }
