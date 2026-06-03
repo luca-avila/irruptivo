@@ -5,6 +5,10 @@
 FROM node:20-bookworm-slim AS deps
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
+# Prisma needs OpenSSL to detect libssl and pick the correct query-engine binary
+# during `prisma generate`; without it the slim image defaults to openssl-1.1.x.
+RUN apt-get update && apt-get install -y --no-install-recommends openssl \
+    && rm -rf /var/lib/apt/lists/*
 # Copy the Prisma schema before install so the `postinstall` (prisma generate) succeeds.
 COPY package.json package-lock.json ./
 COPY prisma ./prisma
@@ -24,6 +28,10 @@ ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
     PORT=3000 \
     HOSTNAME=0.0.0.0
+
+# Runtime also needs OpenSSL for the Prisma query engine.
+RUN apt-get update && apt-get install -y --no-install-recommends openssl \
+    && rm -rf /var/lib/apt/lists/*
 
 # Standalone output bundles a minimal node_modules (incl. sharp + Prisma client).
 COPY --from=builder /app/public ./public
