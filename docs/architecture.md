@@ -76,8 +76,11 @@ Entidades principales (`prisma/schema.prisma`):
 - **`OrderStatusHistory`** — auditoría de transiciones (from/to, razón, actor).
 - **`PaymentEvent`** — eventos del webhook con `@@unique([provider, providerEventId])`
   para **idempotencia**.
-- **`EmailDelivery`** — estado de envío del email de confirmación (idempotencia de
-  "enviar una vez"), `@@unique` por `orderId`.
+- **`EmailDelivery`** — estado de envío de emails transaccionales (idempotencia de
+  "enviar una vez"), `@@unique` por `orderId + kind` (`buyer_confirmation`,
+  `admin_notification`).
+- **`StoreSettings`** — fila única `default` para settings operativos, hoy usada para
+  `adminNotificationEmail`.
 
 Enums: `ProductArea` (clothing/supplement), `ProductStatus`, `OrderStatus` (9 estados),
 `DeliveryMethod`, `PaymentProvider` (mercado_pago), `EmailDeliveryStatus`.
@@ -111,8 +114,10 @@ Estados con pago bloqueado para el admin (`isAdminPaymentLockedOrderStatus`):
    (`payments/payment-reconciliation.ts`) actualiza el pedido a `paid`, registra el
    `PaymentEvent` de forma idempotente y **decrementa el stock** (ver más abajo). El commit
    más reciente también reconcilia al volver el comprador (no solo vía webhook).
-6. **Email de confirmación.** Tras `paid`, se envía un email de confirmación una sola vez
-   (idempotencia vía `EmailDelivery`).
+6. **Emails de compra pagada.** Tras `paid`, se intenta enviar el email al comprador y el
+   aviso interno al admin una sola vez por `kind` (idempotencia vía `EmailDelivery`). El
+   destinatario admin se resuelve por DB (`StoreSettings`) y fallback
+   `IRRUPTIVO_ADMIN_NOTIFICATION_EMAIL`; si falta, se omite sin romper el flujo.
 7. **Estado de pedido.** El invitado consulta `/pedido/[token]` con su token seguro; el
    admin gestiona el fulfillment desde `/admin/(protected)/pedidos`.
 

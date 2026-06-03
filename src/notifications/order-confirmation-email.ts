@@ -67,6 +67,8 @@ export type OrderConfirmationEmailSender = (
   order: Order
 ) => Promise<OrderConfirmationEmailResult>;
 
+export type EmailDeliveryKind = "buyer_confirmation" | "admin_notification";
+
 export type SendOrderConfirmationOnceOptions = {
   emailProvider?: (message: EmailMessage) => Promise<EmailSendResult>;
   appUrl?: string | null;
@@ -84,6 +86,8 @@ export type OrderConfirmationEmailDeliveryWriteRow = Omit<
   "id"
 >;
 
+const BUYER_CONFIRMATION_EMAIL_DELIVERY_KIND =
+  "buyer_confirmation" as const satisfies EmailDeliveryKind;
 const SUPPORT_WHATSAPP_URL = "https://wa.me/5490000000000";
 const orderConfirmationEmailDeliveryStatuses = [
   "sending",
@@ -127,13 +131,16 @@ export async function sendOrderConfirmationOnce(
 
   const recipientEmail = order.contact.email;
   const attemptedAt = getDate(now, "now").toISOString();
-  const claim = await claimOrderConfirmationEmailDelivery({
-    orderId: order.id,
-    recipientEmail,
-    status: "sending",
-    providerMessageId: null,
-    attemptedAt,
-    errorMessage: null
+  const claim = await claimOrderEmailDelivery({
+    kind: BUYER_CONFIRMATION_EMAIL_DELIVERY_KIND,
+    delivery: {
+      orderId: order.id,
+      recipientEmail,
+      status: "sending",
+      providerMessageId: null,
+      attemptedAt,
+      errorMessage: null
+    }
   });
 
   if (claim.status === "duplicate") {
@@ -153,8 +160,9 @@ export async function sendOrderConfirmationOnce(
   const sendResult = await sendEmailSafely(emailProvider, message);
 
   if (sendResult.status === "sent") {
-    await updateOrderConfirmationEmailDelivery({
+    await updateOrderEmailDelivery({
       orderId: order.id,
+      kind: BUYER_CONFIRMATION_EMAIL_DELIVERY_KIND,
       status: "sent",
       providerMessageId: sendResult.messageId,
       errorMessage: null
@@ -168,8 +176,9 @@ export async function sendOrderConfirmationOnce(
     };
   }
 
-  await updateOrderConfirmationEmailDelivery({
+  await updateOrderEmailDelivery({
     orderId: order.id,
+    kind: BUYER_CONFIRMATION_EMAIL_DELIVERY_KIND,
     status: sendResult.status,
     providerMessageId: null,
     errorMessage: sendResult.message
@@ -222,6 +231,7 @@ export function mapOrderConfirmationEmailDeliveryRecordToRow(
 ): OrderConfirmationEmailDeliveryWriteRow {
   return {
     orderId: assertNonEmptyString(delivery.orderId, "orderId"),
+    kind: BUYER_CONFIRMATION_EMAIL_DELIVERY_KIND,
     recipientEmail: assertNonEmptyString(
       delivery.recipientEmail,
       "recipientEmail"
@@ -280,9 +290,13 @@ export function buildOrderConfirmationEmailMessage({
   };
 }
 
-async function claimOrderConfirmationEmailDelivery(
-  delivery: OrderConfirmationEmailDeliveryRecord
-): Promise<
+export async function claimOrderEmailDelivery({
+  kind,
+  delivery
+}: {
+  kind: EmailDeliveryKind;
+  delivery: OrderConfirmationEmailDeliveryRecord;
+}): Promise<
   | {
       status: "claimed";
       delivery: OrderConfirmationEmailDeliveryRecord;
@@ -292,7 +306,10 @@ async function claimOrderConfirmationEmailDelivery(
       delivery: OrderConfirmationEmailDeliveryRecord;
     }
 > {
-  const normalizedDelivery = mapOrderConfirmationEmailDeliveryRecordToRow(delivery);
+  const normalizedDelivery = {
+    ...mapOrderConfirmationEmailDeliveryRecordToRow(delivery),
+    kind
+  };
 
   try {
     const createdDelivery = await prisma.emailDelivery.create({
@@ -308,9 +325,10 @@ async function claimOrderConfirmationEmailDelivery(
       throw error;
     }
 
-    const existingDelivery = await readOrderConfirmationEmailDeliveryByOrderId(
-      delivery.orderId
-    );
+    const existingDelivery = await readOrderEmailDeliveryByOrderIdAndKind({
+      orderId: delivery.orderId,
+      kind
+    });
 
     if (!existingDelivery) {
       throw error;
@@ -323,20 +341,25 @@ async function claimOrderConfirmationEmailDelivery(
   }
 }
 
-async function updateOrderConfirmationEmailDelivery({
+export async function updateOrderEmailDelivery({
   orderId,
+  kind,
   status,
   providerMessageId,
   errorMessage
 }: {
   orderId: string;
+  kind: EmailDeliveryKind;
   status: OrderConfirmationEmailDeliveryStatus;
   providerMessageId: string | null;
   errorMessage: string | null;
 }): Promise<OrderConfirmationEmailDeliveryRecord> {
   const updatedDelivery = await prisma.emailDelivery.update({
     where: {
-      orderId
+      orderId_kind: {
+        orderId,
+        kind
+      }
     },
     data: {
       status,
@@ -348,9 +371,13 @@ async function updateOrderConfirmationEmailDelivery({
   return mapOrderConfirmationEmailDeliveryRowToRecord(updatedDelivery);
 }
 
-async function readOrderConfirmationEmailDeliveryByOrderId(
-  orderId: string
-): Promise<OrderConfirmationEmailDeliveryRecord | null> {
+export async function readOrderEmailDeliveryByOrderIdAndKind({
+  orderId,
+  kind
+}: {
+  orderId: string;
+  kind: EmailDeliveryKind;
+}): Promise<OrderConfirmationEmailDeliveryRecord | null> {
   const normalizedOrderId = orderId.trim();
 
   if (!normalizedOrderId) {
@@ -359,7 +386,10 @@ async function readOrderConfirmationEmailDeliveryByOrderId(
 
   const delivery = await prisma.emailDelivery.findUnique({
     where: {
-      orderId: normalizedOrderId
+      orderId_kind: {
+        orderId: normalizedOrderId,
+        kind
+      }
     }
   });
 

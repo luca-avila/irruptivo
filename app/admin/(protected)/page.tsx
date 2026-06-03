@@ -1,4 +1,4 @@
-import { ArrowRight, ClipboardList, Package } from "lucide-react";
+import { ArrowRight, ClipboardList, Package, Settings } from "lucide-react";
 import Link from "next/link";
 
 import styles from "./admin.module.css";
@@ -17,6 +17,13 @@ const adminAreas = [
     copy: "Acceso preparado para la cola operativa y el seguimiento de cumplimiento.",
     href: "/admin/pedidos",
     icon: ClipboardList
+  },
+  {
+    id: "configuracion",
+    title: "Configuración",
+    copy: "Definí la casilla que recibe avisos internos cuando se confirma una compra.",
+    href: "/admin/configuracion",
+    icon: Settings
   }
 ] as const;
 

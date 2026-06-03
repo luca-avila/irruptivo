@@ -1,5 +1,11 @@
 import { ORDER_STATUS, type OrderStatus } from "../domain/rules";
 import { prisma } from "../db/client";
+import { getAdminNotificationRecipient } from "../admin/settings";
+import {
+  sendAdminOrderNotificationOnce,
+  type AdminOrderNotificationEmailSender,
+  type AdminOrderNotificationResult
+} from "../notifications/admin-order-notification-email";
 import {
   sendOrderConfirmationOnce,
   type OrderConfirmationEmailResult,
@@ -76,6 +82,7 @@ export type ReconcileMercadoPagoEventOptions = {
   eventRecorder?: PaymentEventRecorder;
   eventFinder?: PaymentEventFinder;
   confirmationEmailSender?: OrderConfirmationEmailSender;
+  adminNotificationEmailSender?: AdminOrderNotificationEmailSender;
   config?: PaymentReconciliationConfig;
   now?: Date | string;
 };
@@ -87,6 +94,7 @@ export type PaymentReconciliationResult =
       providerPaymentId: string;
       orderStatus: typeof ORDER_STATUS.paid;
       confirmationEmail: OrderConfirmationEmailResult;
+      adminNotification: AdminOrderNotificationResult;
     }
   | {
       status: "payment_failed";
@@ -133,6 +141,7 @@ export async function reconcileMercadoPagoEvent(
     eventRecorder = recordPaymentEventOnce,
     eventFinder,
     confirmationEmailSender = sendOrderConfirmationOnce,
+    adminNotificationEmailSender = sendConfiguredAdminOrderNotificationOnce,
     config = {},
     now = new Date()
   }: ReconcileMercadoPagoEventOptions = {}
@@ -241,7 +250,8 @@ export async function reconcileMercadoPagoEvent(
       order: reconciledOrder,
       payment,
       orderRepository,
-      confirmationEmailSender
+      confirmationEmailSender,
+      adminNotificationEmailSender
     });
   }
 
@@ -320,12 +330,14 @@ async function reconcileApprovedPayment({
   order,
   payment,
   orderRepository,
-  confirmationEmailSender
+  confirmationEmailSender,
+  adminNotificationEmailSender
 }: {
   order: Order;
   payment: MercadoPagoPayment;
   orderRepository: PaymentReconciliationOrderRepository;
   confirmationEmailSender: OrderConfirmationEmailSender;
+  adminNotificationEmailSender: AdminOrderNotificationEmailSender;
 }): Promise<PaymentReconciliationResult> {
   if (order.status === ORDER_STATUS.expired) {
     return {
@@ -359,17 +371,20 @@ async function reconcileApprovedPayment({
       };
     }
 
-    const confirmationEmail = await sendConfirmationEmailSafely(
-      confirmationEmailSender,
-      settlementResult.order
-    );
+    const { confirmationEmail, adminNotification } =
+      await sendPaidOrderEmailsSafely({
+        order: settlementResult.order,
+        confirmationEmailSender,
+        adminNotificationEmailSender
+      });
 
     return {
       status: "paid",
       orderId: order.id,
       providerPaymentId: payment.id,
       orderStatus: ORDER_STATUS.paid,
-      confirmationEmail
+      confirmationEmail,
+      adminNotification
     };
   }
 
@@ -385,10 +400,12 @@ async function reconcileApprovedPayment({
           ...order,
           status: ORDER_STATUS.paid
         };
-  const confirmationEmail = await sendConfirmationEmailSafely(
-    confirmationEmailSender,
-    paidOrder
-  );
+  const { confirmationEmail, adminNotification } =
+    await sendPaidOrderEmailsSafely({
+      order: paidOrder,
+      confirmationEmailSender,
+      adminNotificationEmailSender
+    });
 
   return {
     status: "paid",
@@ -397,7 +414,8 @@ async function reconcileApprovedPayment({
     orderStatus: updatedOrder?.status === ORDER_STATUS.paid
       ? updatedOrder.status
       : ORDER_STATUS.paid,
-    confirmationEmail
+    confirmationEmail,
+    adminNotification
   };
 }
 
@@ -519,6 +537,53 @@ async function sendConfirmationEmailSafely(
       message: "No pudimos enviar el email transaccional."
     };
   }
+}
+
+async function sendPaidOrderEmailsSafely({
+  order,
+  confirmationEmailSender,
+  adminNotificationEmailSender
+}: {
+  order: Order;
+  confirmationEmailSender: OrderConfirmationEmailSender;
+  adminNotificationEmailSender: AdminOrderNotificationEmailSender;
+}): Promise<{
+  confirmationEmail: OrderConfirmationEmailResult;
+  adminNotification: AdminOrderNotificationResult;
+}> {
+  const [confirmationEmail, adminNotification] = await Promise.all([
+    sendConfirmationEmailSafely(confirmationEmailSender, order),
+    sendAdminNotificationEmailSafely(adminNotificationEmailSender, order)
+  ]);
+
+  return {
+    confirmationEmail,
+    adminNotification
+  };
+}
+
+async function sendAdminNotificationEmailSafely(
+  adminNotificationEmailSender: AdminOrderNotificationEmailSender,
+  order: Order
+): Promise<AdminOrderNotificationResult> {
+  try {
+    return await adminNotificationEmailSender(order);
+  } catch {
+    return {
+      status: "failed",
+      orderId: order.id,
+      recipientEmail: "",
+      message: "No pudimos enviar el aviso interno de compra."
+    };
+  }
+}
+
+async function sendConfiguredAdminOrderNotificationOnce(
+  order: Order
+): Promise<AdminOrderNotificationResult> {
+  return sendAdminOrderNotificationOnce(order, {
+    recipient: await getAdminNotificationRecipient()
+  });
 }
 
 async function reconcileFailedPayment({

@@ -139,7 +139,7 @@ model Order {
   items                    OrderItem[]
   statusHistory            OrderStatusHistory[]
   paymentEvents            PaymentEvent[]
-  emailDelivery            EmailDelivery?
+  emailDeliveries          EmailDelivery[]
 
   @@index([status, createdAt])
   @@map("orders")
@@ -204,7 +204,8 @@ model PaymentEvent {
 
 model EmailDelivery {
   id                String              @id @default(uuid())
-  orderId           String              @unique @map("order_id")
+  orderId           String              @map("order_id")
+  kind              String              @default("buyer_confirmation")
   recipientEmail    String              @map("recipient_email")
   status            EmailDeliveryStatus
   providerMessageId String?             @map("provider_message_id")
@@ -212,5 +213,14 @@ model EmailDelivery {
   errorMessage      String?             @map("error_message")
   order             Order               @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
+  @@unique([orderId, kind])
   @@map("email_deliveries")
+}
+
+model StoreSettings {
+  id                     String   @id
+  adminNotificationEmail String?  @map("admin_notification_email")
+  updatedAt              DateTime @updatedAt @map("updated_at")
+
+  @@map("store_settings")
 }

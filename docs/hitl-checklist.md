@@ -113,13 +113,23 @@ These are business/content items. The app runs without them, but it will look un
 - [X] **Email provider decision**
   - Action: Resend chosen and integrated as the production transactional email provider.
   - Why it matters: The adapter is provider-agnostic with a local outbox fallback; a real
-    provider is required to send confirmation emails in production.
+    provider is required to send confirmation and admin notification emails in production.
   - Files/env: `IRRUPTIVO_EMAIL_PROVIDER=resend`, `IRRUPTIVO_EMAIL_PROVIDER_TOKEN`,
     `IRRUPTIVO_EMAIL_FROM_EMAIL`, `IRRUPTIVO_EMAIL_FROM_NAME`;
     `IRRUPTIVO_EMAIL_PROVIDER_URL` is not used in resend mode.
     `src/notifications/email-provider.ts`.
   - Owner: agent (integration done) → human (production credentials)
   - Blocking level: Production
+
+- [ ] **Admin paid-order notification recipient**
+  - Action: Set the recipient from `/admin/configuracion`, or configure
+    `IRRUPTIVO_ADMIN_NOTIFICATION_EMAIL` as the fallback.
+  - Why it matters: Paid orders still complete without this value, but the store operator
+    will not receive internal purchase notifications.
+  - Files/env: `IRRUPTIVO_ADMIN_NOTIFICATION_EMAIL`; `src/admin/settings.ts`,
+    `src/notifications/admin-order-notification-email.ts`.
+  - Owner: human
+  - Blocking level: Production operations
 
 - [ ] **Email sender-domain DNS verification**
   - Action: Verify the sending domain (SPF/DKIM) with the chosen provider. Start early —
@@ -203,6 +213,7 @@ In order:
 4. **Mercado Pago production setup:** live credentials, webhook secret, public
    `MERCADO_PAGO_NOTIFICATION_URL`, real `IRRUPTIVO_APP_URL`; then run one end-to-end
    purchase test.
-5. **Set and verify all production env vars**, including Resend credentials and sender.
+5. **Set and verify all production env vars**, including Resend credentials, sender, and
+   `IRRUPTIVO_ADMIN_NOTIFICATION_EMAIL` or the DB setting in `/admin/configuracion`.
 6. **Leave deferred items** (dynamic shipping, address validation, backups, analytics,
    advanced/marketing email) for post-MVP.

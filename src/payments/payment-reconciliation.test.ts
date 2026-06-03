@@ -4,6 +4,7 @@ import { DELIVERY_METHOD, ORDER_STATUS, type OrderStatus } from "../domain/rules
 import {
   type OrderConfirmationEmailResult
 } from "../notifications/order-confirmation-email";
+import { type AdminOrderNotificationResult } from "../notifications/admin-order-notification-email";
 import { type Order } from "../orders/order-creation";
 import {
   type PaymentEventRecord,
@@ -20,10 +21,11 @@ import {
 const now = "2026-05-30T12:00:00.000Z";
 
 describe("Mercado Pago payment reconciliation", () => {
-  it("moves a pending order to paid and sends confirmation email after verified server-side approved payment", async () => {
+  it("moves a pending order to paid and sends buyer and admin emails after verified server-side approved payment", async () => {
     const repository = createOrderRepository(getOrder(ORDER_STATUS.pendingPayment));
     const eventRecorder = createTestPaymentEventRecorder();
     const confirmationEmails: Order[] = [];
+    const adminNotifications: Order[] = [];
 
     const result = await reconcileMercadoPagoEvent(getNotification(), {
       paymentProvider: async () => getPayment({ status: "approved" }),
@@ -33,6 +35,11 @@ describe("Mercado Pago payment reconciliation", () => {
         confirmationEmails.push(order);
 
         return getSentConfirmationEmailResult(order);
+      },
+      adminNotificationEmailSender: async (order) => {
+        adminNotifications.push(order);
+
+        return getSentAdminNotificationResult(order);
       },
       now
     });
@@ -47,6 +54,12 @@ describe("Mercado Pago payment reconciliation", () => {
         orderId: "order-001",
         recipientEmail: "luca@example.com",
         providerMessageId: "message-order-001"
+      },
+      adminNotification: {
+        status: "sent",
+        orderId: "order-001",
+        recipientEmail: "admin@irruptivo.test",
+        providerMessageId: "admin-message-order-001"
       }
     });
     expect(repository.getOrder()?.status).toBe(ORDER_STATUS.paid);
@@ -56,6 +69,11 @@ describe("Mercado Pago payment reconciliation", () => {
     });
     expect(confirmationEmails).toHaveLength(1);
     expect(confirmationEmails[0]).toMatchObject({
+      id: "order-001",
+      status: ORDER_STATUS.paid
+    });
+    expect(adminNotifications).toHaveLength(1);
+    expect(adminNotifications[0]).toMatchObject({
       id: "order-001",
       status: ORDER_STATUS.paid
     });
@@ -111,6 +129,8 @@ describe("Mercado Pago payment reconciliation", () => {
       orderRepository: repository,
       eventRecorder: eventRecorder.record,
       confirmationEmailSender,
+      adminNotificationEmailSender: async (order) =>
+        getSkippedAdminNotificationResult(order),
       now
     });
     const duplicateResult = await reconcileMercadoPagoEvent(notification, {
@@ -118,6 +138,8 @@ describe("Mercado Pago payment reconciliation", () => {
       orderRepository: repository,
       eventRecorder: eventRecorder.record,
       confirmationEmailSender,
+      adminNotificationEmailSender: async (order) =>
+        getSkippedAdminNotificationResult(order),
       now
     });
 
@@ -140,12 +162,16 @@ describe("Mercado Pago payment reconciliation", () => {
       paymentProvider: async () => getPayment({ status: "rejected" }),
       orderRepository: repository,
       eventRecorder: eventRecorder.record,
+      adminNotificationEmailSender: async (order) =>
+        getSkippedAdminNotificationResult(order),
       now
     });
     const duplicateResult = await reconcileMercadoPagoEvent(notification, {
       paymentProvider: async () => getPayment({ status: "rejected" }),
       orderRepository: repository,
       eventRecorder: eventRecorder.record,
+      adminNotificationEmailSender: async (order) =>
+        getSkippedAdminNotificationResult(order),
       now
     });
 
@@ -222,6 +248,8 @@ describe("Mercado Pago payment reconciliation", () => {
       paymentProvider: async () => getPayment({ status: "approved" }),
       orderRepository: repository,
       eventRecorder: eventRecorder.record,
+      adminNotificationEmailSender: async (order) =>
+        getSkippedAdminNotificationResult(order),
       now
     });
 
@@ -273,6 +301,8 @@ describe("Mercado Pago payment reconciliation", () => {
         recipientEmail: order.contact.email,
         message: "El proveedor de email rechazó el envío."
       }),
+      adminNotificationEmailSender: async (order) =>
+        getSkippedAdminNotificationResult(order),
       now
     });
 
@@ -286,6 +316,11 @@ describe("Mercado Pago payment reconciliation", () => {
         orderId: "order-001",
         recipientEmail: "luca@example.com",
         message: "El proveedor de email rechazó el envío."
+      },
+      adminNotification: {
+        status: "skipped",
+        reason: "no_recipient_configured",
+        orderId: "order-001"
       }
     });
     expect(repository.getOrder()?.status).toBe(ORDER_STATUS.paid);
@@ -306,6 +341,8 @@ describe("Mercado Pago payment reconciliation", () => {
       eventRecorder: eventRecorder.record,
       confirmationEmailSender: async (order) =>
         getSentConfirmationEmailResult(order),
+      adminNotificationEmailSender: async (order) =>
+        getSkippedAdminNotificationResult(order),
       now
     });
 
@@ -432,6 +469,27 @@ function getSentConfirmationEmailResult(
     orderId: order.id,
     recipientEmail: order.contact.email,
     providerMessageId: `message-${order.id}`
+  };
+}
+
+function getSentAdminNotificationResult(
+  order: Order
+): AdminOrderNotificationResult {
+  return {
+    status: "sent",
+    orderId: order.id,
+    recipientEmail: "admin@irruptivo.test",
+    providerMessageId: `admin-message-${order.id}`
+  };
+}
+
+function getSkippedAdminNotificationResult(
+  order: Order
+): AdminOrderNotificationResult {
+  return {
+    status: "skipped",
+    reason: "no_recipient_configured",
+    orderId: order.id
   };
 }
 

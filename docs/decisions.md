@@ -573,3 +573,27 @@ Item/order changes require manual handling outside the system.
 ## Revisit if
 
 Order adjustment, refund, or exchange workflows are added.
+
+# Decision 023: Paid Order Email Notifications
+
+## Context
+
+The checkout needs to notify both the buyer and the store operator after Mercado Pago confirms payment, without letting internal notification issues affect the buyer experience or payment reconciliation.
+
+## Decision
+
+`EmailDelivery` stores one idempotency row per order and notification kind. Buyer confirmations use `buyer_confirmation`; internal admin notifications use `admin_notification`.
+
+The admin notification recipient is configurable from `/admin/configuracion`. If the database setting is empty, the app falls back to `IRRUPTIVO_ADMIN_NOTIFICATION_EMAIL`; if neither exists, the admin notification is skipped and the paid order flow continues.
+
+## Why
+
+Separate delivery kinds let the same paid order send buyer and admin emails exactly once without unique-key conflicts. The DB setting lets operations change the recipient without redeploying, while the env fallback keeps production bootstrapping simple.
+
+## Tradeoffs
+
+Failed or missing admin notifications are visible in delivery state but do not block the order from becoming `paid` or the buyer confirmation attempt.
+
+## Revisit if
+
+The store needs multiple internal recipients, per-area routing, or richer notification preferences.

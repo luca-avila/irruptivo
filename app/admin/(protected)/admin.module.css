@@ -260,6 +260,28 @@
   color: #70251f;
 }
 
+.feedbackInline {
+  padding: 0.75rem 0.85rem;
+  border: 1px solid rgba(17, 17, 17, 0.12);
+  border-radius: 8px;
+  background: #fffdf8;
+  color: #111111;
+  font-weight: 760;
+  line-height: 1.45;
+}
+
+.feedbackInline[data-tone="success"] {
+  border-color: rgba(67, 105, 28, 0.28);
+  background: #f4f8e8;
+  color: #263d11;
+}
+
+.feedbackInline[data-tone="error"] {
+  border-color: rgba(151, 46, 46, 0.3);
+  background: #fff1ee;
+  color: #70251f;
+}
+
 .toast {
   position: fixed;
   inset-inline: 0;

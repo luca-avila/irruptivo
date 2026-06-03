@@ -3,6 +3,7 @@ import {
   LayoutDashboard,
   LogOut,
   Package,
+  Settings,
   Store
 } from "lucide-react";
 import Link from "next/link";
@@ -31,6 +32,11 @@ const adminNavigation = [
     href: "/admin/pedidos",
     label: "Pedidos",
     icon: ClipboardList
+  },
+  {
+    href: "/admin/configuracion",
+    label: "Configuración",
+    icon: Settings
   }
 ] as const;
 
