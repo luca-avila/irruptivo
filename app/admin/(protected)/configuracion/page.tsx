@@ -4,6 +4,8 @@ import { getStoreSettings } from "../../../../src/admin/settings";
 import styles from "../admin.module.css";
 import { AdminNotificationEmailForm } from "./admin-notification-email-form";
 
+export const dynamic = "force-dynamic";
+
 export default async function AdminSettingsPage() {
   const settings = await getStoreSettings();
 
