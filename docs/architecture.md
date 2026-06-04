@@ -167,6 +167,39 @@ su rama de normalización de config. El estado de cada envío se persiste en `em
 Pendiente para producción: verificar el dominio remitente en Resend (SPF/DKIM), si no los
 emails caen en spam o el envío falla.
 
+### Cuándo se envían
+
+Hay **un único momento de negocio** que dispara emails: cuando un pedido pasa de
+`pending_payment` a `paid` (pago aprobado por Mercado Pago). En ese instante
+`reconcileApprovedPayment` (`payments/payment-reconciliation.ts`) manda **dos** emails en
+paralelo (`sendPaidOrderEmailsSafely`, un `Promise.all`):
+
+- **`buyer_confirmation`** → confirmación de compra al comprador (`sendOrderConfirmationOnce`).
+- **`admin_notification`** → aviso interno al admin (`sendAdminOrderNotificationOnce`), **sólo
+  si hay destinatario**: `StoreSettings.adminNotificationEmail` (panel `/admin/configuracion`)
+  con fallback a `IRRUPTIVO_ADMIN_NOTIFICATION_EMAIL`; si no hay ninguno, se omite sin romper el flujo.
+
+Ese paso a `paid` se reconcilia desde **dos entrypoints**, y cualquiera de los dos puede
+gatillar los emails:
+
+1. **Webhook de Mercado Pago** (`reconcileMercadoPagoEvent`) — fuente de verdad.
+2. **Retorno del comprador** a `/checkout/pago/*` (`reconcileMercadoPagoPaymentById`) — cubre el
+   caso de que el webhook todavía no haya llegado.
+
+Garantías:
+
+- **Una sola vez por `kind`**, aunque webhook y retorno reconcilien el mismo pedido:
+  idempotencia por `EmailDelivery` con `@@unique(orderId, kind)`.
+- **Sólo en la transición real a `paid`** (cuando `markOrderPaidAndDecrementStock` devuelve
+  `paid`). Si el pedido ya estaba reconciliado (`duplicate` / `already_reconciled`) o `expired`,
+  no se reenvía nada.
+- **No bloquean el flujo:** los envíos van "safe"; un fallo no afecta la reconciliación a `paid`
+  ni el decremento de stock, y el email del admin no bloquea al del comprador.
+
+No se envían emails al crear el pedido, al expirar (30 min), en pago fallido, ni en las
+transiciones de fulfillment posteriores (`preparing` → `shipped`/`ready_for_pickup` →
+`delivered`/`picked_up`); esos avisos de envío/retiro están fuera del alcance del MVP.
+
 ## Deploy
 
 - **Docker / docker-compose:** servicios `app` (Next) + Postgres + volumen `media_data`
