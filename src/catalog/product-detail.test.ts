@@ -222,4 +222,53 @@ describe("product detail variant resolution", () => {
     expect(selection.selectedVariant).not.toHaveProperty("stock");
     expect(JSON.stringify(detail)).not.toContain('"stock"');
   });
+
+  it("returns the detail gallery filtered by the selected color", () => {
+    const detail = getProductDetailPageView({
+      area: PRODUCT_AREA.clothing,
+      slug: "training-tee-negra",
+      selectedOptions: {
+        color: "negro"
+      },
+      products: [
+        {
+          ...products[0],
+          images: [
+            imageRecord("general", 1),
+            imageRecord("black-back", 3, { associatedColor: "Negro" }),
+            imageRecord("black-front", 2, { associatedColor: " negro " }),
+            imageRecord("white-front", 4, { associatedColor: "Blanco" })
+          ]
+        }
+      ]
+    });
+
+    if (detail.status !== "active") {
+      throw new Error("Expected active product detail");
+    }
+
+    expect(detail.selection.status).toBe("no_selection");
+    expect(detail.product.images.map((image) => image.id)).toEqual([
+      "black-front",
+      "black-back"
+    ]);
+  });
 });
+
+function imageRecord(
+  id: string,
+  sortOrder: number,
+  tags: {
+    associatedColor?: string | null;
+    variantId?: string | null;
+  } = {}
+) {
+  return {
+    id,
+    path: `products/training-tee/${id}.webp`,
+    alt: `Foto ${id}`,
+    sortOrder,
+    associatedColor: tags.associatedColor,
+    variantId: tags.variantId
+  };
+}

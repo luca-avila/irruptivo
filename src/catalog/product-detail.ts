@@ -1,4 +1,5 @@
 import { type AvailabilityLabel } from "../domain/rules";
+import { getVariantAwarePublicImageSet } from "./product-images";
 import { getVariantAvailability, resolveUnitPrice } from "./variants";
 import {
   PRODUCT_AREA,
@@ -117,10 +118,23 @@ export function getProductDetailPageView({
     };
   }
 
+  const selection = resolveSelectedVariant(product, selectedOptions);
+  const productView = getProductDetailView(product);
+
   return {
     status: "active",
-    product: getProductDetailView(product),
-    selection: resolveSelectedVariant(product, selectedOptions),
+    product: {
+      ...productView,
+      images: getVariantAwarePublicImageSet(
+        product.images,
+        {
+          selectedOptions,
+          selectedVariantId: selection.selectedVariant?.id
+        },
+        { usage: "detail" }
+      )
+    },
+    selection,
     backHref: route.href,
     backLabel: route.backLabel
   };

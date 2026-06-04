@@ -1,12 +1,10 @@
 import { ArrowLeft, MessageCircle, RotateCcw, Ruler, Truck } from "lucide-react";
-import Image from "next/image";
 import Link from "next/link";
 
 import {
   PRODUCT_AREA,
   type ProductArea,
   type PublicProductDetailView,
-  type PublicProductImageView,
   type VariantOptionValues
 } from "../../catalog/catalog";
 import {
@@ -15,6 +13,7 @@ import {
 } from "../../catalog/product-detail";
 import { contactLink, instagramLink } from "../navigation";
 import { AddToCartControl } from "./add-to-cart-control";
+import { ProductGallery } from "./product-gallery";
 import styles from "./product-detail-page.module.css";
 
 type SearchParamValue = string | string[] | undefined;
@@ -106,8 +105,6 @@ export function StorefrontProductDetailPage({
 
   const { product, selection } = view;
   const optionGroups = getOptionGroups(product, area);
-  const galleryImages = product.images.length > 0 ? product.images : [];
-  const primaryImage = galleryImages[0] ?? product.image;
 
   return (
     <section className={styles.detailPage} data-area={area}>
@@ -118,7 +115,11 @@ export function StorefrontProductDetailPage({
         </Link>
 
         <div className={styles.layout}>
-          <ProductGallery product={product} primaryImage={primaryImage} images={galleryImages} />
+          <ProductGallery
+            productName={product.name}
+            images={product.images}
+            selectedOptions={selectedOptions}
+          />
 
           <div className={styles.content}>
             <section className={styles.summary} aria-labelledby="product-detail-title">
@@ -172,50 +173,6 @@ export function StorefrontProductDetailPage({
           </div>
         </div>
       </div>
-    </section>
-  );
-}
-
-function ProductGallery({
-  product,
-  primaryImage,
-  images
-}: {
-  product: PublicProductDetailView;
-  primaryImage: PublicProductImageView | null;
-  images: PublicProductImageView[];
-}) {
-  return (
-    <section className={styles.gallery} aria-label={`Fotos de ${product.name}`}>
-      <div className={styles.heroImageFrame}>
-        {primaryImage ? (
-          <Image
-            className={styles.heroImage}
-            src={primaryImage.path}
-            alt={primaryImage.alt}
-            fill
-            priority
-            sizes="(min-width: 760px) 58vw, 100vw"
-          />
-        ) : (
-          <div className={styles.imageFallback}>Sin imagen</div>
-        )}
-      </div>
-
-      {images.length > 1 ? (
-        <div className={styles.thumbnailGrid}>
-          {images.map((image) => (
-            <div className={styles.thumbnail} key={image.id}>
-              <Image
-                src={image.path}
-                alt={image.alt}
-                fill
-                sizes="(min-width: 760px) 12vw, 25vw"
-              />
-            </div>
-          ))}
-        </div>
-      ) : null}
     </section>
   );
 }

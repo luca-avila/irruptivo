@@ -7,7 +7,8 @@ import {
   type CatalogProductImageRenditionRecord,
   type CatalogProductImageRenditionsRecord,
   type CatalogProductRecord,
-  type PublicProductImageView
+  type PublicProductImageView,
+  type VariantOptionValues
 } from "./catalog";
 
 export type ProductImageRenditionUsage = "card" | "detail" | "original";
@@ -47,6 +48,11 @@ export type ProductImageManagementResult =
 
 export type PublicImageSetOptions = {
   usage?: ProductImageRenditionUsage;
+};
+
+export type VariantAwarePublicImageSetSelection = {
+  selectedOptions?: VariantOptionValues;
+  selectedVariantId?: string | null;
 };
 
 const IMAGE_VALIDATION_MESSAGE =
@@ -198,6 +204,39 @@ export function getPublicImageSet(
     .map((image) => getPublicImageView(image, usage));
 }
 
+export function getVariantAwarePublicImageSet(
+  images: readonly CatalogProductImageRecord[],
+  selection: VariantAwarePublicImageSetSelection = {},
+  options: PublicImageSetOptions = {}
+): PublicProductImageView[] {
+  const fullImageSet = getPublicImageSet(images, options);
+  const selectedVariantId = normalizeOptionalText(selection.selectedVariantId);
+
+  if (selectedVariantId) {
+    const variantImages = fullImageSet.filter(
+      (image) => normalizeOptionalText(image.variantId) === selectedVariantId
+    );
+
+    if (variantImages.length > 0) {
+      return variantImages;
+    }
+  }
+
+  const selectedColor = normalizeImageMatchText(selection.selectedOptions?.color);
+
+  if (selectedColor) {
+    const colorImages = fullImageSet.filter(
+      (image) => normalizeImageMatchText(image.associatedColor) === selectedColor
+    );
+
+    if (colorImages.length > 0) {
+      return colorImages;
+    }
+  }
+
+  return fullImageSet;
+}
+
 function getPublicImageView(
   image: CatalogProductImageRecord,
   usage: ProductImageRenditionUsage
@@ -295,6 +334,10 @@ function normalizeOptionalText(value: string | null | undefined): string | null 
   const normalizedValue = value?.trim().replace(/\s+/g, " ") ?? "";
 
   return normalizedValue || null;
+}
+
+function normalizeImageMatchText(value: string | null | undefined): string | null {
+  return normalizeOptionalText(value)?.toLocaleLowerCase("es-AR") ?? null;
 }
 
 function cloneProductRecords(

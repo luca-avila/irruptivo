@@ -7,6 +7,7 @@ import {
 } from "./catalog";
 import {
   getPublicImageSet,
+  getVariantAwarePublicImageSet,
   reorderProductImages,
   softDeleteProductImage,
   uploadProductImage
@@ -306,6 +307,117 @@ describe("product image management", () => {
   });
 });
 
+describe("variant-aware public image sets", () => {
+  it("returns selected color images by associatedColor in public sort order", () => {
+    const imageSet = getVariantAwarePublicImageSet(
+      [
+        imageRecord("general", 1),
+        imageRecord("blue-back", 3, { associatedColor: "Azul   Noche" }),
+        imageRecord("blue-front", 2, { associatedColor: " azul noche " }),
+        imageRecord("red-front", 4, { associatedColor: "Rojo" })
+      ],
+      {
+        selectedOptions: {
+          color: "azul noche"
+        }
+      }
+    );
+
+    expect(imageSet.map((image) => image.id)).toEqual(["blue-front", "blue-back"]);
+  });
+
+  it("prefers selected variantId images over selected color images", () => {
+    const imageSet = getVariantAwarePublicImageSet(
+      [
+        imageRecord("black-color-front", 1, { associatedColor: "Negro" }),
+        imageRecord("black-size-detail", 3, {
+          associatedColor: "Negro",
+          variantId: "tee-black-m"
+        }),
+        imageRecord("black-size-main", 2, {
+          associatedColor: "Negro",
+          variantId: "tee-black-m"
+        })
+      ],
+      {
+        selectedOptions: {
+          color: "Negro"
+        },
+        selectedVariantId: "tee-black-m"
+      }
+    );
+
+    expect(imageSet.map((image) => image.id)).toEqual([
+      "black-size-main",
+      "black-size-detail"
+    ]);
+  });
+
+  it("falls back to selected color images when the selected variant has no tagged images", () => {
+    const imageSet = getVariantAwarePublicImageSet(
+      [
+        imageRecord("general", 1),
+        imageRecord("red-front", 4, { associatedColor: "Rojo" }),
+        imageRecord("black-back", 3, { associatedColor: "Negro" }),
+        imageRecord("black-front", 2, { associatedColor: "Negro" })
+      ],
+      {
+        selectedOptions: {
+          color: "Negro"
+        },
+        selectedVariantId: "tee-black-xl"
+      }
+    );
+
+    expect(imageSet.map((image) => image.id)).toEqual([
+      "black-front",
+      "black-back"
+    ]);
+  });
+
+  it("falls back to the full product image set when the selected color has no tagged images", () => {
+    const imageSet = getVariantAwarePublicImageSet(
+      [
+        imageRecord("general", 2),
+        imageRecord("red-front", 1, { associatedColor: "Rojo" })
+      ],
+      {
+        selectedOptions: {
+          color: "Verde"
+        }
+      }
+    );
+
+    expect(imageSet.map((image) => image.id)).toEqual(["red-front", "general"]);
+  });
+
+  it("returns the full product image set when there is no selection", () => {
+    const imageSet = getVariantAwarePublicImageSet(
+      [
+        imageRecord("second", 2, { associatedColor: "Negro" }),
+        imageRecord("first", 1)
+      ],
+      {}
+    );
+
+    expect(imageSet.map((image) => image.id)).toEqual(["first", "second"]);
+  });
+
+  it("keeps products with only untagged images unchanged", () => {
+    const imageSet = getVariantAwarePublicImageSet(
+      [imageRecord("detail", 2), imageRecord("main", 1)],
+      {
+        selectedOptions: {
+          color: "Negro"
+        },
+        selectedVariantId: "tee-black-s"
+      }
+    );
+
+    expect(imageSet.map((image) => image.id)).toEqual(["main", "detail"]);
+  });
+});
+
 function renditionSet(productId: string, imageId: string) {
   return {
     card: {
@@ -323,5 +435,23 @@ function renditionSet(productId: string, imageId: string) {
       width: 1800,
       height: 2400
     }
+  };
+}
+
+function imageRecord(
+  id: string,
+  sortOrder: number,
+  tags: {
+    associatedColor?: string | null;
+    variantId?: string | null;
+  } = {}
+) {
+  return {
+    id,
+    path: `products/training-tee/${id}.webp`,
+    alt: `Foto ${id}`,
+    sortOrder,
+    associatedColor: tags.associatedColor,
+    variantId: tags.variantId
   };
 }
