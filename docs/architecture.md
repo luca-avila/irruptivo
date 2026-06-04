@@ -17,7 +17,8 @@
 - Empaquetado y deploy vía **Docker / docker-compose** (app + Postgres + volumen de media).
 
 Scripts (`package.json`): `dev`, `build`, `start`, `test` (vitest run), `typecheck`
-(`tsc --noEmit`); `postinstall` corre `prisma generate`; seed vía `prisma/seed.ts` (tsx).
+(`tsc --noEmit`); `postinstall` corre `prisma generate`. La config de Prisma vive en
+`prisma.config.ts` (no en `package.json#prisma`), que define el seed (`tsx prisma/seed.ts`).
 
 ## Organización del código
 
@@ -42,12 +43,14 @@ negocio vive en módulos profundos bajo `src/`; las rutas y la UI bajo `app/`.
 
 ### `app/` — rutas (App Router)
 
-- **Storefront:** `/` (home), `/coleccion/[slug]` (ropa), `/suplementos/[slug]`,
-  `/buscar`, `/carrito`, `/checkout` y `/checkout/pago/*` (éxito, fallo, pendiente,
-  vencido, estado), `/pedido/[token]` (estado de pedido de invitado), `/nosotros`,
+- **Storefront:** `/` (home), `/coleccion` (listado de ropa) y `/coleccion/[slug]` (detalle),
+  `/suplementos` (listado) y `/suplementos/[slug]` (detalle), `/buscar`, `/carrito`,
+  `/checkout` y `/checkout/pago/*` (éxito, fallo, pendiente, vencido, estado), `/pedido`
+  (fallback sin token) y `/pedido/[token]` (estado de pedido de invitado), `/nosotros`,
   `/envios-y-cambios` (trust pages).
-- **Admin:** `/admin/login` + grupo protegido `/admin/(protected)/` con `productos`
-  (lista, nuevo, `[id]/editar`) y `pedidos` (cola, `[id]`).
+- **Admin:** `/admin/login` + grupo protegido `/admin/(protected)/`: dashboard (`/admin`),
+  `productos` (lista, nuevo, `[id]/editar`), `pedidos` (cola, `[id]`) y `configuracion`
+  (settings de tienda, p. ej. el email de aviso al admin).
 - **API:** `/api/mercado-pago/webhook` — única route handler externa.
 - **Media:** `/media/[...path]` — sirve renditions de imágenes desde `IRRUPTIVO_MEDIA_ROOT`.
 
@@ -202,8 +205,9 @@ transiciones de fulfillment posteriores (`preparing` → `shipped`/`ready_for_pi
 
 ## Deploy
 
-- **Docker / docker-compose:** servicios `app` (Next) + Postgres + volumen `media_data`
-  para media persistente (Nginx delante, planeado).
+- **Docker / docker-compose:** servicios `postgres`, `migrate` (corre `prisma migrate deploy`
+  una vez y termina) y `app` (Next), con volúmenes `postgres_data` y `media_data` (media
+  persistente). Nginx delante, planeado.
 - Target: **VPS** (no serverless), porque la media vive en filesystem persistente.
 - Variables de entorno (`.env.example`): `IRRUPTIVO_APP_URL`, `DATABASE_URL` (+ `POSTGRES_*`),
   `NEXT_PUBLIC_WHATSAPP_URL`, `NEXT_PUBLIC_INSTAGRAM_URL`, `ADMIN_USERNAME` / `ADMIN_PASSWORD`
