@@ -2,8 +2,7 @@
 
 > Describe Irruptivo **tal como está implementado hoy**, no como se planeó originalmente.
 > Donde el plan inicial difiere de la realidad (notablemente: reserva de stock), gana este
-> documento. Para el "por qué" de las decisiones ver [`decisions.md`](./decisions.md); para
-> el trabajo restante a producción ver [`hitl-checklist.md`](./hitl-checklist.md).
+> documento. Para el "por qué" de las decisiones ver [`decisions.md`](./decisions.md).
 
 ## Stack
 
@@ -35,7 +34,7 @@ negocio vive en módulos profundos bajo `src/`; las rutas y la UI bajo `app/`.
 | `checkout/` | Formulario de checkout, métodos de entrega, handoff de pago. |
 | `orders/` | Creación de pedido, store de pedidos (Prisma), expiración de pendientes, token de acceso de invitado y proyección de estado de pedido. |
 | `payments/` | Preferencia de Mercado Pago, webhook, reconciliación de pago, eventos de pago (idempotencia), páginas de resultado de pago. |
-| `notifications/` | Email de confirmación de pedido y adaptador de proveedor de email (con outbox local de dev). |
+| `notifications/` | Emails transaccionales (confirmación al comprador, aviso al admin) y adaptador agnóstico de proveedor de email: modos `local` (outbox de dev), `http` (genérico) y `resend` (producción). |
 | `admin/` | Auth/sesión de admin, gestión de productos/variantes/imágenes, cola y detalle de pedidos, transiciones de fulfillment, edición de contacto/fulfillment. |
 | `storefront/` | Homepage, navegación, páginas de confianza (trust), y `components/` (UI compartida del storefront). |
 | `media/` | Resolución y servido de media de producto desde el filesystem. |
@@ -150,13 +149,23 @@ implementado; backup/cleanup del volumen es tarea humana pendiente.
 
 ## Notificaciones por email
 
-`notifications/email-provider.ts` es un adaptador agnóstico con **outbox local** para
-dev/demo, un modo HTTP genérico y un modo de producción `resend`. Resend usa
-`https://api.resend.com/emails` con `IRRUPTIVO_EMAIL_PROVIDER_TOKEN` y el remitente
-`IRRUPTIVO_EMAIL_FROM_EMAIL` / `IRRUPTIVO_EMAIL_FROM_NAME`; `IRRUPTIVO_EMAIL_PROVIDER_URL`
-sólo aplica al modo `http`. El estado de envío se persiste en `email_deliveries`.
-Pendiente para producción: verificar el dominio remitente en Resend (SPF/DKIM) — ver
-[`hitl-checklist.md`](./hitl-checklist.md).
+`notifications/email-provider.ts` es un **adaptador agnóstico de proveedor**: el resto del
+código sólo conoce `sendEmail(EmailMessage)` y un `EmailSendResult` discriminado
+(`sent` / `configuration_missing` / `failed`). El proveedor se elige con
+`IRRUPTIVO_EMAIL_PROVIDER` y hoy hay tres modos:
+
+- **`local`** — outbox en memoria para dev/demo (default fuera de producción); no envía nada
+  real, sólo permite inspección/tests.
+- **`http`** — POST genérico a `IRRUPTIVO_EMAIL_PROVIDER_URL` con `Bearer` token. Pensado para
+  enchufar cualquier proveedor con un endpoint propio.
+- **`resend`** — producción. POST a `https://api.resend.com/emails` con
+  `IRRUPTIVO_EMAIL_PROVIDER_TOKEN`; `IRRUPTIVO_EMAIL_PROVIDER_URL` **no** aplica en este modo.
+
+En todos los modos el remitente sale de `IRRUPTIVO_EMAIL_FROM_EMAIL` /
+`IRRUPTIVO_EMAIL_FROM_NAME`, y agregar otro proveedor es escribir una nueva función `send*` +
+su rama de normalización de config. El estado de cada envío se persiste en `email_deliveries`.
+Pendiente para producción: verificar el dominio remitente en Resend (SPF/DKIM), si no los
+emails caen en spam o el envío falla.
 
 ## Deploy
 
@@ -166,8 +175,9 @@ Pendiente para producción: verificar el dominio remitente en Resend (SPF/DKIM) 
 - Variables de entorno (`.env.example`): `IRRUPTIVO_APP_URL`, `DATABASE_URL` (+ `POSTGRES_*`),
   `NEXT_PUBLIC_WHATSAPP_URL`, `NEXT_PUBLIC_INSTAGRAM_URL`, `ADMIN_USERNAME` / `ADMIN_PASSWORD`
   / `ADMIN_SESSION_SECRET`, `MERCADO_PAGO_ACCESS_TOKEN` / `MERCADO_PAGO_WEBHOOK_SECRET`,
-  `IRRUPTIVO_MEDIA_ROOT`. La configuración para producción se documenta en
-  [`hitl-checklist.md`](./hitl-checklist.md).
+  `IRRUPTIVO_MEDIA_ROOT`, y las de email (`IRRUPTIVO_EMAIL_*`, ver arriba). Para producción
+  faltan, además, las credenciales live de Mercado Pago y la verificación del dominio
+  remitente en Resend.
 
 ## Testing
 

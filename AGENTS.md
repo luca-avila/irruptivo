@@ -5,8 +5,7 @@
 
 Para el **porqué** del producto y las
 decisiones, ver `docs/` (en especial `docs/product.md`, `docs/architecture.md`,
-`docs/decisions.md`). Las **convenciones** de código/UX/copy están en `docs/agent-rules.md`
-y el trabajo restante a producción en `docs/hitl-checklist.md`.
+`docs/decisions.md`). Las **convenciones** de código/UX/copy están en `docs/agent-rules.md`.
 
 ## Qué es
 
@@ -96,9 +95,13 @@ npx prisma db seed       # datos de demo (prisma/seed.ts)
 
 ### `src/notifications/` — email
 
-- `email-provider.ts` — adaptador HTTP agnóstico + outbox local de dev (`sendEmail`).
+- `email-provider.ts` — adaptador agnóstico de proveedor (`sendEmail`). Modos según
+  `IRRUPTIVO_EMAIL_PROVIDER`: `local` (outbox de dev), `http` (POST genérico) y `resend`
+  (producción, `https://api.resend.com/emails`). Sumar otro proveedor = nueva función `send*`.
 - `order-confirmation-email.ts` — `sendOrderConfirmationOnce` (idempotente vía `EmailDelivery`),
   `buildOrderConfirmationEmailMessage`.
+- `admin-order-notification-email.ts` — `sendAdminOrderNotificationOnce` (aviso interno al
+  admin del pedido pagado), `buildAdminOrderNotificationEmailMessage`.
 
 ### `src/admin/` — panel de admin
 

@@ -34,5 +34,4 @@ La documentación vive en [`docs/`](./docs/):
 - **[`decisions.md`](./docs/decisions.md)** — log canónico de decisiones de producto y técnicas.
 - **[`agent-rules.md`](./docs/agent-rules.md)** — convenciones de código, UX y copy para
   trabajar en el repo.
-- **[`hitl-checklist.md`](./docs/hitl-checklist.md)** — trabajo restante antes de producción.
 - **[`wireframes/`](./docs/wireframes/)** — referencia de diseño.
