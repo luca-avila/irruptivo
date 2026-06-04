@@ -1,0 +1,56 @@
+name: Build and push images
+
+# Buildea las imágenes en los runners de GitHub y las publica en ghcr.io.
+# El VPS solo hace `docker compose pull && up -d` (sin build).
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+env:
+  # ghcr.io/luca-avila/irruptivo  (github.repository ya viene en minúsculas acá)
+  IMAGE_BASE: ghcr.io/${{ github.repository }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # necesario para pushear a ghcr.io con GITHUB_TOKEN
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Imagen de la app: target `runner` (server standalone de Next).
+      - name: Build and push app image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: runner
+          push: true
+          tags: |
+            ${{ env.IMAGE_BASE }}-app:latest
+            ${{ env.IMAGE_BASE }}-app:${{ github.sha }}
+          cache-from: type=gha,scope=app
+          cache-to: type=gha,mode=max,scope=app
+
+      # Imagen de migraciones: target `deps` (trae el CLI de Prisma + prisma/migrations).
+      - name: Build and push migrate image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: deps
+          push: true
+          tags: |
+            ${{ env.IMAGE_BASE }}-migrate:latest
+            ${{ env.IMAGE_BASE }}-migrate:${{ github.sha }}
+          cache-from: type=gha,scope=migrate
+          cache-to: type=gha,mode=max,scope=migrate
