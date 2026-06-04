@@ -112,6 +112,9 @@ npx prisma db seed       # datos de demo (prisma/seed.ts)
 - `orders.ts` — vistas de cola y detalle de pedidos (`listAdminOrders`, `getAdminOrderDetail`).
 - `order-transitions.ts` + `order-actions.ts` — transiciones de fulfillment.
 - `order-fulfillment-edits.ts` + `order-fulfillment-edit-actions.ts` — edición de contacto/envío.
+- `settings.ts` (`getStoreSettings`, `setAdminNotificationEmail`, `getAdminNotificationRecipient`)
+  + `settings-actions.ts` + `settings-validation.ts` — `StoreSettings` de la tienda
+  (hoy: email de aviso al admin), editable desde `/admin/(protected)/configuracion`.
 
 ### `src/storefront/` — UI y navegación del storefront
 
@@ -127,10 +130,12 @@ npx prisma db seed       # datos de demo (prisma/seed.ts)
 
 ### `app/` — rutas (App Router)
 
-- **Storefront:** `/` · `/coleccion/[slug]` (ropa) · `/suplementos/[slug]` · `/buscar` ·
-  `/carrito` · `/checkout` + `/checkout/pago/{exito,fallo,pendiente,vencido,estado}` ·
+- **Storefront:** `/` · `/coleccion` + `/coleccion/[slug]` (ropa) · `/suplementos` +
+  `/suplementos/[slug]` · `/buscar` · `/carrito` · `/checkout` +
+  `/checkout/pago/{exito,fallo,pendiente,vencido,estado}` · `/pedido` (fallback sin token) +
   `/pedido/[token]` · `/nosotros` · `/envios-y-cambios`.
-- **Admin:** `/admin/login` + `/admin/(protected)/{productos,pedidos}` (protegido por `proxy.ts`).
+- **Admin:** `/admin/login` + `/admin/(protected)/{,productos,pedidos,configuracion}`
+  (dashboard + secciones; protegido por `proxy.ts`).
 - **API:** `app/api/mercado-pago/webhook/route.ts` (POST) — único route handler externo.
 - **Media:** `app/media/[...path]/route.ts` (GET).
 - `proxy.ts` (raíz) — middleware que protege `/admin/:path*`.
