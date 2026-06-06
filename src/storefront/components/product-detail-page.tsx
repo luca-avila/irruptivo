@@ -246,6 +246,11 @@ function VariantSelectors({
                   })}
                   key={value}
                   aria-current={isActive ? "true" : undefined}
+                  aria-label={getOptionAriaLabel({
+                    isActive,
+                    label: group.label,
+                    value
+                  })}
                 >
                   {value}
                 </Link>
@@ -424,7 +429,7 @@ function isOptionAvailable({
   });
 }
 
-function getOptionHref({
+export function getOptionHref({
   area,
   basePath,
   selectedOptions,
@@ -439,11 +444,21 @@ function getOptionHref({
 }): string {
   const params = new URLSearchParams();
   const nextOptions = {
-    ...selectedOptions,
-    [optionKey]: optionValue
+    ...selectedOptions
   };
+  const optionOrder: readonly (keyof VariantOptionValues)[] = OPTION_ORDER_BY_AREA[area];
 
-  for (const key of OPTION_ORDER_BY_AREA[area]) {
+  if (selectedOptions[optionKey] === optionValue) {
+    const optionIndex = optionOrder.indexOf(optionKey);
+
+    for (const key of optionOrder.slice(optionIndex)) {
+      delete nextOptions[key];
+    }
+  } else {
+    nextOptions[optionKey] = optionValue;
+  }
+
+  for (const key of optionOrder) {
     const value = nextOptions[key];
 
     if (value) {
@@ -453,6 +468,20 @@ function getOptionHref({
 
   const query = params.toString();
   return query ? `${basePath}?${query}` : basePath;
+}
+
+function getOptionAriaLabel({
+  isActive,
+  label,
+  value
+}: {
+  isActive: boolean;
+  label: string;
+  value: string;
+}): string {
+  const action = isActive ? "Quitar" : "Elegir";
+
+  return `${action} ${label.toLowerCase()} ${value}`;
 }
 
 function getAvailabilityLabel(
