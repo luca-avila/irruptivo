@@ -163,6 +163,44 @@ describe.skipIf(!process.env.DATABASE_URL)(
       ]);
     });
 
+    it("sends only once when two invocations race for the same order and kind", async () => {
+      const sentMessages: EmailMessage[] = [];
+      const order = getOrder(ORDER_STATUS.paid);
+      await createTestOrder(order);
+
+      const emailProvider = async (message: EmailMessage) => {
+        sentMessages.push(message);
+
+        return {
+          status: "sent" as const,
+          provider: "test",
+          messageId: "message-concurrent"
+        };
+      };
+
+      const results = await Promise.all([
+        sendOrderConfirmationOnce(order, {
+          emailProvider,
+          appUrl: "https://irruptivo.test",
+          now
+        }),
+        sendOrderConfirmationOnce(order, {
+          emailProvider,
+          appUrl: "https://irruptivo.test",
+          now
+        })
+      ]);
+
+      expect(results.map((result) => result.status).sort()).toEqual([
+        "duplicate",
+        "sent"
+      ]);
+      expect(sentMessages).toHaveLength(1);
+      await expect(
+        readOrderConfirmationEmailDeliveriesForTests()
+      ).resolves.toHaveLength(1);
+    });
+
     it("does not write delivery rows when the order is unpaid or has no guest status link", async () => {
       let providerCalled = false;
 
