@@ -67,6 +67,10 @@ export type ApprovedPaymentSettlementResult =
       order: Order;
     }
   | {
+      status: "insufficient_stock";
+      order: Order;
+    }
+  | {
       status: "already_reconciled";
       order: Order | null;
     };
@@ -248,10 +252,14 @@ export async function reconcileMercadoPagoEvent(
   if (providerStatus === "approved") {
     return await reconcileApprovedPayment({
       order: reconciledOrder,
+      notification,
       payment,
+      providerEventId,
       orderRepository,
+      eventRecorder,
       confirmationEmailSender,
-      adminNotificationEmailSender
+      adminNotificationEmailSender,
+      now
     });
   }
 
@@ -328,16 +336,24 @@ async function expirePendingPaymentOrderIfNeeded({
 
 async function reconcileApprovedPayment({
   order,
+  notification,
   payment,
+  providerEventId,
   orderRepository,
+  eventRecorder,
   confirmationEmailSender,
-  adminNotificationEmailSender
+  adminNotificationEmailSender,
+  now
 }: {
   order: Order;
+  notification: MercadoPagoWebhookNotification;
   payment: MercadoPagoPayment;
+  providerEventId: string;
   orderRepository: PaymentReconciliationOrderRepository;
+  eventRecorder: PaymentEventRecorder;
   confirmationEmailSender: OrderConfirmationEmailSender;
   adminNotificationEmailSender: AdminOrderNotificationEmailSender;
+  now: Date | string;
 }): Promise<PaymentReconciliationResult> {
   if (order.status === ORDER_STATUS.expired) {
     return {
@@ -363,7 +379,32 @@ async function reconcileApprovedPayment({
         reason: "payment_approved"
       });
 
-    if (settlementResult.status !== "paid") {
+    if (settlementResult.status === "insufficient_stock") {
+      await orderRepository.updateOrderStatus({
+        orderId: settlementResult.order.id,
+        status: ORDER_STATUS.expired,
+        reason: "insufficient_stock_on_payment"
+      });
+      await eventRecorder(
+        buildPaymentEventRecord({
+          notification,
+          payment,
+          orderId: settlementResult.order.id,
+          providerEventId: getInsufficientStockProviderEventId(providerEventId),
+          processingResult: PAYMENT_MANUAL_REVIEW_PROCESSING_RESULT,
+          receivedAt: getDate(now, "now").toISOString()
+        })
+      );
+
+      return {
+        status: "manual_review_required",
+        orderId: settlementResult.order.id,
+        providerPaymentId: payment.id,
+        orderStatus: ORDER_STATUS.expired
+      };
+    }
+
+    if (settlementResult.status === "already_reconciled") {
       return {
         status: "ignored",
         reason: "already_reconciled",
@@ -437,78 +478,113 @@ async function markOrderPaidAndDecrementStockInStore({
     };
   }
 
-  return prisma.$transaction(async (tx) => {
-    const existingOrder = await tx.order.findUnique({
-      where: {
-        id: normalizedOrderId
-      },
-      include: {
-        items: true
-      }
-    });
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const existingOrder = await tx.order.findUnique({
+        where: {
+          id: normalizedOrderId
+        },
+        include: {
+          items: true
+        }
+      });
 
-    if (!existingOrder) {
+      if (!existingOrder) {
+        return {
+          status: "already_reconciled",
+          order: null
+        };
+      }
+
+      const currentOrder = mapOrderRecordToOrder(existingOrder);
+
+      if (existingOrder.status !== ORDER_STATUS.pendingPayment) {
+        return {
+          status: "already_reconciled",
+          order: currentOrder
+        };
+      }
+
+      const paidOrderUpdate = await tx.order.updateMany({
+        where: {
+          id: normalizedOrderId,
+          status: ORDER_STATUS.pendingPayment
+        },
+        data: {
+          status: ORDER_STATUS.paid
+        }
+      });
+
+      if (paidOrderUpdate.count !== 1) {
+        const latestOrder = await tx.order.findUnique({
+          where: {
+            id: normalizedOrderId
+          },
+          include: {
+            items: true
+          }
+        });
+
+        return {
+          status: "already_reconciled",
+          order: latestOrder ? mapOrderRecordToOrder(latestOrder) : null
+        };
+      }
+
+      await tx.orderStatusHistory.create({
+        data: {
+          orderId: normalizedOrderId,
+          fromStatus: existingOrder.status,
+          toStatus: ORDER_STATUS.paid,
+          reason,
+          actor
+        }
+      });
+
+      for (const [variantId, quantity] of getVariantQuantityTotals(
+        existingOrder.items
+      )) {
+        const updatedRows = await tx.$executeRaw`
+          UPDATE "product_variants"
+          SET "stock" = "stock" - ${quantity},
+              "updated_at" = NOW()
+          WHERE "id" = ${variantId}
+            AND "stock" >= ${quantity}
+        `;
+
+        if (updatedRows !== 1) {
+          throw new InsufficientStockSettlementError(currentOrder);
+        }
+      }
+
+      const paidOrder = await tx.order.findUnique({
+        where: {
+          id: normalizedOrderId
+        },
+        include: {
+          items: true
+        }
+      });
+
+      if (!paidOrder) {
+        throw new Error("Paid order disappeared during payment settlement.");
+      }
+
       return {
-        status: "already_reconciled",
-        order: null
+        status: "paid",
+        order: mapOrderRecordToOrder(paidOrder)
+      };
+    });
+  } catch (error) {
+    if (error instanceof InsufficientStockSettlementError) {
+      return {
+        status: "insufficient_stock",
+        order: error.order
       };
     }
 
-    if (existingOrder.status !== ORDER_STATUS.pendingPayment) {
-      return {
-        status: "already_reconciled",
-        order: mapOrderRecordToOrder(existingOrder)
-      };
-    }
-
-    await tx.order.update({
-      where: {
-        id: normalizedOrderId
-      },
-      data: {
-        status: ORDER_STATUS.paid
-      }
-    });
-
-    await tx.orderStatusHistory.create({
-      data: {
-        orderId: normalizedOrderId,
-        fromStatus: existingOrder.status,
-        toStatus: ORDER_STATUS.paid,
-        reason,
-        actor
-      }
-    });
-
-    for (const [variantId, quantity] of getVariantQuantityTotals(
-      existingOrder.items
-    )) {
-      await tx.$executeRaw`
-        UPDATE "product_variants"
-        SET "stock" = GREATEST("stock" - ${quantity}, 0),
-            "updated_at" = NOW()
-        WHERE "id" = ${variantId}
-      `;
-    }
-
-    const paidOrder = await tx.order.findUnique({
-      where: {
-        id: normalizedOrderId
-      },
-      include: {
-        items: true
-      }
-    });
-
-    if (!paidOrder) {
-      throw new Error("Paid order disappeared during payment settlement.");
-    }
-
-    return {
-      status: "paid",
-      order: mapOrderRecordToOrder(paidOrder)
-    };
-  });
+    throw error;
+  }
 }
 
 function getVariantQuantityTotals(
@@ -746,6 +822,17 @@ function getProviderEventId(
   }
 
   return `${notification.dataId}:${notification.action}:${payment.status}`;
+}
+
+function getInsufficientStockProviderEventId(providerEventId: string): string {
+  return `${providerEventId}:insufficient_stock`;
+}
+
+class InsufficientStockSettlementError extends Error {
+  constructor(readonly order: Order) {
+    super("Insufficient stock during paid order settlement.");
+    this.name = "InsufficientStockSettlementError";
+  }
 }
 
 function getDate(value: Date | string, name: string): Date {

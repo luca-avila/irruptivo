@@ -163,7 +163,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
         required: true,
         label: "Revisión manual requerida",
         description:
-          "Llegó un pago aprobado para un pedido con reserva vencida. Revisá el caso antes de preparar o devolver el pago.",
+          "Llegó un pago aprobado que no pudimos completar automáticamente (reserva vencida o sin stock al confirmar). Revisá el caso antes de preparar o devolver el pago.",
         providerPaymentIds: ["payment-late-001", "payment-late-002"],
         latestEventAt: "2026-05-30T12:05:00.000Z"
       });

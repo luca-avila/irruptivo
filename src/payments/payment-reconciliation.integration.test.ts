@@ -204,6 +204,96 @@ describe.skipIf(!process.env.DATABASE_URL)(
         ])
       );
     });
+
+    it("does not oversell when two pending orders pay for the same scarce variant", async () => {
+      const scarce = await createProductAndOrdersForVariant({
+        suffix: "scarce",
+        stock: 1,
+        orders: [
+          {
+            orderId: "phase7-order-scarce-first",
+            quantity: 1
+          },
+          {
+            orderId: "phase7-order-scarce-second",
+            quantity: 1
+          }
+        ]
+      });
+      const firstOrder = scarce.orders[0];
+      const secondOrder = scarce.orders[1];
+
+      if (!firstOrder || !secondOrder) {
+        throw new Error("Expected two scarce-stock orders to be created.");
+      }
+
+      const firstResult = await reconcileMercadoPagoEvent(
+        getNotification({
+          id: "phase7-event-scarce-first",
+          dataId: "phase7-payment-scarce-first"
+        }),
+        {
+          paymentProvider: async () =>
+            getPayment({
+              paymentId: "phase7-payment-scarce-first",
+              orderId: firstOrder.orderId,
+              transactionAmount: firstOrder.totalArs
+            }),
+          confirmationEmailSender: async (order) => ({
+            status: "sent",
+            orderId: order.id,
+            recipientEmail: order.contact.email,
+            providerMessageId: `message-${order.id}`
+          }),
+          now
+        }
+      );
+      const secondResult = await reconcileMercadoPagoEvent(
+        getNotification({
+          id: "phase7-event-scarce-second",
+          dataId: "phase7-payment-scarce-second"
+        }),
+        {
+          paymentProvider: async () =>
+            getPayment({
+              paymentId: "phase7-payment-scarce-second",
+              orderId: secondOrder.orderId,
+              transactionAmount: secondOrder.totalArs
+            }),
+          confirmationEmailSender: async (order) => ({
+            status: "sent",
+            orderId: order.id,
+            recipientEmail: order.contact.email,
+            providerMessageId: `message-${order.id}`
+          }),
+          now
+        }
+      );
+
+      await expect(readVariantStock(scarce.variantId)).resolves.toBe(0);
+      await expect(findOrderByIdInStore(firstOrder.orderId)).resolves.toMatchObject({
+        status: ORDER_STATUS.paid
+      });
+      await expect(findOrderByIdInStore(secondOrder.orderId)).resolves.toMatchObject({
+        status: ORDER_STATUS.expired
+      });
+      expect(firstResult).toMatchObject({
+        status: "paid",
+        orderId: firstOrder.orderId
+      });
+      expect(secondResult).toEqual({
+        status: "manual_review_required",
+        orderId: secondOrder.orderId,
+        providerPaymentId: "phase7-payment-scarce-second",
+        orderStatus: ORDER_STATUS.expired
+      });
+      await expect(
+        getPaymentManualReviewForOrder(secondOrder.orderId)
+      ).resolves.toMatchObject({
+        required: true,
+        providerPaymentIds: ["phase7-payment-scarce-second"]
+      });
+    });
   }
 );
 
@@ -280,6 +370,91 @@ async function createProductAndOrder({
     orderId,
     variantId,
     totalArs: quantity * 26000
+  };
+}
+
+async function createProductAndOrdersForVariant({
+  suffix,
+  stock,
+  orders
+}: {
+  suffix: string;
+  stock: number;
+  orders: readonly { orderId: string; quantity: number }[];
+}): Promise<{
+  variantId: string;
+  orders: { orderId: string; totalArs: number }[];
+}> {
+  const productId = `${productIdPrefix}-${suffix}`;
+  const variantId = `${productId}-variant`;
+  const product = getCatalogProduct({
+    productId,
+    variantId,
+    stock
+  });
+
+  await prisma.product.create({
+    data: {
+      id: product.id,
+      slug: product.slug,
+      name: product.name,
+      description: product.description,
+      area: product.area,
+      status: product.status,
+      basePriceArs: product.basePriceArs,
+      clothingSubcategory: product.clothingSubcategory,
+      supplementType: product.supplementType,
+      variants: {
+        create: product.variants.map((variant, index) => ({
+          id: variant.id,
+          sku: variant.sku,
+          skuNormalized: variant.sku.toUpperCase(),
+          name: variant.name,
+          stock: variant.stock,
+          position: index,
+          priceOverrideArs: variant.priceOverrideArs ?? null,
+          optionColor: variant.options?.color ?? null,
+          optionSize: variant.options?.size ?? null,
+          optionFlavor: variant.options?.flavor ?? null,
+          optionWeight: variant.options?.weight ?? null,
+          optionPresentation: variant.options?.presentation ?? null
+        }))
+      }
+    }
+  });
+
+  const createdOrders: { orderId: string; totalArs: number }[] = [];
+
+  for (const order of orders) {
+    const result = await createPendingOrderInStore({
+      idempotencyKey: `idem-${order.orderId}`,
+      cart: getCart({ productId, variantId, quantity: order.quantity }),
+      checkout: {
+        fullName: "Luca Irruptivo",
+        email: "luca@example.com",
+        phone: "11 5555 5555",
+        deliveryMethod: DELIVERY_METHOD.pickup
+      },
+      products: [product],
+      orderId: order.orderId,
+      orderNumber: `IRR-${suffix.toUpperCase()}-${createdOrders.length + 1}`,
+      guestAccessToken: `guest-${order.orderId}`,
+      now
+    });
+
+    if (result.status !== "created") {
+      throw new Error(`Expected ${order.orderId} to be created.`);
+    }
+
+    createdOrders.push({
+      orderId: order.orderId,
+      totalArs: order.quantity * 26000
+    });
+  }
+
+  return {
+    variantId,
+    orders: createdOrders
   };
 }
 

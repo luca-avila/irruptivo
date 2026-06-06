@@ -63,6 +63,8 @@ describe("Mercado Pago payment reconciliation", () => {
       }
     });
     expect(repository.getOrder()?.status).toBe(ORDER_STATUS.paid);
+    expect(repository.readVariantStock("tee-black-s")).toBe(8);
+    expect(repository.readVariantStock("creatina-300g")).toBe(9);
     expect(repository.transitionCount).toBe(1);
     expect(repository.lastUpdate).toMatchObject({
       reason: "payment_approved"
@@ -287,6 +289,146 @@ describe("Mercado Pago payment reconciliation", () => {
     expect(repository.getOrder()?.status).toBe(ORDER_STATUS.expired);
   });
 
+  it("expires the order, flags manual review, and skips emails when approved payment has insufficient stock", async () => {
+    const repository = createOrderRepository(getOrder(ORDER_STATUS.pendingPayment), {
+      stockByVariantId: {
+        "tee-black-s": 1,
+        "creatina-300g": 5
+      }
+    });
+    const eventRecorder = createTestPaymentEventRecorder();
+    const confirmationEmails: Order[] = [];
+    const adminNotifications: Order[] = [];
+
+    const result = await reconcileMercadoPagoEvent(getNotification(), {
+      paymentProvider: async () => getPayment({ status: "approved" }),
+      orderRepository: repository,
+      eventRecorder: eventRecorder.record,
+      confirmationEmailSender: async (order) => {
+        confirmationEmails.push(order);
+
+        return getSentConfirmationEmailResult(order);
+      },
+      adminNotificationEmailSender: async (order) => {
+        adminNotifications.push(order);
+
+        return getSentAdminNotificationResult(order);
+      },
+      now
+    });
+
+    expect(result).toEqual({
+      status: "manual_review_required",
+      orderId: "order-001",
+      providerPaymentId: "payment-001",
+      orderStatus: ORDER_STATUS.expired
+    });
+    expect(repository.getOrder()?.status).toBe(ORDER_STATUS.expired);
+    expect(repository.transitionCount).toBe(1);
+    expect(repository.lastUpdate).toMatchObject({
+      status: ORDER_STATUS.expired,
+      reason: "insufficient_stock_on_payment"
+    });
+    expect(repository.readVariantStock("tee-black-s")).toBe(1);
+    expect(repository.readVariantStock("creatina-300g")).toBe(5);
+    expect(confirmationEmails).toEqual([]);
+    expect(adminNotifications).toEqual([]);
+    expect(eventRecorder.read()).toMatchObject([
+      {
+        providerEventId: "event-001",
+        providerPaymentId: "payment-001",
+        orderId: "order-001",
+        providerStatus: "approved",
+        processingResult: "paid"
+      },
+      {
+        providerEventId: "event-001:insufficient_stock",
+        providerPaymentId: "payment-001",
+        orderId: "order-001",
+        providerStatus: "approved",
+        processingResult: "manual_review_required"
+      }
+    ]);
+  });
+
+  it("rolls back the whole paid settlement when one order line has insufficient stock", async () => {
+    const repository = createOrderRepository(getOrder(ORDER_STATUS.pendingPayment), {
+      stockByVariantId: {
+        "tee-black-s": 2,
+        "creatina-300g": 0
+      }
+    });
+    const eventRecorder = createTestPaymentEventRecorder();
+
+    const result = await reconcileMercadoPagoEvent(getNotification(), {
+      paymentProvider: async () => getPayment({ status: "approved" }),
+      orderRepository: repository,
+      eventRecorder: eventRecorder.record,
+      adminNotificationEmailSender: async (order) =>
+        getSkippedAdminNotificationResult(order),
+      now
+    });
+
+    expect(result).toMatchObject({
+      status: "manual_review_required",
+      orderId: "order-001",
+      orderStatus: ORDER_STATUS.expired
+    });
+    expect(repository.getOrder()?.status).toBe(ORDER_STATUS.expired);
+    expect(repository.readVariantStock("tee-black-s")).toBe(2);
+    expect(repository.readVariantStock("creatina-300g")).toBe(0);
+  });
+
+  it("does not rerun settlement or emails after the insufficient-stock manual-review path", async () => {
+    const repository = createOrderRepository(getOrder(ORDER_STATUS.pendingPayment), {
+      stockByVariantId: {
+        "tee-black-s": 1,
+        "creatina-300g": 5
+      }
+    });
+    const eventRecorder = createTestPaymentEventRecorder();
+    const notification = getNotification();
+    const confirmationEmails: Order[] = [];
+    const confirmationEmailSender = async (
+      order: Order
+    ): Promise<OrderConfirmationEmailResult> => {
+      confirmationEmails.push(order);
+
+      return getSentConfirmationEmailResult(order);
+    };
+
+    await reconcileMercadoPagoEvent(notification, {
+      paymentProvider: async () => getPayment({ status: "approved" }),
+      orderRepository: repository,
+      eventRecorder: eventRecorder.record,
+      confirmationEmailSender,
+      adminNotificationEmailSender: async (order) =>
+        getSkippedAdminNotificationResult(order),
+      now
+    });
+    const duplicateResult = await reconcileMercadoPagoEvent(notification, {
+      paymentProvider: async () => getPayment({ status: "approved" }),
+      orderRepository: repository,
+      eventRecorder: eventRecorder.record,
+      confirmationEmailSender,
+      adminNotificationEmailSender: async (order) =>
+        getSkippedAdminNotificationResult(order),
+      now
+    });
+
+    expect(duplicateResult).toEqual({
+      status: "duplicate",
+      orderId: "order-001",
+      providerPaymentId: "payment-001"
+    });
+    expect(repository.getOrder()?.status).toBe(ORDER_STATUS.expired);
+    expect(repository.transitionCount).toBe(1);
+    expect(repository.readVariantStock("tee-black-s")).toBe(1);
+    expect(repository.readVariantStock("creatina-300g")).toBe(5);
+    expect(confirmationEmails).toEqual([]);
+    expect(eventRecorder.read()).toHaveLength(2);
+  });
+
   it("surfaces confirmation email failure without rolling back the paid transition", async () => {
     const repository = createOrderRepository(getOrder(ORDER_STATUS.pendingPayment));
     const eventRecorder = createTestPaymentEventRecorder();
@@ -493,8 +635,18 @@ function getSkippedAdminNotificationResult(
   };
 }
 
-function createOrderRepository(order: Order | null): TestOrderRepository {
+function createOrderRepository(
+  order: Order | null,
+  {
+    stockByVariantId
+  }: {
+    stockByVariantId?: Record<string, number>;
+  } = {}
+): TestOrderRepository {
   let currentOrder = order ? cloneOrder(order) : null;
+  const variantStock = new Map<string, number>(
+    Object.entries(stockByVariantId ?? getDefaultVariantStock(order))
+  );
 
   return {
     transitionCount: 0,
@@ -523,8 +675,64 @@ function createOrderRepository(order: Order | null): TestOrderRepository {
 
       return cloneOrder(currentOrder);
     },
+    async markOrderPaidAndDecrementStock(input: {
+      orderId: string;
+      reason?: string;
+      actor?: string;
+    }) {
+      const { orderId } = input;
+
+      if (!currentOrder || currentOrder.id !== orderId) {
+        return {
+          status: "already_reconciled",
+          order: null
+        };
+      }
+
+      if (currentOrder.status !== ORDER_STATUS.pendingPayment) {
+        return {
+          status: "already_reconciled",
+          order: cloneOrder(currentOrder)
+        };
+      }
+
+      const quantityByVariantId = getQuantityByVariantId(currentOrder);
+
+      for (const [variantId, quantity] of quantityByVariantId) {
+        if ((variantStock.get(variantId) ?? 0) < quantity) {
+          return {
+            status: "insufficient_stock",
+            order: cloneOrder(currentOrder)
+          };
+        }
+      }
+
+      for (const [variantId, quantity] of quantityByVariantId) {
+        variantStock.set(variantId, (variantStock.get(variantId) ?? 0) - quantity);
+      }
+
+      this.transitionCount += 1;
+      this.lastUpdate = {
+        orderId,
+        status: ORDER_STATUS.paid,
+        reason: input.reason,
+        actor: input.actor
+      };
+      currentOrder = {
+        ...currentOrder,
+        status: ORDER_STATUS.paid
+      };
+
+      return {
+        status: "paid",
+        order: cloneOrder(currentOrder)
+      };
+    },
     getOrder(): Order | null {
       return currentOrder ? cloneOrder(currentOrder) : null;
+    },
+    readVariantStock(variantId: string): number | null {
+      return variantStock.get(variantId) ?? null;
     }
   };
 }
@@ -538,7 +746,31 @@ type TestOrderRepository = PaymentReconciliationOrderRepository & {
     actor?: string;
   } | null;
   getOrder: () => Order | null;
+  readVariantStock: (variantId: string) => number | null;
 };
+
+function getDefaultVariantStock(order: Order | null): Record<string, number> {
+  if (!order) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    order.items.map((item) => [item.variantId, 10])
+  );
+}
+
+function getQuantityByVariantId(order: Order): Map<string, number> {
+  const quantityByVariantId = new Map<string, number>();
+
+  for (const item of order.items) {
+    quantityByVariantId.set(
+      item.variantId,
+      (quantityByVariantId.get(item.variantId) ?? 0) + item.quantity
+    );
+  }
+
+  return quantityByVariantId;
+}
 
 function getOrder(status: OrderStatus): Order {
   return {

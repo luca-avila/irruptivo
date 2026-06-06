@@ -216,7 +216,7 @@ export function buildPaymentManualReviewState(
     required: true,
     label: "Revisión manual requerida",
     description:
-      "Llegó un pago aprobado para un pedido con reserva vencida. Revisá el caso antes de preparar o devolver el pago.",
+      "Llegó un pago aprobado que no pudimos completar automáticamente (reserva vencida o sin stock al confirmar). Revisá el caso antes de preparar o devolver el pago.",
     providerPaymentIds: getUniqueProviderPaymentIds(reviewEvents),
     latestEventAt: getLatestReceivedAt(reviewEvents)
   };
