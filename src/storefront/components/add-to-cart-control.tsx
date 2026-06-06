@@ -1,7 +1,13 @@
 "use client";
 
 import { Check, Loader2 } from "lucide-react";
-import { useEffect, useRef, useState, useTransition } from "react";
+import {
+  type KeyboardEvent,
+  useEffect,
+  useRef,
+  useState,
+  useTransition
+} from "react";
 
 import { validateAddToCartAction } from "../../cart/actions";
 import { addItem, hydrateCart, serializeCart } from "../../cart/cart";
@@ -37,6 +43,8 @@ export function AddToCartControl({
   const [feedback, setFeedback] = useState<AddToCartFeedback | null>(null);
   const [showAddedFeedback, setShowAddedFeedback] = useState(false);
   const addedFeedbackTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const addedFeedbackButtonRef = useRef<HTMLButtonElement | null>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
   const isDisabled = isPending || !canAddToCart || !variantId;
 
   useEffect(() => {
@@ -46,6 +54,14 @@ export function AddToCartControl({
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (!showAddedFeedback) {
+      return;
+    }
+
+    addedFeedbackButtonRef.current?.focus();
+  }, [showAddedFeedback]);
 
   function handleAddToCart() {
     if (!variantId) {
@@ -113,6 +129,10 @@ export function AddToCartControl({
   }
 
   function showProductAddedFeedback() {
+    previousFocusRef.current =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
     setShowAddedFeedback(true);
 
     if (addedFeedbackTimeout.current) {
@@ -120,8 +140,28 @@ export function AddToCartControl({
     }
 
     addedFeedbackTimeout.current = setTimeout(() => {
-      setShowAddedFeedback(false);
+      dismissAddedFeedback();
     }, 1500);
+  }
+
+  function dismissAddedFeedback() {
+    if (addedFeedbackTimeout.current) {
+      clearTimeout(addedFeedbackTimeout.current);
+      addedFeedbackTimeout.current = null;
+    }
+
+    setShowAddedFeedback(false);
+    previousFocusRef.current?.focus();
+    previousFocusRef.current = null;
+  }
+
+  function handleAddedFeedbackKeyDown(
+    event: KeyboardEvent<HTMLButtonElement>
+  ) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      dismissAddedFeedback();
+    }
   }
 
   return (
@@ -149,14 +189,25 @@ export function AddToCartControl({
         </p>
       ) : null}
       {showAddedFeedback ? (
-        <div className={styles.addedOverlay} role="status" aria-live="polite">
-          <div className={styles.addedOverlayContent}>
+        <button
+          ref={addedFeedbackButtonRef}
+          className={styles.addedOverlay}
+          type="button"
+          aria-label="Cerrar aviso de producto añadido"
+          onClick={dismissAddedFeedback}
+          onKeyDown={handleAddedFeedbackKeyDown}
+        >
+          <div
+            className={styles.addedOverlayContent}
+            role="status"
+            aria-live="polite"
+          >
             <span className={styles.addedIcon}>
               <Check aria-hidden="true" size={54} strokeWidth={2.7} />
             </span>
             <p>Producto añadido</p>
           </div>
-        </div>
+        </button>
       ) : null}
     </section>
   );
