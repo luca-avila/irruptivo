@@ -91,6 +91,69 @@ describe("guest order status access", () => {
     expect(JSON.stringify(order)).not.toContain("guest-token-002");
   });
 
+  it("threads manual-review payment state into the guest status projection", async () => {
+    const expiredOrder = {
+      ...createStoredOrder({
+        idempotencyKey: "checkout-submit-003",
+        orderId: "order-003",
+        orderNumber: "IRR-000003",
+        guestAccessToken: "guest-token-003"
+      }),
+      status: ORDER_STATUS.expired
+    };
+
+    const order = await getGuestOrderStatusByToken(
+      "guest-token-003",
+      [expiredOrder],
+      {
+        getManualReviewForOrder: async () => ({
+          required: true,
+          label: "Revisión manual requerida",
+          description: "Revisión manual requerida.",
+          providerPaymentIds: ["payment-003"],
+          latestEventAt: now
+        })
+      }
+    );
+
+    expect(order?.status).toMatchObject({
+      label: "Verificando tu pago",
+      tone: "attention"
+    });
+    expect(order?.status.nextStep.toLowerCase()).toContain("no vuelvas a pagar");
+  });
+
+  it("does not read manual-review payment state for non-expired guest orders", async () => {
+    const paidOrder = {
+      ...createStoredOrder({
+        idempotencyKey: "checkout-submit-004",
+        orderId: "order-004",
+        orderNumber: "IRR-000004",
+        guestAccessToken: "guest-token-004"
+      }),
+      status: ORDER_STATUS.paid
+    };
+    let manualReviewReads = 0;
+
+    const order = await getGuestOrderStatusByToken(
+      "guest-token-004",
+      [paidOrder],
+      {
+        getManualReviewForOrder: async () => {
+          manualReviewReads += 1;
+
+          throw new Error("Manual review should only be read for expired orders.");
+        }
+      }
+    );
+
+    expect(order?.status).toMatchObject({
+      label: "Pago confirmado",
+      tone: "success"
+    });
+    expect(manualReviewReads).toBe(0);
+  });
+
   it("returns null for invalid or missing tokens without exposing order data", async () => {
     const orders = [
       createStoredOrder({
@@ -199,6 +262,41 @@ describe("guest order status presenter", () => {
 
       expect(viewCopy).not.toContain(status);
     }
+  });
+
+  it("shows reassuring copy for an expired order with a payment under review", () => {
+    const view = getGuestOrderStatusView({
+      status: ORDER_STATUS.expired,
+      paymentUnderReview: true
+    });
+    const viewCopy = JSON.stringify(view);
+
+    expect(view).toMatchObject({
+      label: "Verificando tu pago",
+      tone: "attention"
+    });
+    expect(view.label).not.toBe("Pago vencido");
+    expect(view.description).toContain("Recibimos el pago");
+    expect(view.nextStep.toLowerCase()).toContain("no vuelvas a pagar");
+    expect(view.nextStep).toContain("WhatsApp");
+    expect(viewCopy).not.toContain("manual_review_required");
+    expect(viewCopy).not.toContain("expired");
+    expect(viewCopy).not.toContain("compra nueva");
+  });
+
+  it("keeps genuine expired orders on fresh-checkout guidance", () => {
+    const view = getGuestOrderStatusView({
+      status: ORDER_STATUS.expired,
+      paymentUnderReview: false
+    });
+
+    expect(view).toMatchObject({
+      label: "Pago vencido",
+      tone: "danger",
+      description: "La reserva del pedido venció sin confirmación de pago.",
+      nextStep:
+        "Si querés avanzar, armá una compra nueva o consultanos por WhatsApp."
+    });
   });
 
   it("uses pickup-specific next steps when an order is ready for pickup", () => {

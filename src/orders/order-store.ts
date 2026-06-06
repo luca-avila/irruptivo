@@ -200,7 +200,7 @@ export async function findOrderByIdInStore(orderId: string): Promise<Order | nul
 export async function findOrderForPaymentReturn({
   orderId,
   guestAccessToken
-}: PaymentReturnOrderLookupInput): Promise<PendingOrder | null> {
+}: PaymentReturnOrderLookupInput): Promise<Order | null> {
   const normalizedOrderId = orderId?.trim() ?? "";
   const normalizedGuestAccessToken = guestAccessToken?.trim() ?? "";
 
@@ -216,7 +216,7 @@ export async function findOrderForPaymentReturn({
     include: orderWithItems
   });
 
-  return order ? clonePendingOrder(mapOrderRecordToOrder(order) as PendingOrder) : null;
+  return order ? cloneOrder(mapOrderRecordToOrder(order)) : null;
 }
 
 export async function storePendingOrderPaymentPreference({

@@ -46,6 +46,10 @@ export type PaymentResultView = {
   accountCreationCta: null;
 };
 
+export type PaymentResultViewOptions = {
+  paymentUnderReview?: boolean;
+};
+
 const priceFormatter = new Intl.NumberFormat("es-AR", {
   style: "currency",
   currency: "ARS",
@@ -57,15 +61,23 @@ const SUPPORT_ACTION = {
   href: process.env.NEXT_PUBLIC_WHATSAPP_URL ?? "https://wa.me/5490000000000"
 } as const satisfies PaymentResultAction;
 
+const PAYMENT_UNDER_REVIEW_LABEL = "Verificando tu pago";
+
 export function getPaymentResultView(
-  order: PaymentResultOrder
+  order: PaymentResultOrder,
+  { paymentUnderReview = false }: PaymentResultViewOptions = {}
 ): PaymentResultView {
   const guestStatusHref = getGuestStatusHref(order);
-  const stateView = getStateView(order);
+  const stateView = getStateView(order, {
+    paymentUnderReview
+  });
 
   return {
     ...stateView,
-    statusLabel: getOrderStatusLabel(order.status),
+    statusLabel: getPaymentResultStatusLabel({
+      status: order.status,
+      paymentUnderReview
+    }),
     order: {
       orderNumber: order.orderNumber,
       totalLabel: priceFormatter.format(order.totalArs),
@@ -83,7 +95,14 @@ export function getPaymentResultView(
   };
 }
 
-function getStateView(order: PaymentResultOrder): Omit<
+function getStateView(
+  order: PaymentResultOrder,
+  {
+    paymentUnderReview
+  }: {
+    paymentUnderReview: boolean;
+  }
+): Omit<
   PaymentResultView,
   | "statusLabel"
   | "order"
@@ -125,6 +144,24 @@ function getStateView(order: PaymentResultOrder): Omit<
         }
       };
     case ORDER_STATUS.expired:
+      if (paymentUnderReview) {
+        return {
+          state: "pending",
+          eyebrow: "Pago recibido",
+          title: "Estamos verificando tu pago",
+          message:
+            "Recibimos el pago y lo estamos revisando porque no pudimos completar el pedido automáticamente. No vuelvas a pagar.",
+          nextSteps: [
+            "Guardá el enlace de estado del pedido para seguir la verificación.",
+            "Te vamos a contactar por WhatsApp para confirmar disponibilidad o resolver la devolución."
+          ],
+          primaryAction: {
+            label: "Volver a la tienda",
+            href: "/coleccion"
+          }
+        };
+      }
+
       return {
         state: "expired",
         eyebrow: "Pago vencido",
@@ -158,6 +195,20 @@ function getStateView(order: PaymentResultOrder): Omit<
         }
       };
   }
+}
+
+function getPaymentResultStatusLabel({
+  status,
+  paymentUnderReview
+}: {
+  status: PaymentResultOrderStatus;
+  paymentUnderReview: boolean;
+}): string {
+  if (status === ORDER_STATUS.expired && paymentUnderReview) {
+    return PAYMENT_UNDER_REVIEW_LABEL;
+  }
+
+  return getOrderStatusLabel(status);
 }
 
 function getFulfillmentNextStep(order: PaymentResultOrder): string {

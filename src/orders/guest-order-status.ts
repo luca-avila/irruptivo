@@ -9,7 +9,6 @@ import {
   type DeliveryMethod,
   type DeliveryMethodLabel,
   type OrderStatus,
-  type OrderStatusLabel,
   ORDER_STATUS
 } from "../domain/rules";
 import {
@@ -17,6 +16,10 @@ import {
   type PendingOrderDeliverySnapshot
 } from "./order-creation";
 import { readOrderStoreSnapshot } from "./order-store";
+import {
+  getPaymentManualReviewForOrder,
+  type PaymentManualReviewState
+} from "../payments/payment-events";
 
 export type GuestOrderStatusTone =
   | "attention"
@@ -25,7 +28,7 @@ export type GuestOrderStatusTone =
   | "success";
 
 export type GuestOrderStatusView = {
-  label: OrderStatusLabel;
+  label: string;
   tone: GuestOrderStatusTone;
   description: string;
   nextStep: string;
@@ -72,9 +75,16 @@ export type GuestOrderStatusSourceOrder = Omit<PendingOrder, "status"> & {
   status: OrderStatus;
 };
 
+export type GuestOrderStatusLookupOptions = {
+  getManualReviewForOrder?: (
+    orderId: string
+  ) => Promise<PaymentManualReviewState>;
+};
+
 export async function getGuestOrderStatusByToken(
   token: string | null | undefined,
-  orders?: readonly GuestOrderStatusSourceOrder[]
+  orders?: readonly GuestOrderStatusSourceOrder[],
+  { getManualReviewForOrder }: GuestOrderStatusLookupOptions = {}
 ): Promise<GuestOrderStatusOrder | null> {
   const normalizedToken = normalizeGuestOrderStatusToken(token);
 
@@ -87,15 +97,32 @@ export async function getGuestOrderStatusByToken(
     (candidateOrder) => candidateOrder.guestAccessToken === normalizedToken
   );
 
-  return order ? getGuestOrderStatusProjection(order) : null;
+  if (!order) {
+    return null;
+  }
+
+  const manualReviewReader =
+    order.status === ORDER_STATUS.expired
+      ? getManualReviewForOrder ??
+        (orders ? null : getPaymentManualReviewForOrder)
+      : null;
+  const paymentUnderReview = manualReviewReader
+    ? (await manualReviewReader(order.id)).required
+    : false;
+
+  return getGuestOrderStatusProjection(order, {
+    paymentUnderReview
+  });
 }
 
 export function getGuestOrderStatusView({
   status,
-  deliveryMethod
+  deliveryMethod,
+  paymentUnderReview = false
 }: {
   status: OrderStatus;
   deliveryMethod?: DeliveryMethod;
+  paymentUnderReview?: boolean;
 }): GuestOrderStatusView {
   switch (status) {
     case ORDER_STATUS.pendingPayment:
@@ -125,6 +152,17 @@ export function getGuestOrderStatusView({
           "Para comprar estos productos, iniciá una compra nueva o escribinos si necesitás ayuda."
       };
     case ORDER_STATUS.expired:
+      if (paymentUnderReview) {
+        return {
+          label: "Verificando tu pago",
+          tone: "attention",
+          description:
+            "Recibimos el pago y lo estamos verificando porque no pudimos completar el pedido automáticamente.",
+          nextStep:
+            "No vuelvas a pagar. Te vamos a contactar por WhatsApp para confirmar disponibilidad o resolver la devolución."
+        };
+      }
+
       return {
         label: getOrderStatusLabel(status),
         tone: "danger",
@@ -188,14 +226,20 @@ export function buildGuestOrderStatusPath(
 }
 
 function getGuestOrderStatusProjection(
-  order: GuestOrderStatusSourceOrder
+  order: GuestOrderStatusSourceOrder,
+  {
+    paymentUnderReview = false
+  }: {
+    paymentUnderReview?: boolean;
+  } = {}
 ): GuestOrderStatusOrder {
   return {
     orderNumber: order.orderNumber,
     createdAt: order.createdAt,
     status: getGuestOrderStatusView({
       status: order.status,
-      deliveryMethod: order.delivery.method
+      deliveryMethod: order.delivery.method,
+      paymentUnderReview
     }),
     contact: {
       ...order.contact

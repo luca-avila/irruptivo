@@ -1,8 +1,14 @@
 import { StorefrontPaymentResultPage } from "../../../src/storefront/components/payment-result-page";
 import { expirePendingPaymentOrders } from "../../../src/orders/order-expiration";
+import { type Order } from "../../../src/orders/order-creation";
 import { findOrderForPaymentReturn } from "../../../src/orders/order-store";
 import { reconcileMercadoPagoPaymentById } from "../../../src/payments/payment-reconciliation";
-import { getPaymentResultView } from "../../../src/payments/payment-result";
+import {
+  getPaymentResultView,
+  type PaymentResultOrder
+} from "../../../src/payments/payment-result";
+import { getPaymentManualReviewForOrder } from "../../../src/payments/payment-events";
+import { ORDER_STATUS } from "../../../src/domain/rules";
 
 export const dynamic = "force-dynamic";
 
@@ -35,7 +41,16 @@ export async function PaymentResultRoutePage({
     orderId: firstParam(params?.order),
     guestAccessToken: firstParam(params?.token)
   });
-  const view = order ? getPaymentResultView(order) : null;
+  const manualReview =
+    order?.status === ORDER_STATUS.expired
+      ? await getPaymentManualReviewForOrder(order.id)
+      : null;
+  const resultOrder = order && isPaymentResultOrder(order) ? order : null;
+  const view = resultOrder
+    ? getPaymentResultView(resultOrder, {
+        paymentUnderReview: manualReview?.required ?? false
+      })
+    : null;
 
   return <StorefrontPaymentResultPage view={view} />;
 }
@@ -62,4 +77,13 @@ async function reconcilePaymentReturn(
 
 function firstParam(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
+}
+
+function isPaymentResultOrder(order: Order): order is PaymentResultOrder {
+  return (
+    order.status === ORDER_STATUS.pendingPayment ||
+    order.status === ORDER_STATUS.paid ||
+    order.status === ORDER_STATUS.paymentFailed ||
+    order.status === ORDER_STATUS.expired
+  );
 }

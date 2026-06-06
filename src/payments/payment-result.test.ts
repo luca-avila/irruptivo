@@ -65,6 +65,33 @@ describe("payment result presenter", () => {
     expect(view.message).toContain("checkout nuevo");
   });
 
+  it("maps an expired payment under manual review to do-not-pay-again guidance", () => {
+    const view = getPaymentResultView(
+      getPaymentResultOrder({ status: ORDER_STATUS.expired }),
+      {
+        paymentUnderReview: true
+      }
+    );
+    const renderedCopy = getCustomerFacingCopy(view).join(" ");
+
+    expect(view.state).toBe("pending");
+    expect(view.statusLabel).toBe("Verificando tu pago");
+    expect(view.statusLabel).not.toBe("Pago vencido");
+    expect(view.eyebrow).toBe("Pago recibido");
+    expect(view.title).toBe("Estamos verificando tu pago");
+    expect(view.message).toContain("Recibimos el pago");
+    expect(renderedCopy.toLowerCase()).toContain("no vuelvas a pagar");
+    expect(view.guestStatusAction).toMatchObject({
+      label: "Ver estado del pedido",
+      href: "/pedido/guest-access-token"
+    });
+    expect(view.primaryAction.label).not.toContain("checkout");
+    expect(view.nextSteps.join(" ")).toContain("WhatsApp");
+    expect(renderedCopy).not.toContain("checkout nuevo");
+    expect(renderedCopy).not.toContain("manual_review_required");
+    expect(renderedCopy).not.toContain("expired");
+  });
+
   it("never mutates order state while presenting a result", () => {
     const order = getPaymentResultOrder({ status: ORDER_STATUS.pendingPayment });
     const snapshot = JSON.stringify(order);
