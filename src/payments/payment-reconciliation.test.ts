@@ -155,6 +155,101 @@ describe("Mercado Pago payment reconciliation", () => {
     expect(confirmationEmails).toHaveLength(1);
   });
 
+  it("retries an approved payment when settlement rolls back before commit", async () => {
+    const repository = createOrderRepository(getOrder(ORDER_STATUS.pendingPayment));
+    const eventRecorder = createTestPaymentEventRecorder();
+    const notification = getNotification();
+    const failingRepository: TestOrderRepository = {
+      ...repository,
+      async markOrderPaidAndDecrementStock() {
+        throw new Error("Simulated settlement rollback.");
+      }
+    };
+
+    await expect(
+      reconcileMercadoPagoEvent(notification, {
+        paymentProvider: async () => getPayment({ status: "approved" }),
+        orderRepository: failingRepository,
+        eventRecorder: eventRecorder.record,
+        adminNotificationEmailSender: async (order) =>
+          getSkippedAdminNotificationResult(order),
+        now
+      })
+    ).rejects.toThrow("Simulated settlement rollback.");
+
+    expect(eventRecorder.read()).toEqual([]);
+    expect(repository.getOrder()?.status).toBe(ORDER_STATUS.pendingPayment);
+    expect(repository.readVariantStock("tee-black-s")).toBe(10);
+    expect(repository.readVariantStock("creatina-300g")).toBe(10);
+
+    const retryResult = await reconcileMercadoPagoEvent(notification, {
+      paymentProvider: async () => getPayment({ status: "approved" }),
+      orderRepository: repository,
+      eventRecorder: eventRecorder.record,
+      adminNotificationEmailSender: async (order) =>
+        getSkippedAdminNotificationResult(order),
+      now
+    });
+
+    expect(retryResult).toMatchObject({
+      status: "paid",
+      orderId: "order-001",
+      providerPaymentId: "payment-001"
+    });
+    expect(eventRecorder.read()).toMatchObject([
+      {
+        providerEventId: "event-001",
+        processingResult: "paid"
+      }
+    ]);
+    expect(repository.getOrder()?.status).toBe(ORDER_STATUS.paid);
+    expect(repository.readVariantStock("tee-black-s")).toBe(8);
+    expect(repository.readVariantStock("creatina-300g")).toBe(9);
+  });
+
+  it("does not decrement stock again for a second approved event with a different event id", async () => {
+    const repository = createOrderRepository(getOrder(ORDER_STATUS.pendingPayment));
+    const eventRecorder = createTestPaymentEventRecorder();
+
+    const firstResult = await reconcileMercadoPagoEvent(
+      getNotification({ id: "event-001" }),
+      {
+        paymentProvider: async () => getPayment({ status: "approved" }),
+        orderRepository: repository,
+        eventRecorder: eventRecorder.record,
+        adminNotificationEmailSender: async (order) =>
+          getSkippedAdminNotificationResult(order),
+        now
+      }
+    );
+    const secondResult = await reconcileMercadoPagoEvent(
+      getNotification({ id: "event-002" }),
+      {
+        paymentProvider: async () => getPayment({ status: "approved" }),
+        orderRepository: repository,
+        eventRecorder: eventRecorder.record,
+        adminNotificationEmailSender: async (order) =>
+          getSkippedAdminNotificationResult(order),
+        now
+      }
+    );
+
+    expect(firstResult).toMatchObject({
+      status: "paid",
+      orderId: "order-001"
+    });
+    expect(secondResult).toEqual({
+      status: "ignored",
+      reason: "already_reconciled",
+      providerPaymentId: "payment-001"
+    });
+    expect(repository.getOrder()?.status).toBe(ORDER_STATUS.paid);
+    expect(repository.transitionCount).toBe(1);
+    expect(repository.readVariantStock("tee-black-s")).toBe(8);
+    expect(repository.readVariantStock("creatina-300g")).toBe(9);
+    expect(eventRecorder.read()).toHaveLength(2);
+  });
+
   it("does not repeat a failed transition for a duplicate failure event", async () => {
     const repository = createOrderRepository(getOrder(ORDER_STATUS.pendingPayment));
     const eventRecorder = createTestPaymentEventRecorder();
@@ -335,13 +430,6 @@ describe("Mercado Pago payment reconciliation", () => {
     expect(adminNotifications).toEqual([]);
     expect(eventRecorder.read()).toMatchObject([
       {
-        providerEventId: "event-001",
-        providerPaymentId: "payment-001",
-        orderId: "order-001",
-        providerStatus: "approved",
-        processingResult: "paid"
-      },
-      {
         providerEventId: "event-001:insufficient_stock",
         providerPaymentId: "payment-001",
         orderId: "order-001",
@@ -417,9 +505,10 @@ describe("Mercado Pago payment reconciliation", () => {
     });
 
     expect(duplicateResult).toEqual({
-      status: "duplicate",
+      status: "manual_review_required",
       orderId: "order-001",
-      providerPaymentId: "payment-001"
+      providerPaymentId: "payment-001",
+      orderStatus: ORDER_STATUS.expired
     });
     expect(repository.getOrder()?.status).toBe(ORDER_STATUS.expired);
     expect(repository.transitionCount).toBe(1);
@@ -679,6 +768,8 @@ function createOrderRepository(
       orderId: string;
       reason?: string;
       actor?: string;
+      paymentEvent?: PaymentEventRecord;
+      paymentEventRecorder?: PaymentEventRecorder;
     }) {
       const { orderId } = input;
 
@@ -703,6 +794,17 @@ function createOrderRepository(
           return {
             status: "insufficient_stock",
             order: cloneOrder(currentOrder)
+          };
+        }
+      }
+
+      if (input.paymentEvent && input.paymentEventRecorder) {
+        const claimResult = await input.paymentEventRecorder(input.paymentEvent);
+
+        if (claimResult.status === "duplicate") {
+          return {
+            status: "duplicate",
+            event: claimResult.event
           };
         }
       }

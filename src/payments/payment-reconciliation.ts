@@ -21,6 +21,7 @@ import {
 import {
   PAYMENT_MANUAL_REVIEW_PROCESSING_RESULT,
   findPaymentEventByIdentity,
+  mapPaymentEventRecordToRow,
   recordPaymentEventOnce,
   type PaymentEventIdentity,
   type PaymentEventRecord,
@@ -46,6 +47,8 @@ export type PaymentReconciliationOrderRepository = {
     orderId: string;
     reason?: string;
     actor?: string;
+    paymentEvent?: PaymentEventRecord;
+    paymentEventRecorder?: PaymentEventRecorder;
   }) => Promise<ApprovedPaymentSettlementResult>;
 };
 
@@ -73,6 +76,10 @@ export type ApprovedPaymentSettlementResult =
   | {
       status: "already_reconciled";
       order: Order | null;
+    }
+  | {
+      status: "duplicate";
+      event: PaymentEventRecord;
     };
 
 export type PaymentReconciliationConfig = {
@@ -222,23 +229,29 @@ export async function reconcileMercadoPagoEvent(
     reconciledOrder.status,
     providerStatus
   );
-  const recordResult = await eventRecorder(
-    buildPaymentEventRecord({
-      notification,
-      payment,
-      orderId: order.id,
-      providerEventId,
-      processingResult,
-      receivedAt: getDate(now, "now").toISOString()
-    })
-  );
+  const paymentEventRecord = buildPaymentEventRecord({
+    notification,
+    payment,
+    orderId: order.id,
+    providerEventId,
+    processingResult,
+    receivedAt: getDate(now, "now").toISOString()
+  });
+  const shouldClaimApprovedPaymentInSettlement =
+    providerStatus === "approved" &&
+    reconciledOrder.status === ORDER_STATUS.pendingPayment &&
+    Boolean(orderRepository.markOrderPaidAndDecrementStock);
 
-  if (recordResult.status === "duplicate") {
-    return {
-      status: "duplicate",
-      orderId: recordResult.event.orderId,
-      providerPaymentId: recordResult.event.providerPaymentId
-    };
+  if (!shouldClaimApprovedPaymentInSettlement) {
+    const recordResult = await eventRecorder(paymentEventRecord);
+
+    if (recordResult.status === "duplicate") {
+      return {
+        status: "duplicate",
+        orderId: recordResult.event.orderId,
+        providerPaymentId: recordResult.event.providerPaymentId
+      };
+    }
   }
 
   if (!providerStatus) {
@@ -255,6 +268,9 @@ export async function reconcileMercadoPagoEvent(
       notification,
       payment,
       providerEventId,
+      paymentEventRecord: shouldClaimApprovedPaymentInSettlement
+        ? paymentEventRecord
+        : null,
       orderRepository,
       eventRecorder,
       confirmationEmailSender,
@@ -339,6 +355,7 @@ async function reconcileApprovedPayment({
   notification,
   payment,
   providerEventId,
+  paymentEventRecord,
   orderRepository,
   eventRecorder,
   confirmationEmailSender,
@@ -349,6 +366,7 @@ async function reconcileApprovedPayment({
   notification: MercadoPagoWebhookNotification;
   payment: MercadoPagoPayment;
   providerEventId: string;
+  paymentEventRecord: PaymentEventRecord | null;
   orderRepository: PaymentReconciliationOrderRepository;
   eventRecorder: PaymentEventRecorder;
   confirmationEmailSender: OrderConfirmationEmailSender;
@@ -376,7 +394,9 @@ async function reconcileApprovedPayment({
     const settlementResult =
       await orderRepository.markOrderPaidAndDecrementStock({
         orderId: order.id,
-        reason: "payment_approved"
+        reason: "payment_approved",
+        paymentEvent: paymentEventRecord ?? undefined,
+        paymentEventRecorder: eventRecorder
       });
 
     if (settlementResult.status === "insufficient_stock") {
@@ -409,6 +429,14 @@ async function reconcileApprovedPayment({
         status: "ignored",
         reason: "already_reconciled",
         providerPaymentId: payment.id
+      };
+    }
+
+    if (settlementResult.status === "duplicate") {
+      return {
+        status: "duplicate",
+        orderId: settlementResult.event.orderId,
+        providerPaymentId: settlementResult.event.providerPaymentId
       };
     }
 
@@ -463,11 +491,13 @@ async function reconcileApprovedPayment({
 async function markOrderPaidAndDecrementStockInStore({
   orderId,
   reason = "payment_approved",
-  actor = "system"
+  actor = "system",
+  paymentEvent
 }: {
   orderId: string;
   reason?: string;
   actor?: string;
+  paymentEvent?: PaymentEventRecord;
 }): Promise<ApprovedPaymentSettlementResult> {
   const normalizedOrderId = orderId.trim();
 
@@ -480,6 +510,20 @@ async function markOrderPaidAndDecrementStockInStore({
 
   try {
     return await prisma.$transaction(async (tx) => {
+      if (paymentEvent) {
+        try {
+          await tx.paymentEvent.create({
+            data: mapPaymentEventRecordToRow(paymentEvent)
+          });
+        } catch (error) {
+          if (isPrismaKnownError(error, "P2002")) {
+            throw new DuplicatePaymentEventSettlementError(paymentEvent);
+          }
+
+          throw error;
+        }
+      }
+
       const existingOrder = await tx.order.findUnique({
         where: {
           id: normalizedOrderId
@@ -490,19 +534,13 @@ async function markOrderPaidAndDecrementStockInStore({
       });
 
       if (!existingOrder) {
-        return {
-          status: "already_reconciled",
-          order: null
-        };
+        throw new AlreadyReconciledSettlementError(null);
       }
 
       const currentOrder = mapOrderRecordToOrder(existingOrder);
 
       if (existingOrder.status !== ORDER_STATUS.pendingPayment) {
-        return {
-          status: "already_reconciled",
-          order: currentOrder
-        };
+        throw new AlreadyReconciledSettlementError(currentOrder);
       }
 
       const paidOrderUpdate = await tx.order.updateMany({
@@ -525,10 +563,9 @@ async function markOrderPaidAndDecrementStockInStore({
           }
         });
 
-        return {
-          status: "already_reconciled",
-          order: latestOrder ? mapOrderRecordToOrder(latestOrder) : null
-        };
+        throw new AlreadyReconciledSettlementError(
+          latestOrder ? mapOrderRecordToOrder(latestOrder) : null
+        );
       }
 
       await tx.orderStatusHistory.create({
@@ -579,6 +616,24 @@ async function markOrderPaidAndDecrementStockInStore({
     if (error instanceof InsufficientStockSettlementError) {
       return {
         status: "insufficient_stock",
+        order: error.order
+      };
+    }
+
+    if (error instanceof DuplicatePaymentEventSettlementError) {
+      return {
+        status: "duplicate",
+        event:
+          (await findPaymentEventByIdentity({
+            provider: error.event.provider,
+            providerEventId: error.event.providerEventId
+          })) ?? error.event
+      };
+    }
+
+    if (error instanceof AlreadyReconciledSettlementError) {
+      return {
+        status: "already_reconciled",
         order: error.order
       };
     }
@@ -833,6 +888,29 @@ class InsufficientStockSettlementError extends Error {
     super("Insufficient stock during paid order settlement.");
     this.name = "InsufficientStockSettlementError";
   }
+}
+
+class DuplicatePaymentEventSettlementError extends Error {
+  constructor(readonly event: PaymentEventRecord) {
+    super("Payment event was already claimed during payment settlement.");
+    this.name = "DuplicatePaymentEventSettlementError";
+  }
+}
+
+class AlreadyReconciledSettlementError extends Error {
+  constructor(readonly order: Order | null) {
+    super("Order was already reconciled during payment settlement.");
+    this.name = "AlreadyReconciledSettlementError";
+  }
+}
+
+function isPrismaKnownError(error: unknown, code: string): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === code
+  );
 }
 
 function getDate(value: Date | string, name: string): Date {

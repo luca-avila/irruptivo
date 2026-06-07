@@ -293,6 +293,76 @@ describe.skipIf(!process.env.DATABASE_URL)(
         required: true,
         providerPaymentIds: ["phase7-payment-scarce-second"]
       });
+      expect(
+        (await readPaymentEventsForTests())
+          .filter((event) => event.orderId === secondOrder.orderId)
+          .map((event) => event.processingResult)
+      ).toEqual(["manual_review_required"]);
+    });
+
+    it("claims duplicate approved events atomically with a single stock decrement", async () => {
+      const approved = await createProductAndOrder({
+        suffix: "concurrent",
+        orderId: "phase7-order-concurrent",
+        stock: 5,
+        quantity: 3
+      });
+      const notification = getNotification({
+        id: "phase7-event-concurrent",
+        dataId: "phase7-payment-concurrent"
+      });
+
+      const results = await Promise.all([
+        reconcileMercadoPagoEvent(notification, {
+          paymentProvider: async () =>
+            getPayment({
+              paymentId: "phase7-payment-concurrent",
+              orderId: approved.orderId,
+              transactionAmount: approved.totalArs
+            }),
+          confirmationEmailSender: async (order) => ({
+            status: "sent",
+            orderId: order.id,
+            recipientEmail: order.contact.email,
+            providerMessageId: `message-${order.id}`
+          }),
+          now
+        }),
+        reconcileMercadoPagoEvent(notification, {
+          paymentProvider: async () =>
+            getPayment({
+              paymentId: "phase7-payment-concurrent",
+              orderId: approved.orderId,
+              transactionAmount: approved.totalArs
+            }),
+          confirmationEmailSender: async (order) => ({
+            status: "sent",
+            orderId: order.id,
+            recipientEmail: order.contact.email,
+            providerMessageId: `message-${order.id}`
+          }),
+          now
+        })
+      ]);
+
+      await expect(readVariantStock(approved.variantId)).resolves.toBe(2);
+      await expect(findOrderByIdInStore(approved.orderId)).resolves.toMatchObject({
+        status: ORDER_STATUS.paid
+      });
+      expect(results.map((result) => result.status).sort()).toEqual([
+        "duplicate",
+        "paid"
+      ]);
+      expect(
+        (await readPaymentEventsForTests()).filter(
+          (event) => event.orderId === approved.orderId
+        )
+      ).toMatchObject([
+        {
+          providerEventId: "phase7-event-concurrent",
+          processingResult: "paid"
+        }
+      ]);
     });
   }
 );
