@@ -13,6 +13,7 @@ import {
 } from "../../catalog/product-detail";
 import { contactLink, instagramLink } from "../navigation";
 import { AddToCartControl } from "./add-to-cart-control";
+import { ExpandableProductDescription } from "./expandable-product-description";
 import { ProductGallery } from "./product-gallery";
 import styles from "./product-detail-page.module.css";
 
@@ -130,7 +131,7 @@ export function StorefrontProductDetailPage({
               <p className={styles.price}>
                 {priceFormatter.format(selection.effectivePriceArs)}
               </p>
-              <p className={styles.description}>{product.description}</p>
+              <ExpandableProductDescription description={product.description} />
               <span
                 className={styles.availability}
                 data-state={getAvailabilityState(product, selection)}

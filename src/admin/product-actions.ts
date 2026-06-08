@@ -11,6 +11,7 @@ import {
 } from "../catalog/product-images";
 import {
   PRODUCT_STATUS,
+  type CatalogProductImageRecord,
   type CatalogProductRecord,
   type ProductArea,
   type ProductStatus
@@ -25,6 +26,8 @@ import {
   createProduct,
   isDuplicateVariantSkuPersistenceError,
   readAdminProductRecords,
+  saveAdminProductImageRecord,
+  saveAdminProductImageRecords,
   saveAdminProductRecords,
   setProductStatus,
   updateProduct,
@@ -59,7 +62,7 @@ export async function createAdminProduct(formData: FormData): Promise<void> {
   }
 
   await saveAdminProductRecordsOrRedirect(
-    result.products,
+    [result.product],
     getCreateErrorRedirect("duplicate_variant_sku")
   );
   revalidateCatalogPaths(result.product);
@@ -105,7 +108,7 @@ export async function updateAdminProduct(formData: FormData): Promise<void> {
   }
 
   await saveAdminProductRecordsOrRedirect(
-    statusResult.products,
+    [statusResult.product],
     getEditErrorRedirect(productId, "duplicate_variant_sku")
   );
   revalidateCatalogPaths(statusResult.product);
@@ -139,7 +142,7 @@ export async function changeAdminProductStatus(
   }
 
   try {
-    await saveAdminProductRecords(result.products);
+    await saveAdminProductRecords([result.product]);
   } catch (error) {
     if (isDuplicateVariantSkuPersistenceError(error)) {
       return errorToastState("Ya existe una variante/SKU con ese código.");
@@ -187,7 +190,7 @@ export async function createAdminProductVariant(
   }
 
   await saveAdminProductRecordsOrRedirect(
-    result.products,
+    [result.product],
     getEditErrorRedirect(productId, "duplicate_variant_sku")
   );
   revalidateCatalogPaths(result.product);
@@ -217,7 +220,7 @@ export async function updateAdminProductVariant(
   }
 
   await saveAdminProductRecordsOrRedirect(
-    result.products,
+    [result.product],
     getEditErrorRedirect(productId, "duplicate_variant_sku")
   );
   revalidateCatalogPaths(result.product);
@@ -234,9 +237,44 @@ export async function uploadAdminProductImage(formData: FormData): Promise<void>
 
   const productId = readStringField(formData, "productId");
   const products = await readAdminProductRecords();
+  const currentProduct = products.find((product) => product.id === productId);
 
-  if (!products.some((product) => product.id === productId)) {
+  if (!currentProduct) {
     redirect(getEditErrorRedirect(productId, "not_found"));
+  }
+
+  const imageUploadId = readStringField(formData, "imageUploadId").trim();
+
+  if (!isValidImageUploadId(imageUploadId)) {
+    redirect(
+      getEditErrorRedirect(
+        productId,
+        "image_validation",
+        getImageFormStateParams(formData)
+      )
+    );
+  }
+
+  const productWithExistingImageUpload = products.find((product) =>
+    product.images.some((image) => image.id === imageUploadId)
+  );
+
+  if (
+    productWithExistingImageUpload &&
+    productWithExistingImageUpload.id !== currentProduct.id
+  ) {
+    redirect(
+      getEditErrorRedirect(
+        productId,
+        "image_validation",
+        getImageFormStateParams(formData)
+      )
+    );
+  }
+
+  if (productWithExistingImageUpload) {
+    revalidateCatalogPaths(currentProduct);
+    redirect(getImageUploadSuccessRedirect(productId));
   }
 
   const processedImage = await processProductImageUpload({
@@ -244,7 +282,8 @@ export async function uploadAdminProductImage(formData: FormData): Promise<void>
     file: readFileField(formData, "image"),
     alt: readStringField(formData, "alt"),
     associatedColor: readStringField(formData, "associatedColor"),
-    variantId: readStringField(formData, "variantId")
+    variantId: readStringField(formData, "variantId"),
+    imageId: imageUploadId
   });
 
   if (!processedImage.ok) {
@@ -259,21 +298,21 @@ export async function uploadAdminProductImage(formData: FormData): Promise<void>
 
   const result = uploadProductImage(productId, processedImage.image, products);
 
-  if (!result.ok) {
+  if (!result.ok || !result.image) {
     await deleteProcessedProductImageFiles(processedImage.image);
     redirect(
       getEditErrorRedirect(
         productId,
-        result.error.code,
+        result.ok ? "image_processing_failed" : result.error.code,
         getImageFormStateParams(formData)
       )
     );
   }
 
-  await saveUploadedProductImageRecordsOrRedirect(
-    result.products,
+  await saveUploadedProductImageRecordOrRedirect(
+    productId,
+    result.image,
     processedImage.image,
-    getEditErrorRedirect(productId, "duplicate_variant_sku"),
     getEditErrorRedirect(
       productId,
       "image_processing_failed",
@@ -282,9 +321,7 @@ export async function uploadAdminProductImage(formData: FormData): Promise<void>
   );
   revalidateCatalogPaths(result.product);
 
-  redirect(
-    `${ADMIN_PRODUCTS_PATH}/${encodeURIComponent(productId)}/editar?estado=imagen-subida`
-  );
+  redirect(getImageUploadSuccessRedirect(productId));
 }
 
 export async function reorderAdminProductImages(
@@ -304,10 +341,7 @@ export async function reorderAdminProductImages(
     redirect(getEditErrorRedirect(productId, result.error.code));
   }
 
-  await saveAdminProductRecordsOrRedirect(
-    result.products,
-    getEditErrorRedirect(productId, "duplicate_variant_sku")
-  );
+  await saveAdminProductImageRecords(result.product.id, result.product.images);
   revalidateCatalogPaths(result.product);
 
   redirect(
@@ -331,10 +365,11 @@ export async function softDeleteAdminProductImage(
     redirect(getEditErrorRedirect(productId, result.error.code));
   }
 
-  await saveAdminProductRecordsOrRedirect(
-    result.products,
-    getEditErrorRedirect(productId, "duplicate_variant_sku")
-  );
+  if (!result.image) {
+    redirect(getEditErrorRedirect(productId, "image_not_found"));
+  }
+
+  await saveAdminProductImageRecord(productId, result.image);
   revalidateCatalogPaths(result.product);
 
   redirect(
@@ -357,21 +392,16 @@ async function saveAdminProductRecordsOrRedirect(
   }
 }
 
-async function saveUploadedProductImageRecordsOrRedirect(
-  products: readonly CatalogProductRecord[],
-  image: Parameters<typeof deleteProcessedProductImageFiles>[0],
-  duplicateVariantSkuRedirect: string,
+async function saveUploadedProductImageRecordOrRedirect(
+  productId: string,
+  imageRecord: CatalogProductImageRecord,
+  processedImage: Parameters<typeof deleteProcessedProductImageFiles>[0],
   imagePersistFailureRedirect: string
 ): Promise<void> {
   try {
-    await saveAdminProductRecords(products);
-  } catch (error) {
-    await deleteProcessedProductImageFiles(image);
-
-    if (isDuplicateVariantSkuPersistenceError(error)) {
-      redirect(duplicateVariantSkuRedirect);
-    }
-
+    await saveAdminProductImageRecord(productId, imageRecord);
+  } catch {
+    await deleteProcessedProductImageFiles(processedImage);
     redirect(imagePersistFailureRedirect);
   }
 }
@@ -386,6 +416,12 @@ function readFileField(formData: FormData, name: string): File | null {
   const value = formData.get(name);
 
   return typeof File !== "undefined" && value instanceof File ? value : null;
+}
+
+function isValidImageUploadId(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value
+  );
 }
 
 function readVariantInput(formData: FormData): ProductVariantInput {
@@ -426,6 +462,12 @@ function getEditErrorRedirect(
   return `${ADMIN_PRODUCTS_PATH}/${encodeURIComponent(
     productId
   )}/editar?${params.toString()}`;
+}
+
+function getImageUploadSuccessRedirect(productId: string): string {
+  return `${ADMIN_PRODUCTS_PATH}/${encodeURIComponent(
+    productId
+  )}/editar?estado=imagen-subida`;
 }
 
 function getImageFormStateParams(formData: FormData): URLSearchParams {

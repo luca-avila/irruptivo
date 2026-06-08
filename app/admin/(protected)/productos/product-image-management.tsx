@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import { ArrowDown, ArrowUp, ImagePlus, Trash2 } from "lucide-react";
 
 import {
@@ -28,6 +30,7 @@ export function ProductImageManagement({
 }: ProductImageManagementProps) {
   const images = getPublicImageSet(product.images, { usage: "card" });
   const imageIds = images.map((image) => image.id);
+  const imageUploadId = randomUUID();
 
   return (
     <section className={styles.imageSection} aria-labelledby="image-section-title">
@@ -47,6 +50,7 @@ export function ProductImageManagement({
         action={uploadAdminProductImage}
       >
         <input type="hidden" name="productId" value={product.id} />
+        <input type="hidden" name="imageUploadId" value={imageUploadId} />
 
         <div className={styles.variantCardHeader}>
           <div>

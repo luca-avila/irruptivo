@@ -14,6 +14,8 @@ type ProductFormProps = {
   product?: CatalogProductRecord;
 };
 
+const PRODUCT_DESCRIPTION_MAX_LENGTH = 2000;
+
 export function ProductForm({ action, submitLabel, product }: ProductFormProps) {
   const selectedArea = product?.area ?? "clothing";
   const selectedStatus = product?.status ?? PRODUCT_STATUS.inactive;
@@ -65,7 +67,7 @@ export function ProductForm({ action, submitLabel, product }: ProductFormProps) 
           name="description"
           defaultValue={product?.description ?? ""}
           required
-          maxLength={600}
+          maxLength={PRODUCT_DESCRIPTION_MAX_LENGTH}
           rows={5}
         />
       </label>

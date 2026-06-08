@@ -249,6 +249,39 @@ export async function saveAdminProductRecords(
   });
 }
 
+export async function saveAdminProductImageRecord(
+  productId: string,
+  image: CatalogProductImageRecord
+): Promise<void> {
+  await saveAdminProductImageRecords(productId, [image]);
+}
+
+export async function saveAdminProductImageRecords(
+  productId: string,
+  images: readonly CatalogProductImageRecord[]
+): Promise<void> {
+  if (images.length === 0) {
+    return;
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await Promise.all(
+      images.map((image) =>
+        tx.productImage.upsert({
+          where: {
+            id: image.id
+          },
+          update: getImagePersistenceData(productId, image),
+          create: {
+            id: image.id,
+            ...getImagePersistenceData(productId, image)
+          }
+        })
+      )
+    );
+  });
+}
+
 export function isDuplicateVariantSkuPersistenceError(error: unknown): boolean {
   if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
     return false;

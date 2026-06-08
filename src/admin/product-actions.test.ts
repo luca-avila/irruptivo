@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   PRODUCT_AREA,
   PRODUCT_STATUS,
+  type CatalogProductImageRecord,
   type CatalogProductRecord
 } from "../catalog/catalog";
 import { type ProductImageUploadInput } from "../catalog/product-images";
@@ -20,6 +21,8 @@ const mocks = vi.hoisted(() => ({
   }),
   requireAdmin: vi.fn(),
   revalidatePath: vi.fn(),
+  saveAdminProductImageRecord: vi.fn(),
+  saveAdminProductImageRecords: vi.fn(),
   saveAdminProductRecords: vi.fn()
 }));
 
@@ -46,6 +49,8 @@ vi.mock("./products", () => ({
   isDuplicateVariantSkuPersistenceError:
     mocks.isDuplicateVariantSkuPersistenceError,
   readAdminProductRecords: mocks.readAdminProductRecords,
+  saveAdminProductImageRecord: mocks.saveAdminProductImageRecord,
+  saveAdminProductImageRecords: mocks.saveAdminProductImageRecords,
   saveAdminProductRecords: mocks.saveAdminProductRecords,
   setProductStatus: vi.fn(),
   updateProduct: vi.fn(),
@@ -59,6 +64,90 @@ describe("admin product image actions", () => {
     mocks.isDuplicateVariantSkuPersistenceError.mockReturnValue(false);
   });
 
+  it("persists a single uploaded image with the stable form upload id", async () => {
+    const image = createProcessedImage();
+    mocks.processProductImageUpload.mockResolvedValue({
+      ok: true,
+      image
+    });
+    mocks.readAdminProductRecords.mockResolvedValue([createProductRecord()]);
+    mocks.saveAdminProductImageRecord.mockResolvedValue(undefined);
+
+    await expect(uploadAdminProductImage(createUploadFormData())).rejects.toMatchObject({
+      message: "NEXT_REDIRECT",
+      url: "/admin/productos/irruptivo-training-tee/editar?estado=imagen-subida"
+    });
+
+    expect(mocks.processProductImageUpload).toHaveBeenCalledWith(
+      expect.objectContaining({
+        productId: "irruptivo-training-tee",
+        alt: "Frente",
+        associatedColor: "Negro",
+        variantId: "",
+        imageId: IMAGE_UPLOAD_ID
+      })
+    );
+    expect(mocks.saveAdminProductImageRecord).toHaveBeenCalledWith(
+      "irruptivo-training-tee",
+      expect.objectContaining({
+        id: IMAGE_UPLOAD_ID,
+        alt: "Frente",
+        sortOrder: 1
+      })
+    );
+    expect(mocks.saveAdminProductRecords).not.toHaveBeenCalled();
+  });
+
+  it("treats a repeated upload id as an already completed upload", async () => {
+    mocks.readAdminProductRecords.mockResolvedValue([
+      createProductRecord({
+        images: [createImageRecord()]
+      })
+    ]);
+
+    await expect(uploadAdminProductImage(createUploadFormData())).rejects.toMatchObject({
+      message: "NEXT_REDIRECT",
+      url: "/admin/productos/irruptivo-training-tee/editar?estado=imagen-subida"
+    });
+
+    expect(mocks.processProductImageUpload).not.toHaveBeenCalled();
+    expect(mocks.saveAdminProductImageRecord).not.toHaveBeenCalled();
+    expect(mocks.saveAdminProductRecords).not.toHaveBeenCalled();
+  });
+
+  it("rejects uploads without a valid form upload id before processing the file", async () => {
+    mocks.readAdminProductRecords.mockResolvedValue([createProductRecord()]);
+
+    await expect(
+      uploadAdminProductImage(createUploadFormData({ imageUploadId: "bad-id" }))
+    ).rejects.toMatchObject({
+      message: "NEXT_REDIRECT",
+      url: "/admin/productos/irruptivo-training-tee/editar?imageAlt=Frente&imageColor=Negro&error=image_validation"
+    });
+
+    expect(mocks.processProductImageUpload).not.toHaveBeenCalled();
+    expect(mocks.saveAdminProductImageRecord).not.toHaveBeenCalled();
+  });
+
+  it("rejects an upload id already owned by another product", async () => {
+    mocks.readAdminProductRecords.mockResolvedValue([
+      createProductRecord(),
+      createProductRecord({
+        id: "other-product",
+        slug: "other-product",
+        images: [createImageRecord()]
+      })
+    ]);
+
+    await expect(uploadAdminProductImage(createUploadFormData())).rejects.toMatchObject({
+      message: "NEXT_REDIRECT",
+      url: "/admin/productos/irruptivo-training-tee/editar?imageAlt=Frente&imageColor=Negro&error=image_validation"
+    });
+
+    expect(mocks.processProductImageUpload).not.toHaveBeenCalled();
+    expect(mocks.saveAdminProductImageRecord).not.toHaveBeenCalled();
+  });
+
   it("deletes processed files when image metadata persistence fails after upload processing", async () => {
     const events: string[] = [];
     const image = createProcessedImage();
@@ -67,7 +156,7 @@ describe("admin product image actions", () => {
       image
     });
     mocks.readAdminProductRecords.mockResolvedValue([createProductRecord()]);
-    mocks.saveAdminProductRecords.mockImplementation(async () => {
+    mocks.saveAdminProductImageRecord.mockImplementation(async () => {
       events.push("save");
       throw new Error("database unavailable");
     });
@@ -83,12 +172,20 @@ describe("admin product image actions", () => {
     expect(events).toEqual(["save", "delete"]);
     expect(mocks.deleteProcessedProductImageFiles).toHaveBeenCalledWith(image);
     expect(mocks.revalidatePath).not.toHaveBeenCalled();
+    expect(mocks.saveAdminProductRecords).not.toHaveBeenCalled();
   });
 });
 
-function createUploadFormData(): FormData {
+const IMAGE_UPLOAD_ID = "11111111-1111-4111-8111-111111111111";
+
+function createUploadFormData({
+  imageUploadId = IMAGE_UPLOAD_ID
+}: {
+  imageUploadId?: string;
+} = {}): FormData {
   const formData = new FormData();
   formData.set("productId", "irruptivo-training-tee");
+  formData.set("imageUploadId", imageUploadId);
   formData.set(
     "image",
     new File([new Uint8Array([1])], "training-tee.jpg", {
@@ -101,10 +198,18 @@ function createUploadFormData(): FormData {
   return formData;
 }
 
-function createProductRecord(): CatalogProductRecord {
+function createProductRecord({
+  id = "irruptivo-training-tee",
+  slug = "training-tee-negra",
+  images = []
+}: {
+  id?: string;
+  slug?: string;
+  images?: CatalogProductImageRecord[];
+} = {}): CatalogProductRecord {
   return {
-    id: "irruptivo-training-tee",
-    slug: "training-tee-negra",
+    id,
+    slug,
     name: "Training Tee Negra",
     description: "Remera deportiva de calce relajado para entrenamiento diario.",
     area: PRODUCT_AREA.clothing,
@@ -113,32 +218,47 @@ function createProductRecord(): CatalogProductRecord {
     clothingSubcategory: "Remeras",
     supplementType: null,
     variants: [],
-    images: []
+    images
   };
 }
 
 function createProcessedImage(): ProductImageUploadInput {
   return {
-    id: "image-test",
+    id: IMAGE_UPLOAD_ID,
     alt: "Frente",
     associatedColor: "Negro",
     variantId: null,
     renditions: {
       card: {
-        path: "products/irruptivo-training-tee/image-test/card.webp",
+        path: `products/irruptivo-training-tee/${IMAGE_UPLOAD_ID}/card.webp`,
         width: 640,
         height: 900
       },
       detail: {
-        path: "products/irruptivo-training-tee/image-test/detail.webp",
+        path: `products/irruptivo-training-tee/${IMAGE_UPLOAD_ID}/detail.webp`,
         width: 1200,
         height: 1600
       },
       original: {
-        path: "products/irruptivo-training-tee/image-test/original.webp",
+        path: `products/irruptivo-training-tee/${IMAGE_UPLOAD_ID}/original.webp`,
         width: 1800,
         height: 2400
       }
     }
+  };
+}
+
+function createImageRecord(): CatalogProductImageRecord {
+  return {
+    id: IMAGE_UPLOAD_ID,
+    path: `products/irruptivo-training-tee/${IMAGE_UPLOAD_ID}/detail.webp`,
+    alt: "Frente",
+    sortOrder: 1,
+    width: 1200,
+    height: 1600,
+    renditions: createProcessedImage().renditions,
+    associatedColor: "Negro",
+    variantId: null,
+    deletedAt: null
   };
 }

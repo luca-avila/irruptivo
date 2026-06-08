@@ -168,6 +168,32 @@
   line-height: 1.55;
 }
 
+.descriptionBlock {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.descriptionToggle {
+  justify-self: start;
+  min-height: 34px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #101010;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 900;
+  line-height: 1.2;
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}
+
+.descriptionToggle:focus-visible {
+  outline: 2px solid #101010;
+  outline-offset: 3px;
+}
+
 .availability {
   justify-self: start;
   padding: 0.38rem 0.5rem;
