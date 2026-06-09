@@ -120,6 +120,7 @@
 .content {
   display: grid;
   gap: 1.45rem;
+  min-width: 0;
   padding: 1.45rem 1.1rem 3rem;
   background: #ffffff;
 }
@@ -132,6 +133,7 @@
 .summary {
   display: grid;
   gap: 0.55rem;
+  min-width: 0;
 }
 
 .context {
@@ -166,11 +168,14 @@
   color: #666666;
   font-size: 1rem;
   line-height: 1.55;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
 }
 
 .descriptionBlock {
   display: grid;
   gap: 0.35rem;
+  min-width: 0;
 }
 
 .descriptionToggle {

@@ -22,6 +22,18 @@ describe("expandable product description", () => {
     });
   });
 
+  it("keeps line breaks when collapsing multiline descriptions", () => {
+    expect(
+      getCollapsedProductDescription(
+        "Primera línea\nSegunda línea con detalles importantes para la prenda.",
+        35
+      )
+    ).toEqual({
+      canExpand: true,
+      text: "Primera línea\nSegunda línea con…"
+    });
+  });
+
   it("falls back to the exact limit when there is no useful word boundary", () => {
     expect(getCollapsedProductDescription("Supercalifragilistico", 10)).toEqual({
       canExpand: true,

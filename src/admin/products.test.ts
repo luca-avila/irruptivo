@@ -59,6 +59,125 @@ const baseProducts = [
 ] satisfies CatalogProductRecord[];
 
 describe("admin product management", () => {
+  it("preserves product description line breaks while normalizing horizontal whitespace", () => {
+    const result = createProduct(
+      {
+        name: "Remera multilinea",
+        description:
+          "  Línea uno\t\tcon   espacios\r\n  Línea dos\r\n\r\n\r\nLínea tres  ",
+        area: PRODUCT_AREA.clothing,
+        clothingSubcategory: "Remeras",
+        basePriceArs: 28000,
+        status: PRODUCT_STATUS.inactive
+      },
+      baseProducts
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      product: {
+        description: "Línea uno con espacios\nLínea dos\n\nLínea tres"
+      }
+    });
+  });
+
+  it("enforces product descriptions between 1 and 5000 normalized characters", () => {
+    const accepted = createProduct(
+      {
+        name: "Descripción larga válida",
+        description: "x".repeat(5000),
+        area: PRODUCT_AREA.clothing,
+        clothingSubcategory: "Remeras",
+        basePriceArs: 28000,
+        status: PRODUCT_STATUS.inactive
+      },
+      baseProducts
+    );
+    const tooLong = createProduct(
+      {
+        name: "Descripción demasiado larga",
+        description: "x".repeat(5001),
+        area: PRODUCT_AREA.clothing,
+        clothingSubcategory: "Remeras",
+        basePriceArs: 28000,
+        status: PRODUCT_STATUS.inactive
+      },
+      baseProducts
+    );
+    const empty = createProduct(
+      {
+        name: "Descripción vacía",
+        description: " \n\t\r\n ",
+        area: PRODUCT_AREA.clothing,
+        clothingSubcategory: "Remeras",
+        basePriceArs: 28000,
+        status: PRODUCT_STATUS.inactive
+      },
+      baseProducts
+    );
+
+    expect(accepted).toMatchObject({
+      ok: true,
+      product: {
+        description: "x".repeat(5000)
+      }
+    });
+    expect(tooLong).toMatchObject({
+      ok: false,
+      error: {
+        code: "validation"
+      }
+    });
+    expect(empty).toMatchObject({
+      ok: false,
+      error: {
+        code: "validation"
+      }
+    });
+  });
+
+  it("keeps shared text normalization unchanged for product names and variant SKUs", () => {
+    const productResult = createProduct(
+      {
+        name: "  Training\nTee\t\tNegra  ",
+        description: "Descripción válida.",
+        area: PRODUCT_AREA.clothing,
+        clothingSubcategory: "Remeras",
+        basePriceArs: 28000,
+        status: PRODUCT_STATUS.inactive
+      },
+      []
+    );
+
+    if (!productResult.ok) {
+      throw new Error("Expected product creation to succeed");
+    }
+
+    const variantResult = addProductVariant(
+      productResult.product.id,
+      {
+        sku: " tee\nblk\t\tm ",
+        color: "Negro",
+        size: "M",
+        stock: 2,
+        priceOverrideArs: null
+      },
+      productResult.products
+    );
+
+    expect(productResult.product.name).toBe("Training Tee Negra");
+    expect(variantResult).toMatchObject({
+      ok: true,
+      product: {
+        variants: [
+          {
+            sku: "tee blk m"
+          }
+        ]
+      }
+    });
+  });
+
   it("creates products with globally unique generated slugs", () => {
     const result = createProduct(
       {

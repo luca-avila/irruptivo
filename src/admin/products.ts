@@ -130,6 +130,10 @@ const requiredTextSchema = z
   .string()
   .transform(normalizeText)
   .refine((value) => value.length > 0);
+const descriptionSchema = z
+  .string()
+  .transform(normalizeDescription)
+  .pipe(z.string().min(1).max(5000));
 const optionalTextSchema = z
   .string()
   .nullable()
@@ -138,7 +142,7 @@ const optionalTextSchema = z
 const productInputSchema = z
   .object({
     name: requiredTextSchema,
-    description: requiredTextSchema,
+    description: descriptionSchema,
     area: productAreaSchema,
     clothingSubcategory: optionalTextSchema,
     supplementType: optionalTextSchema,
@@ -905,6 +909,15 @@ function slugify(value: string): string {
 
 function normalizeText(value: string): string {
   return value.trim().replace(/\s+/g, " ");
+}
+
+function normalizeDescription(value: string): string {
+  return value
+    .replace(/\r\n?/g, "\n")
+    .trim()
+    .replace(/[^\S\n]+/g, " ")
+    .replace(/ *\n */g, "\n")
+    .replace(/\n{3,}/g, "\n\n");
 }
 
 function normalizeSku(value: string): string {

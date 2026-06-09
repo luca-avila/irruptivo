@@ -14,7 +14,7 @@ type ProductFormProps = {
   product?: CatalogProductRecord;
 };
 
-const PRODUCT_DESCRIPTION_MAX_LENGTH = 2000;
+const PRODUCT_DESCRIPTION_MAX_LENGTH = 5000;
 
 export function ProductForm({ action, submitLabel, product }: ProductFormProps) {
   const selectedArea = product?.area ?? "clothing";
