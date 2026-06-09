@@ -23,6 +23,7 @@ import {
 } from "./product-image-processing";
 import {
   addProductVariant,
+  createAdminProductImageRecordOnce,
   createProduct,
   isDuplicateVariantSkuPersistenceError,
   readAdminProductRecords,
@@ -255,28 +256,6 @@ export async function uploadAdminProductImage(formData: FormData): Promise<void>
     );
   }
 
-  const productWithExistingImageUpload = products.find((product) =>
-    product.images.some((image) => image.id === imageUploadId)
-  );
-
-  if (
-    productWithExistingImageUpload &&
-    productWithExistingImageUpload.id !== currentProduct.id
-  ) {
-    redirect(
-      getEditErrorRedirect(
-        productId,
-        "image_validation",
-        getImageFormStateParams(formData)
-      )
-    );
-  }
-
-  if (productWithExistingImageUpload) {
-    revalidateCatalogPaths(currentProduct);
-    redirect(getImageUploadSuccessRedirect(productId));
-  }
-
   const processedImage = await processProductImageUpload({
     productId,
     file: readFileField(formData, "image"),
@@ -296,7 +275,16 @@ export async function uploadAdminProductImage(formData: FormData): Promise<void>
     );
   }
 
-  const result = uploadProductImage(productId, processedImage.image, products);
+  const productsForImageValidation = getProductsWithoutImageId(
+    productId,
+    imageUploadId,
+    products
+  );
+  const result = uploadProductImage(
+    productId,
+    processedImage.image,
+    productsForImageValidation
+  );
 
   if (!result.ok || !result.image) {
     await deleteProcessedProductImageFiles(processedImage.image);
@@ -309,7 +297,7 @@ export async function uploadAdminProductImage(formData: FormData): Promise<void>
     );
   }
 
-  await saveUploadedProductImageRecordOrRedirect(
+  const saveResult = await saveUploadedProductImageRecordOrRedirect(
     productId,
     result.image,
     processedImage.image,
@@ -319,7 +307,9 @@ export async function uploadAdminProductImage(formData: FormData): Promise<void>
       getImageFormStateParams(formData)
     )
   );
-  revalidateCatalogPaths(result.product);
+  revalidateCatalogPaths(
+    saveResult.status === "created" ? result.product : currentProduct
+  );
 
   redirect(getImageUploadSuccessRedirect(productId));
 }
@@ -397,13 +387,28 @@ async function saveUploadedProductImageRecordOrRedirect(
   imageRecord: CatalogProductImageRecord,
   processedImage: Parameters<typeof deleteProcessedProductImageFiles>[0],
   imagePersistFailureRedirect: string
-): Promise<void> {
+): Promise<Awaited<ReturnType<typeof createAdminProductImageRecordOnce>>> {
   try {
-    await saveAdminProductImageRecord(productId, imageRecord);
+    return await createAdminProductImageRecordOnce(productId, imageRecord);
   } catch {
     await deleteProcessedProductImageFiles(processedImage);
     redirect(imagePersistFailureRedirect);
   }
+}
+
+function getProductsWithoutImageId(
+  productId: string,
+  imageId: string,
+  products: readonly CatalogProductRecord[]
+): CatalogProductRecord[] {
+  return products.map((product) =>
+    product.id === productId
+      ? {
+          ...product,
+          images: product.images.filter((image) => image.id !== imageId)
+        }
+      : product
+  );
 }
 
 function readStringField(formData: FormData, name: string): string {

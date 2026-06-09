@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   }),
   requireAdmin: vi.fn(),
   revalidatePath: vi.fn(),
+  createAdminProductImageRecordOnce: vi.fn(),
   saveAdminProductImageRecord: vi.fn(),
   saveAdminProductImageRecords: vi.fn(),
   saveAdminProductRecords: vi.fn()
@@ -45,6 +46,7 @@ vi.mock("./product-image-processing", () => ({
 
 vi.mock("./products", () => ({
   addProductVariant: vi.fn(),
+  createAdminProductImageRecordOnce: mocks.createAdminProductImageRecordOnce,
   createProduct: vi.fn(),
   isDuplicateVariantSkuPersistenceError:
     mocks.isDuplicateVariantSkuPersistenceError,
@@ -62,6 +64,10 @@ describe("admin product image actions", () => {
     vi.clearAllMocks();
     mocks.requireAdmin.mockResolvedValue(undefined);
     mocks.isDuplicateVariantSkuPersistenceError.mockReturnValue(false);
+    mocks.createAdminProductImageRecordOnce.mockResolvedValue({
+      status: "created",
+      image: createImageRecord()
+    });
   });
 
   it("persists a single uploaded image with the stable form upload id", async () => {
@@ -71,7 +77,6 @@ describe("admin product image actions", () => {
       image
     });
     mocks.readAdminProductRecords.mockResolvedValue([createProductRecord()]);
-    mocks.saveAdminProductImageRecord.mockResolvedValue(undefined);
 
     await expect(uploadAdminProductImage(createUploadFormData())).rejects.toMatchObject({
       message: "NEXT_REDIRECT",
@@ -87,7 +92,7 @@ describe("admin product image actions", () => {
         imageId: IMAGE_UPLOAD_ID
       })
     );
-    expect(mocks.saveAdminProductImageRecord).toHaveBeenCalledWith(
+    expect(mocks.createAdminProductImageRecordOnce).toHaveBeenCalledWith(
       "irruptivo-training-tee",
       expect.objectContaining({
         id: IMAGE_UPLOAD_ID,
@@ -99,6 +104,14 @@ describe("admin product image actions", () => {
   });
 
   it("treats a repeated upload id as an already completed upload", async () => {
+    const image = createProcessedImage();
+    mocks.processProductImageUpload.mockResolvedValue({
+      ok: true,
+      image
+    });
+    mocks.createAdminProductImageRecordOnce.mockResolvedValue({
+      status: "duplicate"
+    });
     mocks.readAdminProductRecords.mockResolvedValue([
       createProductRecord({
         images: [createImageRecord()]
@@ -110,7 +123,18 @@ describe("admin product image actions", () => {
       url: "/admin/productos/irruptivo-training-tee/editar?estado=imagen-subida"
     });
 
-    expect(mocks.processProductImageUpload).not.toHaveBeenCalled();
+    expect(mocks.processProductImageUpload).toHaveBeenCalledWith(
+      expect.objectContaining({
+        imageId: IMAGE_UPLOAD_ID
+      })
+    );
+    expect(mocks.createAdminProductImageRecordOnce).toHaveBeenCalledWith(
+      "irruptivo-training-tee",
+      expect.objectContaining({
+        id: IMAGE_UPLOAD_ID
+      })
+    );
+    expect(mocks.deleteProcessedProductImageFiles).not.toHaveBeenCalled();
     expect(mocks.saveAdminProductImageRecord).not.toHaveBeenCalled();
     expect(mocks.saveAdminProductRecords).not.toHaveBeenCalled();
   });
@@ -129,7 +153,15 @@ describe("admin product image actions", () => {
     expect(mocks.saveAdminProductImageRecord).not.toHaveBeenCalled();
   });
 
-  it("rejects an upload id already owned by another product", async () => {
+  it("leaves repeated upload id ownership decisions to the database claim", async () => {
+    const image = createProcessedImage();
+    mocks.processProductImageUpload.mockResolvedValue({
+      ok: true,
+      image
+    });
+    mocks.createAdminProductImageRecordOnce.mockResolvedValue({
+      status: "duplicate"
+    });
     mocks.readAdminProductRecords.mockResolvedValue([
       createProductRecord(),
       createProductRecord({
@@ -141,11 +173,16 @@ describe("admin product image actions", () => {
 
     await expect(uploadAdminProductImage(createUploadFormData())).rejects.toMatchObject({
       message: "NEXT_REDIRECT",
-      url: "/admin/productos/irruptivo-training-tee/editar?imageAlt=Frente&imageColor=Negro&error=image_validation"
+      url: "/admin/productos/irruptivo-training-tee/editar?estado=imagen-subida"
     });
 
-    expect(mocks.processProductImageUpload).not.toHaveBeenCalled();
-    expect(mocks.saveAdminProductImageRecord).not.toHaveBeenCalled();
+    expect(mocks.createAdminProductImageRecordOnce).toHaveBeenCalledWith(
+      "irruptivo-training-tee",
+      expect.objectContaining({
+        id: IMAGE_UPLOAD_ID
+      })
+    );
+    expect(mocks.deleteProcessedProductImageFiles).not.toHaveBeenCalled();
   });
 
   it("deletes processed files when image metadata persistence fails after upload processing", async () => {
@@ -156,7 +193,7 @@ describe("admin product image actions", () => {
       image
     });
     mocks.readAdminProductRecords.mockResolvedValue([createProductRecord()]);
-    mocks.saveAdminProductImageRecord.mockImplementation(async () => {
+    mocks.createAdminProductImageRecordOnce.mockImplementation(async () => {
       events.push("save");
       throw new Error("database unavailable");
     });

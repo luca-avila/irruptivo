@@ -112,6 +112,15 @@ export type AdminProductVariantView = {
   isAvailable: boolean;
 };
 
+export type CreateAdminProductImageRecordOnceResult =
+  | {
+      status: "created";
+      image: CatalogProductImageRecord;
+    }
+  | {
+      status: "duplicate";
+    };
+
 const productAreaSchema = z.enum([PRODUCT_AREA.clothing, PRODUCT_AREA.supplement]);
 const productStatusSchema = z.enum([
   PRODUCT_STATUS.active,
@@ -256,6 +265,49 @@ export async function saveAdminProductImageRecord(
   await saveAdminProductImageRecords(productId, [image]);
 }
 
+export async function createAdminProductImageRecordOnce(
+  productId: string,
+  image: CatalogProductImageRecord
+): Promise<CreateAdminProductImageRecordOnceResult> {
+  try {
+    const createdImage = await prisma.$transaction(async (tx) => {
+      const lockedProducts = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM "products" WHERE id = ${productId} FOR UPDATE
+      `;
+
+      if (lockedProducts.length === 0) {
+        throw new Error("Product not found while creating image record");
+      }
+
+      const sortOrder = await getNextProductImageSortOrder(productId, tx);
+      const imageWithSortOrder: CatalogProductImageRecord = {
+        ...image,
+        sortOrder
+      };
+
+      await tx.productImage.create({
+        data: {
+          id: image.id,
+          ...getImagePersistenceData(productId, imageWithSortOrder)
+        }
+      });
+
+      return imageWithSortOrder;
+    });
+
+    return {
+      status: "created",
+      image: createdImage
+    };
+  } catch (error) {
+    if (isDuplicateProductImagePersistenceError(error)) {
+      return { status: "duplicate" };
+    }
+
+    throw error;
+  }
+}
+
 export async function saveAdminProductImageRecords(
   productId: string,
   images: readonly CatalogProductImageRecord[]
@@ -280,6 +332,32 @@ export async function saveAdminProductImageRecords(
       )
     );
   });
+}
+
+export function isDuplicateProductImagePersistenceError(error: unknown): boolean {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
+    return false;
+  }
+
+  if (error.code !== "P2002") {
+    return false;
+  }
+
+  const target = error.meta?.target;
+
+  if (Array.isArray(target)) {
+    return target.includes("id");
+  }
+
+  if (typeof target === "string") {
+    return (
+      target === "product_images_pkey" ||
+      target.includes("product_images_pkey") ||
+      target === "ProductImage_pkey"
+    );
+  }
+
+  return false;
 }
 
 export function isDuplicateVariantSkuPersistenceError(error: unknown): boolean {
@@ -671,6 +749,22 @@ function getImagePersistenceData(
     renditions: image.renditions ?? Prisma.DbNull,
     deletedAt: image.deletedAt ? new Date(image.deletedAt) : null
   };
+}
+
+async function getNextProductImageSortOrder(
+  productId: string,
+  client: Prisma.TransactionClient
+): Promise<number> {
+  const aggregate = await client.productImage.aggregate({
+    where: {
+      productId
+    },
+    _max: {
+      sortOrder: true
+    }
+  });
+
+  return (aggregate._max.sortOrder ?? 0) + 1;
 }
 
 function normalizeProductInput(

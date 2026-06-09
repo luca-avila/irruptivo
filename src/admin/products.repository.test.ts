@@ -10,6 +10,7 @@ import {
 import {
   PRODUCT_AREA,
   PRODUCT_STATUS,
+  type CatalogProductImageRecord,
   type CatalogProductImageRenditionsRecord,
   type CatalogProductRecord
 } from "../catalog/catalog";
@@ -17,6 +18,7 @@ import { prisma } from "../db/client";
 import {
   addProductVariant,
   createProduct,
+  createAdminProductImageRecordOnce,
   readAdminProductRecords,
   saveAdminProductRecords,
   setProductStatus,
@@ -377,6 +379,75 @@ describe.skipIf(!process.env.DATABASE_URL)(
         }
       ]);
     });
+
+    it("creates only one image row when the same upload id is claimed concurrently", async (ctx) => {
+      skipIfDatabaseUnavailable(ctx);
+
+      const product = createTestProduct("Image Claim Same Token");
+      await saveAdminProductRecords([product]);
+
+      const image = createImageRecordForProduct(product, "same-token", 99);
+      const results = await Promise.all([
+        createAdminProductImageRecordOnce(product.id, image),
+        createAdminProductImageRecordOnce(product.id, image)
+      ]);
+
+      expect(results.map((result) => result.status).sort()).toEqual([
+        "created",
+        "duplicate"
+      ]);
+
+      const rows = await prisma.productImage.findMany({
+        where: {
+          productId: product.id
+        },
+        orderBy: {
+          sortOrder: "asc"
+        }
+      });
+
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        id: image.id,
+        sortOrder: 1
+      });
+    });
+
+    it("assigns non-colliding sort orders for concurrent distinct image uploads", async (ctx) => {
+      skipIfDatabaseUnavailable(ctx);
+
+      const product = createTestProduct("Image Claim Distinct Tokens");
+      await saveAdminProductRecords([product]);
+
+      const firstImage = createImageRecordForProduct(product, "first", 99);
+      const secondImage = createImageRecordForProduct(product, "second", 99);
+      const results = await Promise.all([
+        createAdminProductImageRecordOnce(product.id, firstImage),
+        createAdminProductImageRecordOnce(product.id, secondImage)
+      ]);
+
+      expect(results.map((result) => result.status)).toEqual([
+        "created",
+        "created"
+      ]);
+
+      const rows = await prisma.productImage.findMany({
+        where: {
+          productId: product.id
+        },
+        orderBy: [
+          {
+            sortOrder: "asc"
+          },
+          {
+            id: "asc"
+          }
+        ]
+      });
+
+      expect(rows.map((row) => row.sortOrder)).toEqual([1, 2]);
+      expect(new Set(rows.map((row) => row.sortOrder)).size).toBe(2);
+    });
   }
 );
 
@@ -456,5 +527,48 @@ function createRenditions(
       byteSize: 76000,
       mimeType: "image/webp"
     }
+  };
+}
+
+function createImageRecordForProduct(
+  product: CatalogProductRecord,
+  imageId: string,
+  sortOrder: number
+): CatalogProductImageRecord {
+  const fullImageId = `${product.id}-${imageId}`;
+
+  return {
+    id: fullImageId,
+    path: `products/${product.id}/${fullImageId}/detail.webp`,
+    alt: "Imagen de test",
+    sortOrder,
+    width: 1200,
+    height: 1600,
+    renditions: {
+      card: {
+        path: `products/${product.id}/${fullImageId}/card.webp`,
+        width: 640,
+        height: 853,
+        byteSize: 12000,
+        mimeType: "image/webp"
+      },
+      detail: {
+        path: `products/${product.id}/${fullImageId}/detail.webp`,
+        width: 1200,
+        height: 1600,
+        byteSize: 32000,
+        mimeType: "image/webp"
+      },
+      original: {
+        path: `products/${product.id}/${fullImageId}/original.webp`,
+        width: 1800,
+        height: 2400,
+        byteSize: 76000,
+        mimeType: "image/webp"
+      }
+    },
+    associatedColor: "Negro",
+    variantId: null,
+    deletedAt: null
   };
 }

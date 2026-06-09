@@ -1,5 +1,3 @@
-import { randomUUID } from "node:crypto";
-
 import { ArrowDown, ArrowUp, ImagePlus, Trash2 } from "lucide-react";
 
 import {
@@ -14,6 +12,10 @@ import {
   type PublicProductImageView
 } from "../../../../src/catalog/catalog";
 import styles from "../admin.module.css";
+import {
+  ProductImageFileInput,
+  ProductImageUploadSubmitButton
+} from "./product-image-upload-controls";
 
 type ProductImageManagementProps = {
   product: CatalogProductRecord;
@@ -30,7 +32,6 @@ export function ProductImageManagement({
 }: ProductImageManagementProps) {
   const images = getPublicImageSet(product.images, { usage: "card" });
   const imageIds = images.map((image) => image.id);
-  const imageUploadId = randomUUID();
 
   return (
     <section className={styles.imageSection} aria-labelledby="image-section-title">
@@ -50,7 +51,6 @@ export function ProductImageManagement({
         action={uploadAdminProductImage}
       >
         <input type="hidden" name="productId" value={product.id} />
-        <input type="hidden" name="imageUploadId" value={imageUploadId} />
 
         <div className={styles.variantCardHeader}>
           <div>
@@ -60,15 +60,7 @@ export function ProductImageManagement({
         </div>
 
         <div className={styles.variantFormGrid}>
-          <label className={styles.field}>
-            <span>Archivo</span>
-            <input
-              name="image"
-              type="file"
-              accept="image/avif,image/jpeg,image/png,image/webp"
-              required
-            />
-          </label>
+          <ProductImageFileInput />
 
           <label className={styles.field}>
             <span>Texto alternativo</span>
@@ -90,10 +82,7 @@ export function ProductImageManagement({
         </p>
 
         <div className={styles.formActions}>
-          <button className={styles.primaryButton} type="submit">
-            <ImagePlus aria-hidden="true" size={17} strokeWidth={2.1} />
-            <span>Subir imagen</span>
-          </button>
+          <ProductImageUploadSubmitButton />
         </div>
       </form>
 
