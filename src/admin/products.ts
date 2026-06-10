@@ -21,7 +21,6 @@ import {
   resolveUnitPrice,
   updateVariant as updateCatalogVariant
 } from "../catalog/variants";
-import { type ProductImageUploadInput } from "../catalog/product-images";
 import { prisma } from "../db/client";
 import { type AvailabilityLabel } from "../domain/rules";
 
@@ -121,11 +120,6 @@ export type CreateAdminProductImageRecordOnceResult =
   | {
       status: "duplicate";
     };
-
-export type DeleteAdminProductRecordResult = {
-  product: CatalogProductRecord;
-  imageFiles: ProductImageUploadInput[];
-};
 
 const productAreaSchema = z.enum([PRODUCT_AREA.clothing, PRODUCT_AREA.supplement]);
 const productStatusSchema = z.enum([
@@ -270,8 +264,8 @@ export async function saveAdminProductRecords(
 
 export async function deleteAdminProductRecord(
   productId: string
-): Promise<DeleteAdminProductRecordResult | null> {
-  const deletedProduct = await prisma.$transaction(async (tx) => {
+): Promise<CatalogProductRecord | null> {
+  return prisma.$transaction(async (tx) => {
     const product = await tx.product.findUnique({
       where: {
         id: productId
@@ -312,27 +306,6 @@ export async function deleteAdminProductRecord(
 
     return mapProductRowToRecord(product);
   });
-
-  if (!deletedProduct) {
-    return null;
-  }
-
-  return {
-    product: deletedProduct,
-    imageFiles: deletedProduct.images.flatMap((image) =>
-      image.renditions
-        ? [
-            {
-              id: image.id,
-              alt: image.alt,
-              renditions: image.renditions,
-              associatedColor: image.associatedColor,
-              variantId: image.variantId
-            }
-          ]
-        : []
-    )
-  };
 }
 
 export async function saveAdminProductImageRecord(

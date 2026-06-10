@@ -164,6 +164,25 @@ export async function deleteProcessedProductImageFiles(
   await rm(path.dirname(absolutePath), { recursive: true, force: true });
 }
 
+export async function deleteProductMediaDirectory(
+  productId: string,
+  mediaRoot: string = getConfiguredMediaRoot()
+): Promise<void> {
+  const safeProductId = toSafePathSegment(productId);
+  // Reuse the existing file-path validator, then step back to the product dir.
+  const guardPath = `products/${safeProductId}/__delete_guard__/guard.webp`;
+  const absoluteGuardPath = resolveProductMediaPath(mediaRoot, guardPath);
+
+  if (!absoluteGuardPath) {
+    return;
+  }
+
+  await rm(path.dirname(path.dirname(absoluteGuardPath)), {
+    recursive: true,
+    force: true
+  });
+}
+
 async function writeRendition({
   buffer,
   mediaRoot,

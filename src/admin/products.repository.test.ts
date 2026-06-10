@@ -450,7 +450,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(new Set(rows.map((row) => row.sortOrder)).size).toBe(2);
     });
 
-    it("hard-deletes a product with cascaded variants and image rows while returning file cleanup data", async (ctx) => {
+    it("hard-deletes a product with cascaded variants and image rows while returning deleted product data", async (ctx) => {
       skipIfDatabaseUnavailable(ctx);
 
       const product = createTestProduct("Hard Delete");
@@ -486,25 +486,19 @@ describe.skipIf(!process.env.DATABASE_URL)(
       const result = await deleteAdminProductRecord(product.id);
 
       expect(result).toMatchObject({
-        product: {
-          id: product.id,
-          slug: product.slug,
-          images: [
-            {
-              id: activeImage.id,
-              deletedAt: null
-            },
-            {
-              id: deletedImage.id,
-              deletedAt: "2026-05-30T12:00:00.000Z"
-            }
-          ]
-        }
+        id: product.id,
+        slug: product.slug,
+        images: [
+          {
+            id: activeImage.id,
+            deletedAt: null
+          },
+          {
+            id: deletedImage.id,
+            deletedAt: "2026-05-30T12:00:00.000Z"
+          }
+        ]
       });
-      expect(result?.imageFiles.map((image) => image.id)).toEqual([
-        activeImage.id,
-        deletedImage.id
-      ]);
 
       await expect(
         prisma.product.findUnique({

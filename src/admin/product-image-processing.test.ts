@@ -1,4 +1,4 @@
-import { mkdtemp, rm, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   PRODUCT_IMAGE_UPLOAD_LIMIT_BYTES,
+  deleteProductMediaDirectory,
   processProductImageUpload
 } from "./product-image-processing";
 
@@ -115,6 +116,45 @@ describe("product image processing", () => {
     });
     await expect(stat(path.join(mediaRoot, "products/training-tee/oversized"))).rejects.toMatchObject({
       code: "ENOENT"
+    });
+  });
+
+  it("deletes the whole product media directory", async () => {
+    const mediaRoot = await createTempMediaRoot();
+    const firstImageDirectory = path.join(
+      mediaRoot,
+      "products/training-tee/image-a"
+    );
+    const secondImageDirectory = path.join(
+      mediaRoot,
+      "products/training-tee/image-b"
+    );
+
+    await mkdir(firstImageDirectory, { recursive: true });
+    await mkdir(secondImageDirectory, { recursive: true });
+    await writeFile(path.join(firstImageDirectory, "original.webp"), "first");
+    await writeFile(path.join(secondImageDirectory, "original.webp"), "second");
+
+    await deleteProductMediaDirectory("training-tee", mediaRoot);
+
+    await expect(
+      stat(path.join(mediaRoot, "products/training-tee"))
+    ).rejects.toMatchObject({
+      code: "ENOENT"
+    });
+  });
+
+  it("ignores product ids that cannot resolve to a safe media directory", async () => {
+    const mediaRoot = await createTempMediaRoot();
+    const productsDirectory = path.join(mediaRoot, "products");
+
+    await mkdir(productsDirectory, { recursive: true });
+    await writeFile(path.join(productsDirectory, "keep.txt"), "keep");
+
+    await deleteProductMediaDirectory("../../../", mediaRoot);
+
+    await expect(stat(path.join(productsDirectory, "keep.txt"))).resolves.toMatchObject({
+      isFile: expect.any(Function)
     });
   });
 });

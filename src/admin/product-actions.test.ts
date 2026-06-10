@@ -10,6 +10,7 @@ import { type ProductImageUploadInput } from "../catalog/product-images";
 import { deleteAdminProduct, uploadAdminProductImage } from "./product-actions";
 
 const mocks = vi.hoisted(() => ({
+  deleteProductMediaDirectory: vi.fn(),
   deleteProcessedProductImageFiles: vi.fn(),
   isDuplicateVariantSkuPersistenceError: vi.fn(),
   processProductImageUpload: vi.fn(),
@@ -41,6 +42,7 @@ vi.mock("./auth", () => ({
 }));
 
 vi.mock("./product-image-processing", () => ({
+  deleteProductMediaDirectory: mocks.deleteProductMediaDirectory,
   deleteProcessedProductImageFiles: mocks.deleteProcessedProductImageFiles,
   processProductImageUpload: mocks.processProductImageUpload
 }));
@@ -231,6 +233,7 @@ describe("admin product delete action", () => {
     );
 
     expect(mocks.deleteAdminProductRecord).not.toHaveBeenCalled();
+    expect(mocks.deleteProductMediaDirectory).not.toHaveBeenCalled();
     expect(mocks.deleteProcessedProductImageFiles).not.toHaveBeenCalled();
   });
 
@@ -245,11 +248,12 @@ describe("admin product delete action", () => {
     expect(mocks.deleteAdminProductRecord).toHaveBeenCalledWith(
       "irruptivo-training-tee"
     );
+    expect(mocks.deleteProductMediaDirectory).not.toHaveBeenCalled();
     expect(mocks.deleteProcessedProductImageFiles).not.toHaveBeenCalled();
     expect(mocks.revalidatePath).not.toHaveBeenCalled();
   });
 
-  it("deletes image files, revalidates catalog paths, and redirects with a success notice", async () => {
+  it("deletes the product media directory, revalidates catalog paths, and redirects with a success notice", async () => {
     const result = createDeleteResult();
     mocks.deleteAdminProductRecord.mockResolvedValue(result);
 
@@ -258,15 +262,11 @@ describe("admin product delete action", () => {
       url: "/admin/productos?estado=producto-eliminado"
     });
 
-    expect(mocks.deleteProcessedProductImageFiles).toHaveBeenCalledTimes(2);
-    expect(mocks.deleteProcessedProductImageFiles).toHaveBeenNthCalledWith(
-      1,
-      result.imageFiles[0]
+    expect(mocks.deleteProductMediaDirectory).toHaveBeenCalledTimes(1);
+    expect(mocks.deleteProductMediaDirectory).toHaveBeenCalledWith(
+      "irruptivo-training-tee"
     );
-    expect(mocks.deleteProcessedProductImageFiles).toHaveBeenNthCalledWith(
-      2,
-      result.imageFiles[1]
-    );
+    expect(mocks.deleteProcessedProductImageFiles).not.toHaveBeenCalled();
     expect(mocks.revalidatePath).toHaveBeenCalledWith("/admin/productos");
     expect(mocks.revalidatePath).toHaveBeenCalledWith("/coleccion");
     expect(mocks.revalidatePath).toHaveBeenCalledWith(
@@ -278,7 +278,7 @@ describe("admin product delete action", () => {
   });
 
   it("still redirects successfully when file cleanup fails after the database delete", async () => {
-    mocks.deleteProcessedProductImageFiles.mockRejectedValueOnce(
+    mocks.deleteProductMediaDirectory.mockRejectedValueOnce(
       new Error("missing file")
     );
 
@@ -287,7 +287,8 @@ describe("admin product delete action", () => {
       url: "/admin/productos?estado=producto-eliminado"
     });
 
-    expect(mocks.deleteProcessedProductImageFiles).toHaveBeenCalledTimes(2);
+    expect(mocks.deleteProductMediaDirectory).toHaveBeenCalledTimes(1);
+    expect(mocks.deleteProcessedProductImageFiles).not.toHaveBeenCalled();
     expect(mocks.revalidatePath).toHaveBeenCalledWith("/admin/productos");
   });
 });
@@ -386,11 +387,7 @@ function createImageRecord(): CatalogProductImageRecord {
   };
 }
 
-function createDeleteResult(): {
-  product: CatalogProductRecord;
-  imageFiles: ProductImageUploadInput[];
-} {
-  const activeImage = createProcessedImage();
+function createDeleteResult(): CatalogProductRecord {
   const deletedImage: ProductImageUploadInput = {
     ...createProcessedImage(),
     id: "22222222-2222-4222-8222-222222222222",
@@ -413,24 +410,21 @@ function createDeleteResult(): {
     }
   };
 
-  return {
-    product: createProductRecord({
-      images: [
-        createImageRecord(),
-        {
-          id: deletedImage.id,
-          path: deletedImage.renditions.detail.path,
-          alt: "Imagen eliminada",
-          sortOrder: 2,
-          width: deletedImage.renditions.detail.width,
-          height: deletedImage.renditions.detail.height,
-          renditions: deletedImage.renditions,
-          associatedColor: null,
-          variantId: null,
-          deletedAt: "2026-05-30T12:00:00.000Z"
-        }
-      ]
-    }),
-    imageFiles: [activeImage, deletedImage]
-  };
+  return createProductRecord({
+    images: [
+      createImageRecord(),
+      {
+        id: deletedImage.id,
+        path: deletedImage.renditions.detail.path,
+        alt: "Imagen eliminada",
+        sortOrder: 2,
+        width: deletedImage.renditions.detail.width,
+        height: deletedImage.renditions.detail.height,
+        renditions: deletedImage.renditions,
+        associatedColor: null,
+        variantId: null,
+        deletedAt: "2026-05-30T12:00:00.000Z"
+      }
+    ]
+  });
 }

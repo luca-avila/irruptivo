@@ -18,6 +18,7 @@ import {
 } from "../catalog/catalog";
 import { requireAdmin } from "./auth";
 import {
+  deleteProductMediaDirectory,
   deleteProcessedProductImageFiles,
   processProductImageUpload
 } from "./product-image-processing";
@@ -184,16 +185,12 @@ export async function deleteAdminProduct(formData: FormData): Promise<void> {
     redirect(getEditErrorRedirect(productId, "not_found"));
   }
 
-  await Promise.all(
-    result.imageFiles.map(async (image) => {
-      try {
-        await deleteProcessedProductImageFiles(image);
-      } catch {
-        // DB deletion is already committed; filesystem cleanup is best-effort.
-      }
-    })
-  );
-  revalidateCatalogPaths(result.product);
+  try {
+    await deleteProductMediaDirectory(productId);
+  } catch {
+    // DB deletion is already committed; filesystem cleanup is best-effort.
+  }
+  revalidateCatalogPaths(result);
 
   redirect(`${ADMIN_PRODUCTS_PATH}?estado=producto-eliminado`);
 }
