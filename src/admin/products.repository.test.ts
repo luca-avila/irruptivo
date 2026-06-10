@@ -19,6 +19,7 @@ import {
   addProductVariant,
   createProduct,
   createAdminProductImageRecordOnce,
+  deleteAdminProductRecord,
   readAdminProductRecords,
   saveAdminProductRecords,
   setProductStatus,
@@ -447,6 +448,93 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
       expect(rows.map((row) => row.sortOrder)).toEqual([1, 2]);
       expect(new Set(rows.map((row) => row.sortOrder)).size).toBe(2);
+    });
+
+    it("hard-deletes a product with cascaded variants and image rows while returning file cleanup data", async (ctx) => {
+      skipIfDatabaseUnavailable(ctx);
+
+      const product = createTestProduct("Hard Delete");
+      const withVariant = addProductVariant(
+        product.id,
+        {
+          sku: "phase3-delete-sku",
+          color: "Negro",
+          size: "M",
+          stock: 4,
+          priceOverrideArs: null
+        },
+        [product]
+      );
+
+      if (!withVariant.ok) {
+        throw new Error("Expected variant creation to succeed");
+      }
+
+      const activeImage = createImageRecordForProduct(product, "active", 1);
+      const deletedImage: CatalogProductImageRecord = {
+        ...createImageRecordForProduct(product, "deleted", 2),
+        deletedAt: "2026-05-30T12:00:00.000Z"
+      };
+
+      await saveAdminProductRecords([
+        {
+          ...withVariant.product,
+          images: [activeImage, deletedImage]
+        }
+      ]);
+
+      const result = await deleteAdminProductRecord(product.id);
+
+      expect(result).toMatchObject({
+        product: {
+          id: product.id,
+          slug: product.slug,
+          images: [
+            {
+              id: activeImage.id,
+              deletedAt: null
+            },
+            {
+              id: deletedImage.id,
+              deletedAt: "2026-05-30T12:00:00.000Z"
+            }
+          ]
+        }
+      });
+      expect(result?.imageFiles.map((image) => image.id)).toEqual([
+        activeImage.id,
+        deletedImage.id
+      ]);
+
+      await expect(
+        prisma.product.findUnique({
+          where: {
+            id: product.id
+          }
+        })
+      ).resolves.toBeNull();
+      await expect(
+        prisma.productVariant.count({
+          where: {
+            productId: product.id
+          }
+        })
+      ).resolves.toBe(0);
+      await expect(
+        prisma.productImage.count({
+          where: {
+            productId: product.id
+          }
+        })
+      ).resolves.toBe(0);
+    });
+
+    it("returns null when hard-deleting an unknown product", async (ctx) => {
+      skipIfDatabaseUnavailable(ctx);
+
+      await expect(
+        deleteAdminProductRecord(`${productIdPrefix}-unknown`)
+      ).resolves.toBeNull();
     });
   }
 );

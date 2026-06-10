@@ -83,6 +83,7 @@
 .filterLink:focus-visible,
 .iconLink:focus-visible,
 .textButton:focus-visible,
+.dangerButton:focus-visible,
 .primaryButton:focus-visible,
 .secondaryButton:focus-visible,
 .field input:focus-visible,
@@ -182,7 +183,8 @@
 .primaryButton,
 .secondaryButton,
 .iconLink,
-.textButton {
+.textButton,
+.dangerButton {
   display: inline-flex;
   min-height: 2.5rem;
   align-items: center;
@@ -232,7 +234,18 @@
   gap: 0.4rem;
 }
 
-.textButton:disabled {
+.dangerButton {
+  gap: 0.45rem;
+  width: fit-content;
+  padding: 0 0.85rem;
+  border: 1px solid #70251f;
+  background: #70251f;
+  color: #ffffff;
+  cursor: pointer;
+}
+
+.textButton:disabled,
+.dangerButton:disabled {
   cursor: not-allowed;
   opacity: 0.45;
 }
@@ -676,10 +689,18 @@
 
 .generalSection,
 .variantSection,
-.imageSection {
+.imageSection,
+.dangerSection {
   display: grid;
   gap: 1rem;
   margin-top: 1.25rem;
+}
+
+.dangerSection {
+  padding: 1rem;
+  border: 1px solid rgba(151, 46, 46, 0.28);
+  border-radius: 8px;
+  background: #fff7f5;
 }
 
 .sectionHeader {

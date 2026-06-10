@@ -25,6 +25,7 @@ import {
   addProductVariant,
   createAdminProductImageRecordOnce,
   createProduct,
+  deleteAdminProductRecord,
   isDuplicateVariantSkuPersistenceError,
   readAdminProductRecords,
   saveAdminProductImageRecord,
@@ -171,6 +172,30 @@ export async function changeAdminProductStatus(
 
 function errorToastState(message: string): ProductStatusActionState {
   return { toast: { tone: "error", message, token: Date.now() } };
+}
+
+export async function deleteAdminProduct(formData: FormData): Promise<void> {
+  await requireAdmin();
+
+  const productId = readStringField(formData, "productId");
+  const result = await deleteAdminProductRecord(productId);
+
+  if (!result) {
+    redirect(getEditErrorRedirect(productId, "not_found"));
+  }
+
+  await Promise.all(
+    result.imageFiles.map(async (image) => {
+      try {
+        await deleteProcessedProductImageFiles(image);
+      } catch {
+        // DB deletion is already committed; filesystem cleanup is best-effort.
+      }
+    })
+  );
+  revalidateCatalogPaths(result.product);
+
+  redirect(`${ADMIN_PRODUCTS_PATH}?estado=producto-eliminado`);
 }
 
 export async function createAdminProductVariant(

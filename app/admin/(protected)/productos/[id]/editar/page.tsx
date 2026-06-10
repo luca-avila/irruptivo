@@ -8,6 +8,7 @@ import {
 } from "../../../../../../src/admin/products";
 import { type ProductImageManagementErrorCode } from "../../../../../../src/catalog/product-images";
 import styles from "../../../admin.module.css";
+import { DeleteProductButton } from "../../delete-product-button";
 import { ProductImageManagement } from "../../product-image-management";
 import { ProductForm } from "../../product-form";
 import { VariantManagement } from "../../variant-management";
@@ -91,6 +92,21 @@ export default async function EditProductPage({
             getFirstSearchParamValue(resolvedSearchParams?.imageVariantId) ?? ""
         }}
       />
+
+      <section
+        className={styles.dangerSection}
+        aria-labelledby="danger-section-title"
+      >
+        <div className={styles.sectionHeader}>
+          <p className={styles.eyebrow}>Zona de peligro</p>
+          <h2 id="danger-section-title">Eliminar producto</h2>
+          <p>
+            Borra el producto de forma permanente, junto con sus variantes e
+            imágenes cargadas.
+          </p>
+        </div>
+        <DeleteProductButton productId={product.id} productName={product.name} />
+      </section>
     </>
   );
 }

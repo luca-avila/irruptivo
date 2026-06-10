@@ -225,6 +225,8 @@ function getProductFeedbackMessage({
       return { tone: "success", message: "Producto activado correctamente." };
     case "producto-desactivado":
       return { tone: "success", message: "Producto desactivado correctamente." };
+    case "producto-eliminado":
+      return { tone: "success", message: "Producto eliminado correctamente." };
     default:
       return null;
   }

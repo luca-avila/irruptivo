@@ -7,7 +7,7 @@ import {
   type CatalogProductRecord
 } from "../catalog/catalog";
 import { type ProductImageUploadInput } from "../catalog/product-images";
-import { uploadAdminProductImage } from "./product-actions";
+import { deleteAdminProduct, uploadAdminProductImage } from "./product-actions";
 
 const mocks = vi.hoisted(() => ({
   deleteProcessedProductImageFiles: vi.fn(),
@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
   requireAdmin: vi.fn(),
   revalidatePath: vi.fn(),
   createAdminProductImageRecordOnce: vi.fn(),
+  deleteAdminProductRecord: vi.fn(),
   saveAdminProductImageRecord: vi.fn(),
   saveAdminProductImageRecords: vi.fn(),
   saveAdminProductRecords: vi.fn()
@@ -48,6 +49,7 @@ vi.mock("./products", () => ({
   addProductVariant: vi.fn(),
   createAdminProductImageRecordOnce: mocks.createAdminProductImageRecordOnce,
   createProduct: vi.fn(),
+  deleteAdminProductRecord: mocks.deleteAdminProductRecord,
   isDuplicateVariantSkuPersistenceError:
     mocks.isDuplicateVariantSkuPersistenceError,
   readAdminProductRecords: mocks.readAdminProductRecords,
@@ -68,6 +70,7 @@ describe("admin product image actions", () => {
       status: "created",
       image: createImageRecord()
     });
+    mocks.deleteAdminProductRecord.mockResolvedValue(null);
   });
 
   it("persists a single uploaded image with the stable form upload id", async () => {
@@ -213,6 +216,82 @@ describe("admin product image actions", () => {
   });
 });
 
+describe("admin product delete action", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.requireAdmin.mockResolvedValue(undefined);
+    mocks.deleteAdminProductRecord.mockResolvedValue(createDeleteResult());
+  });
+
+  it("requires an admin session before deleting", async () => {
+    mocks.requireAdmin.mockRejectedValue(new Error("unauthorized"));
+
+    await expect(deleteAdminProduct(createDeleteFormData())).rejects.toThrow(
+      "unauthorized"
+    );
+
+    expect(mocks.deleteAdminProductRecord).not.toHaveBeenCalled();
+    expect(mocks.deleteProcessedProductImageFiles).not.toHaveBeenCalled();
+  });
+
+  it("redirects to the product list error when the product does not exist", async () => {
+    mocks.deleteAdminProductRecord.mockResolvedValue(null);
+
+    await expect(deleteAdminProduct(createDeleteFormData())).rejects.toMatchObject({
+      message: "NEXT_REDIRECT",
+      url: "/admin/productos?error=not_found"
+    });
+
+    expect(mocks.deleteAdminProductRecord).toHaveBeenCalledWith(
+      "irruptivo-training-tee"
+    );
+    expect(mocks.deleteProcessedProductImageFiles).not.toHaveBeenCalled();
+    expect(mocks.revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("deletes image files, revalidates catalog paths, and redirects with a success notice", async () => {
+    const result = createDeleteResult();
+    mocks.deleteAdminProductRecord.mockResolvedValue(result);
+
+    await expect(deleteAdminProduct(createDeleteFormData())).rejects.toMatchObject({
+      message: "NEXT_REDIRECT",
+      url: "/admin/productos?estado=producto-eliminado"
+    });
+
+    expect(mocks.deleteProcessedProductImageFiles).toHaveBeenCalledTimes(2);
+    expect(mocks.deleteProcessedProductImageFiles).toHaveBeenNthCalledWith(
+      1,
+      result.imageFiles[0]
+    );
+    expect(mocks.deleteProcessedProductImageFiles).toHaveBeenNthCalledWith(
+      2,
+      result.imageFiles[1]
+    );
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/admin/productos");
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/coleccion");
+    expect(mocks.revalidatePath).toHaveBeenCalledWith(
+      "/admin/productos/irruptivo-training-tee/editar"
+    );
+    expect(mocks.revalidatePath).toHaveBeenCalledWith(
+      "/coleccion/training-tee-negra"
+    );
+  });
+
+  it("still redirects successfully when file cleanup fails after the database delete", async () => {
+    mocks.deleteProcessedProductImageFiles.mockRejectedValueOnce(
+      new Error("missing file")
+    );
+
+    await expect(deleteAdminProduct(createDeleteFormData())).rejects.toMatchObject({
+      message: "NEXT_REDIRECT",
+      url: "/admin/productos?estado=producto-eliminado"
+    });
+
+    expect(mocks.deleteProcessedProductImageFiles).toHaveBeenCalledTimes(2);
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/admin/productos");
+  });
+});
+
 const IMAGE_UPLOAD_ID = "11111111-1111-4111-8111-111111111111";
 
 function createUploadFormData({
@@ -231,6 +310,13 @@ function createUploadFormData({
   );
   formData.set("alt", "Frente");
   formData.set("associatedColor", "Negro");
+
+  return formData;
+}
+
+function createDeleteFormData(): FormData {
+  const formData = new FormData();
+  formData.set("productId", "irruptivo-training-tee");
 
   return formData;
 }
@@ -297,5 +383,54 @@ function createImageRecord(): CatalogProductImageRecord {
     associatedColor: "Negro",
     variantId: null,
     deletedAt: null
+  };
+}
+
+function createDeleteResult(): {
+  product: CatalogProductRecord;
+  imageFiles: ProductImageUploadInput[];
+} {
+  const activeImage = createProcessedImage();
+  const deletedImage: ProductImageUploadInput = {
+    ...createProcessedImage(),
+    id: "22222222-2222-4222-8222-222222222222",
+    renditions: {
+      card: {
+        path: "products/irruptivo-training-tee/soft-deleted/card.webp",
+        width: 640,
+        height: 900
+      },
+      detail: {
+        path: "products/irruptivo-training-tee/soft-deleted/detail.webp",
+        width: 1200,
+        height: 1600
+      },
+      original: {
+        path: "products/irruptivo-training-tee/soft-deleted/original.webp",
+        width: 1800,
+        height: 2400
+      }
+    }
+  };
+
+  return {
+    product: createProductRecord({
+      images: [
+        createImageRecord(),
+        {
+          id: deletedImage.id,
+          path: deletedImage.renditions.detail.path,
+          alt: "Imagen eliminada",
+          sortOrder: 2,
+          width: deletedImage.renditions.detail.width,
+          height: deletedImage.renditions.detail.height,
+          renditions: deletedImage.renditions,
+          associatedColor: null,
+          variantId: null,
+          deletedAt: "2026-05-30T12:00:00.000Z"
+        }
+      ]
+    }),
+    imageFiles: [activeImage, deletedImage]
   };
 }
