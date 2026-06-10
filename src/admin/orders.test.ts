@@ -4,6 +4,10 @@ import { DELIVERY_METHOD, ORDER_STATUS, type OrderStatus } from "../domain/rules
 import { type Order } from "../orders/order-creation";
 import { type PaymentManualReviewState } from "../payments/payment-events";
 import {
+  type EmailDeliveryKind,
+  type OrderConfirmationEmailDeliveryRecord
+} from "../notifications/order-confirmation-email";
+import {
   getAdminOrderDetail,
   listAdminOrders,
   type AdminOrderProjectionOptions,
@@ -260,6 +264,62 @@ describe("admin order projection", () => {
       "Este pedido ya no tiene pasos de cumplimiento disponibles."
     );
   });
+
+  it("surfaces fulfillment email resend state without rendering raw delivery status", async () => {
+    const failedEmailDetail = await getAdminOrderDetail(
+      "order-001",
+      getProjectionOptions(
+        [
+          getOrder({
+            status: ORDER_STATUS.shipped
+          })
+        ],
+        getNeutralManualReviewForOrder,
+        async () => getEmailDelivery({ status: "failed" })
+      )
+    );
+    const sentEmailDetail = await getAdminOrderDetail(
+      "order-001",
+      getProjectionOptions(
+        [
+          getOrder({
+            status: ORDER_STATUS.readyForPickup,
+            deliveryMethod: DELIVERY_METHOD.pickup
+          })
+        ],
+        getNeutralManualReviewForOrder,
+        async () => getEmailDelivery({ status: "sent" })
+      )
+    );
+    const nonNotifiableDetail = await getAdminOrderDetail(
+      "order-001",
+      getProjectionOptions(
+        [
+          getOrder({
+            status: ORDER_STATUS.preparing
+          })
+        ],
+        getNeutralManualReviewForOrder,
+        async () => getEmailDelivery({ status: "failed" })
+      )
+    );
+
+    expect(failedEmailDetail?.fulfillment.notification).toMatchObject({
+      canResend: true,
+      statusLabel: "Falló el envío"
+    });
+    expect(sentEmailDetail?.fulfillment.notification).toMatchObject({
+      canResend: false,
+      statusLabel: "Email enviado"
+    });
+    expect(nonNotifiableDetail?.fulfillment.notification).toBeNull();
+    expect(JSON.stringify(failedEmailDetail?.fulfillment.notification)).not.toContain(
+      "failed"
+    );
+    expect(JSON.stringify(sentEmailDetail?.fulfillment.notification)).not.toContain(
+      "sent"
+    );
+  });
 });
 
 function createOrderRepository(orders: readonly Order[]): AdminOrderRepository {
@@ -274,7 +334,11 @@ function getProjectionOptions(
   ordersOrRepository: readonly Order[] | AdminOrderRepository,
   getManualReviewForOrder: (
     orderId: string
-  ) => Promise<PaymentManualReviewState> = getNeutralManualReviewForOrder
+  ) => Promise<PaymentManualReviewState> = getNeutralManualReviewForOrder,
+  readEmailDelivery?: (input: {
+    orderId: string;
+    kind: EmailDeliveryKind;
+  }) => Promise<OrderConfirmationEmailDeliveryRecord | null>
 ): AdminOrderProjectionOptions {
   const orderRepository: AdminOrderRepository = Array.isArray(ordersOrRepository)
     ? createOrderRepository(ordersOrRepository)
@@ -282,7 +346,8 @@ function getProjectionOptions(
 
   return {
     orderRepository,
-    getManualReviewForOrder
+    getManualReviewForOrder,
+    readEmailDelivery
   };
 }
 
@@ -293,6 +358,21 @@ async function getNeutralManualReviewForOrder(): Promise<PaymentManualReviewStat
     description: "No hay pagos tardíos pendientes de revisión para este pedido.",
     providerPaymentIds: [],
     latestEventAt: null
+  };
+}
+
+function getEmailDelivery({
+  status
+}: {
+  status: OrderConfirmationEmailDeliveryRecord["status"];
+}): OrderConfirmationEmailDeliveryRecord {
+  return {
+    orderId: "order-001",
+    recipientEmail: "luca@example.com",
+    status,
+    providerMessageId: status === "sent" ? "message-001" : null,
+    attemptedAt: now,
+    errorMessage: status === "failed" ? "No pudimos enviar el email." : null
   };
 }
 

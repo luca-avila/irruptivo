@@ -98,7 +98,8 @@ export async function sendAdminOrderNotificationOnce(
       providerMessageId: null,
       attemptedAt,
       errorMessage: null
-    }
+    },
+    now
   });
 
   if (claim.status === "duplicate") {

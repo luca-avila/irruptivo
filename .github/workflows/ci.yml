@@ -1,0 +1,65 @@
+name: Tests
+
+on:
+  pull_request: {}
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: irruptivo
+          POSTGRES_PASSWORD: irruptivo
+          POSTGRES_DB: irruptivo_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U irruptivo -d irruptivo_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://irruptivo:irruptivo@localhost:5432/irruptivo_test?schema=public
+      IRRUPTIVO_APP_URL: http://localhost:3000
+      NEXT_PUBLIC_WHATSAPP_URL: https://wa.me/5490000000000
+      NEXT_PUBLIC_INSTAGRAM_URL: https://instagram.com/irruptivo
+      ADMIN_USERNAME: admin@example.com
+      ADMIN_PASSWORD: change-me
+      ADMIN_SESSION_SECRET: replace-with-at-least-32-characters
+      IRRUPTIVO_EMAIL_PROVIDER: local
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Apply database migrations
+        run: npx prisma migrate deploy
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build

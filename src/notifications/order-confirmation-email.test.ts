@@ -12,10 +12,13 @@ import { DELIVERY_METHOD, ORDER_STATUS, type OrderStatus } from "../domain/rules
 import { type Order } from "../orders/order-creation";
 import { type EmailMessage } from "./email-provider";
 import {
+  EMAIL_DELIVERY_RECLAIM_AFTER_MS,
   buildOrderConfirmationEmailMessage,
+  claimOrderEmailDelivery,
   getGuestStatusUrl,
   mapOrderConfirmationEmailDeliveryRecordToRow,
   mapOrderConfirmationEmailDeliveryRowToRecord,
+  readOrderEmailDeliveryByOrderIdAndKind,
   readOrderConfirmationEmailDeliveriesForTests,
   resetOrderConfirmationEmailDeliveriesForTests,
   sendOrderConfirmationOnce
@@ -255,10 +258,14 @@ describe.skipIf(!process.env.DATABASE_URL)(
       );
     });
 
-    it("persists provider failures and blocks later re-send attempts", async () => {
+    it("throttles failed deliveries before backoff and reclaims them after backoff", async () => {
       const providerCalls: EmailMessage[] = [];
       const order = getOrder(ORDER_STATUS.paid);
       await createTestOrder(order);
+      const retryAfterBackoff = addMilliseconds(
+        now,
+        EMAIL_DELIVERY_RECLAIM_AFTER_MS + 1
+      );
 
       const result = await sendOrderConfirmationOnce(order, {
         emailProvider: async (message) => {
@@ -273,7 +280,20 @@ describe.skipIf(!process.env.DATABASE_URL)(
         appUrl: "https://irruptivo.test",
         now
       });
-      const duplicateResult = await sendOrderConfirmationOnce(order, {
+      const duplicateBeforeBackoffResult = await sendOrderConfirmationOnce(order, {
+        emailProvider: async (message) => {
+          providerCalls.push(message);
+
+          return {
+            status: "sent",
+            provider: "test",
+            messageId: "message-before-backoff"
+          };
+        },
+        appUrl: "https://irruptivo.test",
+        now
+      });
+      const retryAfterBackoffResult = await sendOrderConfirmationOnce(order, {
         emailProvider: async (message) => {
           providerCalls.push(message);
 
@@ -284,7 +304,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
           };
         },
         appUrl: "https://irruptivo.test",
-        now
+        now: retryAfterBackoff
       });
 
       expect(result).toEqual({
@@ -293,28 +313,40 @@ describe.skipIf(!process.env.DATABASE_URL)(
         recipientEmail: "luca@example.com",
         message: "El proveedor de email rechazó el envío."
       });
-      expect(duplicateResult).toEqual({
+      expect(duplicateBeforeBackoffResult).toEqual({
         status: "duplicate",
         orderId: "order-001",
         recipientEmail: "luca@example.com",
         previousStatus: "failed"
       });
-      expect(providerCalls).toHaveLength(1);
+      expect(retryAfterBackoffResult).toEqual({
+        status: "sent",
+        orderId: "order-001",
+        recipientEmail: "luca@example.com",
+        providerMessageId: "message-retry"
+      });
+      expect(providerCalls).toHaveLength(2);
       await expect(
         readOrderConfirmationEmailDeliveriesForTests()
       ).resolves.toMatchObject([
         {
           orderId: "order-001",
-          status: "failed",
-          errorMessage: "El proveedor de email rechazó el envío."
+          status: "sent",
+          providerMessageId: "message-retry",
+          errorMessage: null,
+          attemptedAt: retryAfterBackoff
         }
       ]);
     });
 
-    it("persists configuration-missing sends and blocks later re-send attempts", async () => {
+    it("throttles configuration-missing deliveries before backoff and reclaims them after backoff", async () => {
       const providerCalls: EmailMessage[] = [];
       const order = getOrder(ORDER_STATUS.paid);
       await createTestOrder(order);
+      const retryAfterBackoff = addMilliseconds(
+        now,
+        EMAIL_DELIVERY_RECLAIM_AFTER_MS + 1
+      );
 
       const result = await sendOrderConfirmationOnce(order, {
         emailProvider: async (message) => {
@@ -330,7 +362,20 @@ describe.skipIf(!process.env.DATABASE_URL)(
         appUrl: "https://irruptivo.test",
         now
       });
-      const duplicateResult = await sendOrderConfirmationOnce(order, {
+      const duplicateBeforeBackoffResult = await sendOrderConfirmationOnce(order, {
+        emailProvider: async (message) => {
+          providerCalls.push(message);
+
+          return {
+            status: "sent",
+            provider: "test",
+            messageId: "message-before-backoff"
+          };
+        },
+        appUrl: "https://irruptivo.test",
+        now
+      });
+      const retryAfterBackoffResult = await sendOrderConfirmationOnce(order, {
         emailProvider: async (message) => {
           providerCalls.push(message);
 
@@ -341,7 +386,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
           };
         },
         appUrl: "https://irruptivo.test",
-        now
+        now: retryAfterBackoff
       });
 
       expect(result).toEqual({
@@ -350,22 +395,132 @@ describe.skipIf(!process.env.DATABASE_URL)(
         recipientEmail: "luca@example.com",
         message: "Falta configurar el proveedor de email."
       });
-      expect(duplicateResult).toEqual({
+      expect(duplicateBeforeBackoffResult).toEqual({
         status: "duplicate",
         orderId: "order-001",
         recipientEmail: "luca@example.com",
         previousStatus: "configuration_missing"
       });
-      expect(providerCalls).toHaveLength(1);
+      expect(retryAfterBackoffResult).toEqual({
+        status: "sent",
+        orderId: "order-001",
+        recipientEmail: "luca@example.com",
+        providerMessageId: "message-retry"
+      });
+      expect(providerCalls).toHaveLength(2);
       await expect(
         readOrderConfirmationEmailDeliveriesForTests()
       ).resolves.toMatchObject([
         {
           orderId: "order-001",
-          status: "configuration_missing",
-          errorMessage: "Falta configurar el proveedor de email."
+          status: "sent",
+          providerMessageId: "message-retry",
+          errorMessage: null,
+          attemptedAt: retryAfterBackoff
         }
       ]);
+    });
+
+    it("reclaims a stale sending delivery row atomically", async () => {
+      const order = getOrder(ORDER_STATUS.paid);
+      const staleAttempt = addMilliseconds(
+        now,
+        -(EMAIL_DELIVERY_RECLAIM_AFTER_MS + 1)
+      );
+      await createTestOrder(order);
+
+      const initialClaim = await claimOrderEmailDelivery({
+        kind: "buyer_confirmation",
+        delivery: {
+          orderId: order.id,
+          recipientEmail: "old-recipient@example.com",
+          status: "sending",
+          providerMessageId: null,
+          attemptedAt: staleAttempt,
+          errorMessage: null
+        },
+        now: staleAttempt
+      });
+      const reclaim = await claimOrderEmailDelivery({
+        kind: "buyer_confirmation",
+        delivery: {
+          orderId: order.id,
+          recipientEmail: order.contact.email,
+          status: "sending",
+          providerMessageId: null,
+          attemptedAt: now,
+          errorMessage: null
+        },
+        now
+      });
+
+      expect(initialClaim.status).toBe("claimed");
+      expect(reclaim).toEqual({
+        status: "claimed",
+        delivery: {
+          orderId: order.id,
+          recipientEmail: order.contact.email,
+          status: "sending",
+          providerMessageId: null,
+          attemptedAt: now,
+          errorMessage: null
+        }
+      });
+    });
+
+    it("never reclaims a sent delivery row, even after backoff", async () => {
+      const providerCalls: EmailMessage[] = [];
+      const order = getOrder(ORDER_STATUS.paid);
+      await createTestOrder(order);
+
+      await sendOrderConfirmationOnce(order, {
+        emailProvider: async (message) => {
+          providerCalls.push(message);
+
+          return {
+            status: "sent",
+            provider: "test",
+            messageId: "message-001"
+          };
+        },
+        appUrl: "https://irruptivo.test",
+        now
+      });
+      const reclaimAfterBackoff = await claimOrderEmailDelivery({
+        kind: "buyer_confirmation",
+        delivery: {
+          orderId: order.id,
+          recipientEmail: "retry@example.com",
+          status: "sending",
+          providerMessageId: null,
+          attemptedAt: addMilliseconds(now, EMAIL_DELIVERY_RECLAIM_AFTER_MS + 1),
+          errorMessage: null
+        },
+        now: addMilliseconds(now, EMAIL_DELIVERY_RECLAIM_AFTER_MS + 1)
+      });
+
+      expect(reclaimAfterBackoff).toEqual({
+        status: "duplicate",
+        delivery: {
+          orderId: order.id,
+          recipientEmail: order.contact.email,
+          status: "sent",
+          providerMessageId: "message-001",
+          attemptedAt: now,
+          errorMessage: null
+        }
+      });
+      expect(providerCalls).toHaveLength(1);
+      await expect(
+        readOrderEmailDeliveryByOrderIdAndKind({
+          orderId: order.id,
+          kind: "buyer_confirmation"
+        })
+      ).resolves.toMatchObject({
+        status: "sent",
+        recipientEmail: order.contact.email,
+        providerMessageId: "message-001"
+      });
     });
   }
 );
@@ -485,4 +640,8 @@ async function skipIfDatabaseUnavailable(ctx: TestContext): Promise<void> {
   } catch {
     ctx.skip("DATABASE_URL is set, but the database is not reachable.");
   }
+}
+
+function addMilliseconds(value: string, milliseconds: number): string {
+  return new Date(new Date(value).getTime() + milliseconds).toISOString();
 }

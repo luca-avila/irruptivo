@@ -23,6 +23,16 @@ import {
   getAllowedAdminTransitions,
   type AdminAllowedFulfillmentTransition
 } from "./order-transitions";
+import {
+  getFulfillmentUpdateEmailDeliveryKind,
+  isFulfillmentUpdateEmailStatus
+} from "../notifications/fulfillment-update-email";
+import {
+  readOrderEmailDeliveryByOrderIdAndKind,
+  type EmailDeliveryKind,
+  type OrderConfirmationEmailDeliveryRecord,
+  type OrderConfirmationEmailDeliveryStatus
+} from "../notifications/order-confirmation-email";
 
 export type AdminOrderRepository = {
   listOrders: () => Promise<readonly Order[]>;
@@ -34,6 +44,7 @@ export type AdminOrderProjectionOptions = {
   getManualReviewForOrder?: (
     orderId: string
   ) => Promise<PaymentManualReviewState>;
+  readEmailDelivery?: AdminOrderEmailDeliveryReader;
 };
 
 export type AdminOrderListInput = {
@@ -154,6 +165,13 @@ export type AdminOrderManualReviewView = PaymentManualReviewState & {
 export type AdminOrderFulfillmentView = {
   actions: AdminAllowedFulfillmentTransition[];
   unavailableReason: string | null;
+  notification: AdminOrderFulfillmentNotificationView | null;
+};
+
+export type AdminOrderFulfillmentNotificationView = {
+  kind: EmailDeliveryKind;
+  canResend: boolean;
+  statusLabel: string;
 };
 
 export type AdminOrderStatusTone =
@@ -172,6 +190,11 @@ type AdminOrderFilterDefinition = {
   statuses: readonly OrderStatus[];
   emptyState: AdminOrderEmptyState;
 };
+
+type AdminOrderEmailDeliveryReader = (input: {
+  orderId: string;
+  kind: EmailDeliveryKind;
+}) => Promise<OrderConfirmationEmailDeliveryRecord | null>;
 
 const DEFAULT_QUEUE_STATUSES = [
   ORDER_STATUS.paid,
@@ -245,6 +268,9 @@ const defaultOrderRepository: AdminOrderRepository = {
   findOrderById: findOrderByIdInStore
 };
 
+const defaultEmailDeliveryReader: AdminOrderEmailDeliveryReader =
+  readOrderEmailDeliveryByOrderIdAndKind;
+
 export async function listAdminOrders(
   input: AdminOrderListInput = {},
   {
@@ -291,7 +317,8 @@ export async function getAdminOrderDetail(
   orderId: string,
   {
     orderRepository = defaultOrderRepository,
-    getManualReviewForOrder = getPaymentManualReviewForOrder
+    getManualReviewForOrder = getPaymentManualReviewForOrder,
+    readEmailDelivery = defaultEmailDeliveryReader
   }: AdminOrderProjectionOptions = {}
 ): Promise<AdminOrderDetailView | null> {
   const normalizedOrderId = orderId.trim();
@@ -306,10 +333,12 @@ export async function getAdminOrderDetail(
     return null;
   }
 
-  return getAdminOrderDetailView(
-    order,
-    await getManualReviewForOrder(order.id)
-  );
+  const [manualReview, fulfillmentNotification] = await Promise.all([
+    getManualReviewForOrder(order.id),
+    getAdminOrderFulfillmentNotificationView(order, readEmailDelivery)
+  ]);
+
+  return getAdminOrderDetailView(order, manualReview, fulfillmentNotification);
 }
 
 function getAdminOrderListItemView(
@@ -360,7 +389,8 @@ function getNeutralManualReviewState(): PaymentManualReviewState {
 
 function getAdminOrderDetailView(
   order: Order,
-  manualReview: PaymentManualReviewState
+  manualReview: PaymentManualReviewState,
+  fulfillmentNotification: AdminOrderFulfillmentNotificationView | null
 ): AdminOrderDetailView {
   return {
     id: order.id,
@@ -421,18 +451,66 @@ function getAdminOrderDetailView(
         ? formatDateTime(manualReview.latestEventAt)
         : null
     },
-    fulfillment: getAdminOrderFulfillmentView(order)
+    fulfillment: getAdminOrderFulfillmentView(order, fulfillmentNotification)
   };
 }
 
-function getAdminOrderFulfillmentView(order: Order): AdminOrderFulfillmentView {
+function getAdminOrderFulfillmentView(
+  order: Order,
+  notification: AdminOrderFulfillmentNotificationView | null
+): AdminOrderFulfillmentView {
   const actions = getAllowedAdminTransitions(order);
 
   return {
     actions,
     unavailableReason:
-      actions.length > 0 ? null : getAdminOrderFulfillmentUnavailableReason(order)
+      actions.length > 0 ? null : getAdminOrderFulfillmentUnavailableReason(order),
+    notification
   };
+}
+
+async function getAdminOrderFulfillmentNotificationView(
+  order: Order,
+  readEmailDelivery: AdminOrderEmailDeliveryReader
+): Promise<AdminOrderFulfillmentNotificationView | null> {
+  if (!isFulfillmentUpdateEmailStatus(order.status)) {
+    return null;
+  }
+
+  const kind = getFulfillmentUpdateEmailDeliveryKind(order.status);
+
+  if (!kind) {
+    return null;
+  }
+
+  const delivery = await readEmailDelivery({
+    orderId: order.id,
+    kind
+  });
+
+  return {
+    kind,
+    canResend: delivery?.status !== "sent",
+    statusLabel: getEmailDeliveryStatusLabel(delivery?.status ?? null)
+  };
+}
+
+function getEmailDeliveryStatusLabel(
+  status: OrderConfirmationEmailDeliveryStatus | null
+): string {
+  switch (status) {
+    case "sent":
+      return "Email enviado";
+    case "sending":
+      return "Envío pendiente";
+    case "configuration_missing":
+      return "Falta configuración de email";
+    case "failed":
+      return "Falló el envío";
+    case null:
+    default:
+      return "Email no enviado";
+  }
 }
 
 function getAdminOrderFulfillmentUnavailableReason(order: Order): string {

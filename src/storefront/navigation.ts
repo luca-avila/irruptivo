@@ -1,6 +1,7 @@
 import { getCartCount, hydrateCart } from "../cart/cart";
 
 export const CART_STORAGE_KEY = "irruptivo.cart";
+export const DEFAULT_WHATSAPP_URL = "https://wa.me/5490000000000";
 
 export type StorefrontRoute = {
   label: string;
@@ -24,7 +25,7 @@ export const storefrontTrustRoutes = [
 
 export const contactLink = {
   label: "Contacto",
-  href: process.env.NEXT_PUBLIC_WHATSAPP_URL ?? "https://wa.me/5490000000000"
+  href: process.env.NEXT_PUBLIC_WHATSAPP_URL ?? DEFAULT_WHATSAPP_URL
 } as const satisfies ExternalStorefrontLink;
 
 export const instagramLink = {

@@ -10,6 +10,11 @@ import {
   findOrderByIdInStore,
   updateOrderStatusInStore
 } from "../orders/order-store";
+import {
+  isFulfillmentUpdateEmailStatus,
+  sendFulfillmentUpdateOnce,
+  type FulfillmentUpdateEmailSender
+} from "../notifications/fulfillment-update-email";
 
 export const ADMIN_FULFILLMENT_TRANSITION_ACTION = {
   prepare: "preparar",
@@ -46,6 +51,7 @@ export type TransitionOrderFulfillmentStatusInput = {
 
 export type TransitionOrderFulfillmentStatusOptions = {
   orderRepository?: AdminOrderTransitionRepository;
+  fulfillmentUpdateEmailSender?: FulfillmentUpdateEmailSender;
 };
 
 export type AdminOrderTransitionErrorCode =
@@ -138,7 +144,8 @@ export function getAllowedAdminTransitions(
 export async function transitionOrderFulfillmentStatus(
   input: TransitionOrderFulfillmentStatusInput,
   {
-    orderRepository = defaultOrderRepository
+    orderRepository = defaultOrderRepository,
+    fulfillmentUpdateEmailSender = sendFulfillmentUpdateOnce
   }: TransitionOrderFulfillmentStatusOptions = {}
 ): Promise<AdminOrderTransitionResult> {
   const normalizedOrderId = input.orderId.trim();
@@ -229,6 +236,14 @@ export async function transitionOrderFulfillmentStatus(
         message: "No pudimos guardar el nuevo estado del pedido."
       }
     };
+  }
+
+  if (isFulfillmentUpdateEmailStatus(updatedOrder.status)) {
+    try {
+      await fulfillmentUpdateEmailSender(updatedOrder);
+    } catch {
+      // Fulfillment emails are best-effort and must not block admin transitions.
+    }
   }
 
   return {

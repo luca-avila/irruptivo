@@ -11,6 +11,7 @@ import {
   type Order,
   type PendingOrderDeliverySnapshot
 } from "../orders/order-creation";
+import { DEFAULT_WHATSAPP_URL } from "../storefront/navigation";
 import {
   sendEmail,
   type EmailMessage,
@@ -67,7 +68,11 @@ export type OrderConfirmationEmailSender = (
   order: Order
 ) => Promise<OrderConfirmationEmailResult>;
 
-export type EmailDeliveryKind = "buyer_confirmation" | "admin_notification";
+export type EmailDeliveryKind =
+  | "buyer_confirmation"
+  | "admin_notification"
+  | "buyer_shipped"
+  | "buyer_ready_for_pickup";
 
 export type SendOrderConfirmationOnceOptions = {
   emailProvider?: (message: EmailMessage) => Promise<EmailSendResult>;
@@ -86,9 +91,13 @@ export type OrderConfirmationEmailDeliveryWriteRow = Omit<
   "id"
 >;
 
+// Retry throttle for non-sent deliveries, and staleness window for crashed sending rows.
+export const EMAIL_DELIVERY_RECLAIM_AFTER_MS = 5 * 60_000;
+// Short admin resend throttle: prevents double-submit resends while reclaiming stale failures quickly.
+export const EMAIL_DELIVERY_RESEND_RECLAIM_AFTER_MS = 30_000;
+
 const BUYER_CONFIRMATION_EMAIL_DELIVERY_KIND =
   "buyer_confirmation" as const satisfies EmailDeliveryKind;
-const SUPPORT_WHATSAPP_URL = "https://wa.me/5490000000000";
 const orderConfirmationEmailDeliveryStatuses = [
   "sending",
   "sent",
@@ -140,7 +149,8 @@ export async function sendOrderConfirmationOnce(
       providerMessageId: null,
       attemptedAt,
       errorMessage: null
-    }
+    },
+    now
   });
 
   if (claim.status === "duplicate") {
@@ -155,7 +165,7 @@ export async function sendOrderConfirmationOnce(
   const message = buildOrderConfirmationEmailMessage({
     order,
     guestStatusUrl: getGuestStatusUrl(statusPath, appUrl),
-    whatsappUrl: whatsappUrl?.trim() || SUPPORT_WHATSAPP_URL
+    whatsappUrl: whatsappUrl?.trim() || DEFAULT_WHATSAPP_URL
   });
   const sendResult = await sendEmailSafely(emailProvider, message);
 
@@ -292,10 +302,14 @@ export function buildOrderConfirmationEmailMessage({
 
 export async function claimOrderEmailDelivery({
   kind,
-  delivery
+  delivery,
+  reclaimAfterMs = EMAIL_DELIVERY_RECLAIM_AFTER_MS,
+  now = new Date()
 }: {
   kind: EmailDeliveryKind;
   delivery: OrderConfirmationEmailDeliveryRecord;
+  reclaimAfterMs?: number;
+  now?: Date | string;
 }): Promise<
   | {
       status: "claimed";
@@ -334,9 +348,58 @@ export async function claimOrderEmailDelivery({
       throw error;
     }
 
+    if (existingDelivery.status === "sent") {
+      return {
+        status: "duplicate",
+        delivery: existingDelivery
+      };
+    }
+
+    const reclaimWindowMs = getNonNegativeMilliseconds(
+      reclaimAfterMs,
+      "reclaimAfterMs"
+    );
+    const claimDate = getDate(now, "now");
+    const cutoff = new Date(claimDate.getTime() - reclaimWindowMs);
+    const reclaim = await prisma.emailDelivery.updateMany({
+      where: {
+        orderId: normalizedDelivery.orderId,
+        kind,
+        status: {
+          not: "sent"
+        },
+        attemptedAt: {
+          lte: cutoff
+        }
+      },
+      data: {
+        status: "sending",
+        recipientEmail: normalizedDelivery.recipientEmail,
+        providerMessageId: null,
+        errorMessage: null,
+        attemptedAt: normalizedDelivery.attemptedAt
+      }
+    });
+
+    if (reclaim.count !== 1) {
+      return {
+        status: "duplicate",
+        delivery: existingDelivery
+      };
+    }
+
+    const reclaimedDelivery = await readOrderEmailDeliveryByOrderIdAndKind({
+      orderId: normalizedDelivery.orderId,
+      kind
+    });
+
+    if (!reclaimedDelivery) {
+      throw error;
+    }
+
     return {
-      status: "duplicate",
-      delivery: existingDelivery
+      status: "claimed",
+      delivery: reclaimedDelivery
     };
   }
 }
@@ -479,6 +542,14 @@ function getDate(value: Date | string, name: string): Date {
   }
 
   return date;
+}
+
+function getNonNegativeMilliseconds(value: number, name: string): number {
+  if (!Number.isFinite(value) || value < 0) {
+    throw new RangeError(`${name} must be a non-negative number`);
+  }
+
+  return value;
 }
 
 function assertNonEmptyString(value: string, name: string): string {

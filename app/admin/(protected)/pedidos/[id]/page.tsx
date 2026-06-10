@@ -2,6 +2,7 @@ import {
   AlertTriangle,
   ArrowLeft,
   CreditCard,
+  Mail,
   PackageCheck,
   Truck,
   UserRound
@@ -9,7 +10,10 @@ import {
 import Link from "next/link";
 
 import { type AdminOrderFulfillmentEditErrorCode } from "../../../../../src/admin/order-fulfillment-edits";
-import { transitionAdminOrderFulfillment } from "../../../../../src/admin/order-actions";
+import {
+  resendFulfillmentUpdateEmail,
+  transitionAdminOrderFulfillment
+} from "../../../../../src/admin/order-actions";
 import { getAdminOrderDetail } from "../../../../../src/admin/orders";
 import styles from "../../admin.module.css";
 import { OrderFulfillmentEditForm } from "./order-fulfillment-edit-form";
@@ -161,6 +165,30 @@ export default async function AdminOrderDetailPage({
               "No hay acciones de cumplimiento disponibles."}
           </p>
         )}
+
+        {detail.fulfillment.notification ? (
+          <div className={styles.fulfillmentAction}>
+            <div>
+              <strong>Email al cliente: {detail.fulfillment.notification.statusLabel}</strong>
+              <p>
+                Aviso automático para el estado {detail.statusLabel.toLowerCase()}.
+              </p>
+            </div>
+            {detail.fulfillment.notification.canResend ? (
+              <form action={resendFulfillmentUpdateEmail}>
+                <input type="hidden" name="orderId" value={detail.id} />
+                <button className={styles.secondaryButton} type="submit">
+                  <Mail aria-hidden="true" size={17} strokeWidth={2.1} />
+                  <span>Reenviar email</span>
+                </button>
+              </form>
+            ) : (
+              <p className={styles.formHint}>
+                El aviso de cumplimiento ya fue enviado al cliente.
+              </p>
+            )}
+          </div>
+        ) : null}
       </section>
 
       <section className={styles.detailGrid} aria-label="Datos del pedido">
@@ -343,6 +371,22 @@ function getTransitionFeedback({
     };
   }
 
+  if (state === "email-reenviado") {
+    return {
+      tone: "success",
+      title: "Email reenviado",
+      description: "El aviso de cumplimiento se envió al cliente."
+    };
+  }
+
+  if (state === "email-ya-enviado") {
+    return {
+      tone: "success",
+      title: "Email ya enviado",
+      description: "El aviso de cumplimiento ya estaba marcado como enviado."
+    };
+  }
+
   return null;
 }
 
@@ -358,6 +402,12 @@ function getTransitionErrorMessage(error: string): string {
       return "Este pedido ya no tiene pasos de cumplimiento disponibles.";
     case "guardado-fallido":
       return "No pudimos guardar el nuevo estado. Volvé a intentar.";
+    case "email-no-disponible":
+      return "El pedido no está en un estado que permita reenviar este aviso.";
+    case "email-configuracion-faltante":
+      return "Falta configurar el proveedor de email transaccional.";
+    case "email-envio-fallido":
+      return "No pudimos enviar el email al cliente. Volvé a intentar.";
     case "pedido-no-encontrado":
     default:
       return "No encontramos el pedido para actualizar.";

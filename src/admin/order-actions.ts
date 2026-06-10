@@ -4,6 +4,13 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { requireAdmin } from "./auth";
+import { findOrderByIdInStore } from "../orders/order-store";
+import { EMAIL_DELIVERY_RESEND_RECLAIM_AFTER_MS } from "../notifications/order-confirmation-email";
+import {
+  isFulfillmentUpdateEmailStatus,
+  sendFulfillmentUpdateOnce,
+  type FulfillmentUpdateEmailResult
+} from "../notifications/fulfillment-update-email";
 import {
   transitionOrderFulfillmentStatus,
   type AdminOrderTransitionErrorCode
@@ -35,6 +42,44 @@ export async function transitionAdminOrderFulfillment(
 
   revalidatePath(getAdminOrderDetailPath(result.order.id));
   redirect(`${getAdminOrderDetailPath(result.order.id)}?estado=estado-actualizado`);
+}
+
+export async function resendFulfillmentUpdateEmail(
+  formData: FormData
+): Promise<void> {
+  await requireAdmin();
+
+  const orderId = readStringField(formData, "orderId");
+  const normalizedOrderId = orderId.trim();
+
+  if (!normalizedOrderId) {
+    redirect(`${ADMIN_ORDERS_PATH}?error=pedido-no-encontrado`);
+  }
+
+  const order = await findOrderByIdInStore(normalizedOrderId);
+
+  if (!order) {
+    redirect(getTransitionErrorRedirect(normalizedOrderId, "order_not_found"));
+  }
+
+  if (!isFulfillmentUpdateEmailStatus(order.status)) {
+    redirect(
+      `${getAdminOrderDetailPath(normalizedOrderId)}?error=email-no-disponible`
+    );
+  }
+
+  const result = await sendFulfillmentUpdateOnce(order, {
+    reclaimAfterMs: EMAIL_DELIVERY_RESEND_RECLAIM_AFTER_MS
+  });
+
+  revalidatePath(ADMIN_ORDERS_PATH);
+  revalidatePath(getAdminOrderDetailPath(order.id));
+
+  redirect(
+    `${getAdminOrderDetailPath(order.id)}?${getFulfillmentEmailRedirectParam(
+      result
+    )}`
+  );
 }
 
 function readStringField(formData: FormData, name: string): string {
@@ -74,6 +119,24 @@ function getTransitionErrorParam(
     case "order_not_found":
     default:
       return "pedido-no-encontrado";
+  }
+}
+
+function getFulfillmentEmailRedirectParam(
+  result: FulfillmentUpdateEmailResult
+): string {
+  switch (result.status) {
+    case "sent":
+      return "estado=email-reenviado";
+    case "duplicate":
+      return "estado=email-ya-enviado";
+    case "configuration_missing":
+      return "error=email-configuracion-faltante";
+    case "failed":
+      return "error=email-envio-fallido";
+    case "skipped":
+    default:
+      return "error=email-no-disponible";
   }
 }
 

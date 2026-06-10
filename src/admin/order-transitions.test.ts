@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { DELIVERY_METHOD, ORDER_STATUS, type OrderStatus } from "../domain/rules";
 import { type Order } from "../orders/order-creation";
@@ -54,6 +54,44 @@ describe("admin fulfillment transitions", () => {
     });
   });
 
+  it("sends a fulfillment update email after shipping transitions", async () => {
+    const repository = createOrderRepository(
+      getOrder({
+        deliveryMethod: DELIVERY_METHOD.shipping,
+        status: ORDER_STATUS.preparing
+      })
+    );
+    const emailSender = vi.fn(async () => ({
+      status: "sent" as const,
+      orderId: "order-001",
+      recipientEmail: "luca@example.com",
+      providerMessageId: "message-shipped"
+    }));
+
+    const result = await transitionOrderFulfillmentStatus(
+      {
+        orderId: "order-001",
+        actionId: ADMIN_FULFILLMENT_TRANSITION_ACTION.markShipped
+      },
+      {
+        orderRepository: repository,
+        fulfillmentUpdateEmailSender: emailSender
+      }
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      order: { status: ORDER_STATUS.shipped }
+    });
+    expect(emailSender).toHaveBeenCalledTimes(1);
+    expect(emailSender).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "order-001",
+        status: ORDER_STATUS.shipped
+      })
+    );
+  });
+
   it("moves pickup orders through the valid path in order", async () => {
     const repository = createOrderRepository(
       getOrder({ deliveryMethod: DELIVERY_METHOD.pickup, status: ORDER_STATUS.paid })
@@ -90,6 +128,127 @@ describe("admin fulfillment transitions", () => {
       )
     ).toMatchObject({ ok: true, order: { status: ORDER_STATUS.pickedUp } });
     expect(repository.transitionCount).toBe(3);
+  });
+
+  it("sends a fulfillment update email after ready-for-pickup transitions", async () => {
+    const repository = createOrderRepository(
+      getOrder({
+        deliveryMethod: DELIVERY_METHOD.pickup,
+        status: ORDER_STATUS.preparing
+      })
+    );
+    const emailSender = vi.fn(async () => ({
+      status: "sent" as const,
+      orderId: "order-001",
+      recipientEmail: "luca@example.com",
+      providerMessageId: "message-pickup"
+    }));
+
+    const result = await transitionOrderFulfillmentStatus(
+      {
+        orderId: "order-001",
+        actionId: ADMIN_FULFILLMENT_TRANSITION_ACTION.markReadyForPickup
+      },
+      {
+        orderRepository: repository,
+        fulfillmentUpdateEmailSender: emailSender
+      }
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      order: { status: ORDER_STATUS.readyForPickup }
+    });
+    expect(emailSender).toHaveBeenCalledTimes(1);
+    expect(emailSender).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "order-001",
+        status: ORDER_STATUS.readyForPickup
+      })
+    );
+  });
+
+  it("does not send fulfillment update emails for non-notifiable transitions", async () => {
+    const repository = createOrderRepository(
+      getOrder({ deliveryMethod: DELIVERY_METHOD.shipping, status: ORDER_STATUS.paid })
+    );
+    const emailSender = vi.fn(async () => ({
+      status: "sent" as const,
+      orderId: "order-001",
+      recipientEmail: "luca@example.com",
+      providerMessageId: "message-preparing"
+    }));
+
+    const result = await transitionOrderFulfillmentStatus(
+      {
+        orderId: "order-001",
+        actionId: ADMIN_FULFILLMENT_TRANSITION_ACTION.prepare
+      },
+      {
+        orderRepository: repository,
+        fulfillmentUpdateEmailSender: emailSender
+      }
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      order: { status: ORDER_STATUS.preparing }
+    });
+    expect(emailSender).not.toHaveBeenCalled();
+  });
+
+  it("keeps the transition successful when the fulfillment email fails", async () => {
+    const failedEmailRepository = createOrderRepository(
+      getOrder({
+        deliveryMethod: DELIVERY_METHOD.shipping,
+        status: ORDER_STATUS.preparing
+      })
+    );
+    const thrownEmailRepository = createOrderRepository(
+      getOrder({
+        deliveryMethod: DELIVERY_METHOD.pickup,
+        status: ORDER_STATUS.preparing
+      })
+    );
+
+    await expect(
+      transitionOrderFulfillmentStatus(
+        {
+          orderId: "order-001",
+          actionId: ADMIN_FULFILLMENT_TRANSITION_ACTION.markShipped
+        },
+        {
+          orderRepository: failedEmailRepository,
+          fulfillmentUpdateEmailSender: async () => ({
+            status: "failed",
+            orderId: "order-001",
+            recipientEmail: "luca@example.com",
+            message: "No pudimos enviar el email transaccional."
+          })
+        }
+      )
+    ).resolves.toMatchObject({
+      ok: true,
+      order: { status: ORDER_STATUS.shipped }
+    });
+
+    await expect(
+      transitionOrderFulfillmentStatus(
+        {
+          orderId: "order-001",
+          actionId: ADMIN_FULFILLMENT_TRANSITION_ACTION.markReadyForPickup
+        },
+        {
+          orderRepository: thrownEmailRepository,
+          fulfillmentUpdateEmailSender: async () => {
+            throw new Error("provider unavailable");
+          }
+        }
+      )
+    ).resolves.toMatchObject({
+      ok: true,
+      order: { status: ORDER_STATUS.readyForPickup }
+    });
   });
 
   it("rejects skipped, backward, and cross delivery-method transitions", async () => {
