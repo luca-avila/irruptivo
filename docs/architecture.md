@@ -215,6 +215,8 @@ transiciones de fulfillment posteriores (`preparing` → `shipped`/`ready_for_pi
   `IRRUPTIVO_MEDIA_ROOT`, y las de email (`IRRUPTIVO_EMAIL_*`, ver arriba). Para producción
   faltan, además, las credenciales live de Mercado Pago y la verificación del dominio
   remitente en Resend.
+- Las variables `NEXT_PUBLIC_*` se incluyen en el bundle de Next durante `npm run build`; en
+  Docker/CI deben pasarse como build args, no solo como variables runtime del contenedor.
 
 ## Testing
 

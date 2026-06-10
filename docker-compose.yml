@@ -33,6 +33,9 @@ services:
     build:
       context: .
       target: runner
+      args:
+        NEXT_PUBLIC_WHATSAPP_URL: ${NEXT_PUBLIC_WHATSAPP_URL}
+        NEXT_PUBLIC_INSTAGRAM_URL: ${NEXT_PUBLIC_INSTAGRAM_URL}
     restart: unless-stopped
     ports:
       - "3000:3000"

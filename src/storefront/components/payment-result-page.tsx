@@ -15,6 +15,7 @@ import {
   type PaymentResultState,
   type PaymentResultView,
 } from "../../payments/payment-result";
+import { contactLink } from "../navigation";
 import styles from "./payment-result-page.module.css";
 
 type StorefrontPaymentResultPageProps = {
@@ -158,7 +159,7 @@ function PaymentResultNotFound() {
             </Link>
             <a
               className={styles.secondaryAction}
-              href="https://wa.me/5491164176557"
+              href={contactLink.href}
             >
               <MessageCircle aria-hidden="true" size={18} strokeWidth={2.1} />
               <span>Escribir por WhatsApp</span>

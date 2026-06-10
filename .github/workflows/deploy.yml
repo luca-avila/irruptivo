@@ -29,6 +29,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Validate public build configuration
+        env:
+          NEXT_PUBLIC_WHATSAPP_URL: ${{ vars.NEXT_PUBLIC_WHATSAPP_URL }}
+          NEXT_PUBLIC_INSTAGRAM_URL: ${{ vars.NEXT_PUBLIC_INSTAGRAM_URL }}
+        run: |
+          test -n "$NEXT_PUBLIC_WHATSAPP_URL"
+          test -n "$NEXT_PUBLIC_INSTAGRAM_URL"
+
       # Imagen de la app: target `runner` (server standalone de Next).
       - name: Build and push app image
         uses: docker/build-push-action@v6
@@ -39,6 +47,9 @@ jobs:
           tags: |
             ${{ env.IMAGE_BASE }}-app:latest
             ${{ env.IMAGE_BASE }}-app:${{ github.sha }}
+          build-args: |
+            NEXT_PUBLIC_WHATSAPP_URL=${{ vars.NEXT_PUBLIC_WHATSAPP_URL }}
+            NEXT_PUBLIC_INSTAGRAM_URL=${{ vars.NEXT_PUBLIC_INSTAGRAM_URL }}
           cache-from: type=gha,scope=app
           cache-to: type=gha,mode=max,scope=app
 
