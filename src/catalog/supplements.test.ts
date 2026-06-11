@@ -131,11 +131,70 @@ describe("supplement listing", () => {
     ]);
     expect(listing.filters).toContainEqual(
       expect.objectContaining({
-        label: "Proteína",
+        label: "Proteina",
         value: "proteina",
         isActive: true
       })
     );
+  });
+
+  it("derives filters only from the types the admin assigned", () => {
+    const comboSupplement = {
+      id: "combo-fuerza",
+      slug: "combo-fuerza",
+      name: "Combo Fuerza",
+      description: "Whey + creatina.",
+      area: PRODUCT_AREA.supplement,
+      status: PRODUCT_STATUS.active,
+      basePriceArs: 52000,
+      supplementType: "Combos",
+      variants: [{ id: "combo-fuerza-u", sku: "COMBO-FZA", name: "Único", stock: 4 }],
+      images: []
+    } satisfies CatalogProductRecord;
+
+    const listing = listSupplementProducts({
+      products: [...products, comboSupplement]
+    });
+
+    // A type the admin assigned shows up as a chip, with its original label.
+    expect(listing.filters).toContainEqual(
+      expect.objectContaining({ label: "Combos", value: "combos", productCount: 1 })
+    );
+
+    // The active types are exactly "Todo" + the assigned ones (no hardcoded
+    // categories): active products are typed Proteina, Creatina and Combos.
+    expect(listing.filters.map((filter) => filter.value)).toEqual([
+      "todo",
+      "combos",
+      "creatina",
+      "proteina"
+    ]);
+  });
+
+  it("keeps untyped supplements visible without generating a fallback chip", () => {
+    const untypedSupplement = {
+      id: "shaker",
+      slug: "shaker-plus",
+      name: "Shaker Plus",
+      description: "Vaso mezclador.",
+      area: PRODUCT_AREA.supplement,
+      status: PRODUCT_STATUS.active,
+      basePriceArs: 9000,
+      supplementType: "",
+      variants: [{ id: "shaker-u", sku: "SHAKER", name: "Único", stock: 5 }],
+      images: []
+    } satisfies CatalogProductRecord;
+
+    const listing = listSupplementProducts({
+      products: [...products, untypedSupplement]
+    });
+
+    // The untyped product stays visible under "Todo"...
+    expect(listing.products.map((product) => product.slug)).toContain("shaker-plus");
+    // ...but no "Suplementos" fallback filter chip is generated.
+    expect(
+      listing.filters.some((filter) => filter.value === "suplementos")
+    ).toBe(false);
   });
 
   it("returns an actionable empty state when the catalog has no active supplements", () => {

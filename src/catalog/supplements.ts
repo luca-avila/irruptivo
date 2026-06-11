@@ -8,20 +8,14 @@ import {
 
 const SUPPLEMENT_FILTER_ALL = "todo";
 
-const CANONICAL_SUPPLEMENT_TYPES = [
-  { value: "proteina", label: "Proteína" },
-  { value: "creatina", label: "Creatina" },
-  { value: "pre-entreno", label: "Pre-entreno" }
-] as const;
+// Suplementos sin "Tipo de suplemento" cargado caen en este bucket: se listan
+// bajo "Todo" pero no generan una chip de filtro propia.
+const SUPPLEMENT_FALLBACK_TYPE = "suplementos";
+const SUPPLEMENT_FALLBACK_LABEL = "Suplementos";
 
 type SupplementListingInput = {
   products: readonly CatalogProductRecord[];
   selectedType?: string | null;
-};
-
-type SupplementTypeFilterDefinition = {
-  value: string;
-  label: string;
 };
 
 export type SupplementTypeFilterView = {
@@ -98,34 +92,23 @@ function getSupplementProductCardView(
   };
 }
 
+// Las categorías que aparecen son las que el admin carga en los productos: cada
+// "Tipo de suplemento" distinto genera su chip. Si no quedan productos con un
+// tipo, la chip desaparece sola. Los suplementos sin tipo no generan chip.
 function getSupplementTypeFilters(
   products: readonly CatalogProductRecord[],
   selectedType: string | null
 ): SupplementTypeFilterView[] {
-  const typeCounts = getSupplementTypeCounts(products);
-  const canonicalFilters = CANONICAL_SUPPLEMENT_TYPES.map((type) =>
-    getSupplementTypeFilterView(type, typeCounts, selectedType)
-  );
-  const extraTypeFilters = [...typeCounts.keys()]
-    .filter(
-      (typeValue) =>
-        !CANONICAL_SUPPLEMENT_TYPES.some(
-          (canonicalType) => canonicalType.value === typeValue
-        )
-    )
-    .sort((first, second) =>
-      getSupplementTypeLabel(first).localeCompare(getSupplementTypeLabel(second), "es-AR")
-    )
-    .map((typeValue) =>
-      getSupplementTypeFilterView(
-        {
-          value: typeValue,
-          label: getSupplementTypeLabel(typeValue)
-        },
-        typeCounts,
-        selectedType
-      )
-    );
+  const typeFilters = [...getSupplementTypeEntries(products).values()]
+    .filter((entry) => entry.value !== SUPPLEMENT_FALLBACK_TYPE)
+    .sort((first, second) => first.label.localeCompare(second.label, "es-AR"))
+    .map((entry) => ({
+      label: entry.label,
+      value: entry.value,
+      href: `/suplementos?tipo=${encodeURIComponent(entry.value)}`,
+      isActive: selectedType === entry.value,
+      productCount: entry.count
+    }));
 
   return [
     {
@@ -135,33 +118,35 @@ function getSupplementTypeFilters(
       isActive: selectedType === null,
       productCount: products.length
     },
-    ...canonicalFilters,
-    ...extraTypeFilters
+    ...typeFilters
   ];
 }
 
-function getSupplementTypeFilterView(
-  type: SupplementTypeFilterDefinition,
-  typeCounts: ReadonlyMap<string, number>,
-  selectedType: string | null
-): SupplementTypeFilterView {
-  return {
-    label: type.label,
-    value: type.value,
-    href: `/suplementos?tipo=${encodeURIComponent(type.value)}`,
-    isActive: selectedType === type.value,
-    productCount: typeCounts.get(type.value) ?? 0
-  };
-}
+type SupplementTypeEntry = {
+  value: string;
+  label: string;
+  count: number;
+};
 
-function getSupplementTypeCounts(
+function getSupplementTypeEntries(
   products: readonly CatalogProductRecord[]
-): Map<string, number> {
-  return products.reduce((counts, product) => {
-    const typeValue = getSupplementTypeValue(product.supplementType);
-    counts.set(typeValue, (counts.get(typeValue) ?? 0) + 1);
-    return counts;
-  }, new Map<string, number>());
+): Map<string, SupplementTypeEntry> {
+  return products.reduce((entries, product) => {
+    const value = getSupplementTypeValue(product.supplementType);
+    const existing = entries.get(value);
+
+    if (existing) {
+      existing.count += 1;
+    } else {
+      entries.set(value, {
+        value,
+        label: getSupplementTypeLabel(product.supplementType),
+        count: 1
+      });
+    }
+
+    return entries;
+  }, new Map<string, SupplementTypeEntry>());
 }
 
 function getSupplementListingEmptyState(
@@ -190,7 +175,7 @@ function getSupplementListingEmptyState(
 }
 
 function getSupplementTypeValue(type: string | null | undefined): string {
-  return normalizeSupplementTypeValue(type) ?? "suplementos";
+  return normalizeSupplementTypeValue(type) ?? SUPPLEMENT_FALLBACK_TYPE;
 }
 
 function normalizeSupplementTypeValue(type: string | null | undefined): string | null {
@@ -213,21 +198,10 @@ function normalizeSupplementTypeValue(type: string | null | undefined): string |
   return value;
 }
 
+// Mostramos el "Tipo de suplemento" tal como lo escribió el admin (respetando
+// acentos y mayúsculas); el bucket sin tipo usa la etiqueta genérica.
 function getSupplementTypeLabel(type: string | null | undefined): string {
-  const typeValue = getSupplementTypeValue(type);
-  const canonicalType = CANONICAL_SUPPLEMENT_TYPES.find(
-    (candidate) => candidate.value === typeValue
-  );
-
-  if (canonicalType) {
-    return canonicalType.label;
-  }
-
-  return typeValue
-    .split("-")
-    .filter(Boolean)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ");
+  return type?.trim() || SUPPLEMENT_FALLBACK_LABEL;
 }
 
 function formatPriceArs(priceArs: number): string {
