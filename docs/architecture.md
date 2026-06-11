@@ -35,8 +35,8 @@ negocio vive en módulos profundos bajo `src/`; las rutas y la UI bajo `app/`.
 | `checkout/` | Formulario de checkout, métodos de entrega, handoff de pago. |
 | `orders/` | Creación de pedido, store de pedidos (Prisma), expiración de pendientes, token de acceso de invitado y proyección de estado de pedido. |
 | `payments/` | Preferencia de Mercado Pago, webhook, reconciliación de pago, eventos de pago (idempotencia), páginas de resultado de pago. |
-| `notifications/` | Emails transaccionales (confirmación al comprador, aviso al admin) y adaptador agnóstico de proveedor de email: modos `local` (outbox de dev), `http` (genérico) y `resend` (producción). |
-| `admin/` | Auth/sesión de admin, gestión de productos/variantes/imágenes, cola y detalle de pedidos, transiciones de fulfillment, edición de contacto/fulfillment. |
+| `notifications/` | Emails transaccionales (confirmación al comprador, aviso al admin, y aviso de fulfillment al comprador en envío/retiro) y adaptador agnóstico de proveedor de email: modos `local` (outbox de dev), `http` (genérico) y `resend` (producción). |
+| `admin/` | Auth/sesión de admin, gestión de productos/variantes/imágenes (incluye carga por lote y borrado permanente de producto), cola y detalle de pedidos, transiciones de fulfillment, edición de contacto/fulfillment. |
 | `storefront/` | Homepage, navegación, páginas de confianza (trust), y `components/` (UI compartida del storefront). |
 | `media/` | Resolución y servido de media de producto desde el filesystem. |
 | `db/client.ts` | Singleton del cliente Prisma. |
@@ -79,8 +79,9 @@ Entidades principales (`prisma/schema.prisma`):
 - **`PaymentEvent`** — eventos del webhook con `@@unique([provider, providerEventId])`
   para **idempotencia**.
 - **`EmailDelivery`** — estado de envío de emails transaccionales (idempotencia de
-  "enviar una vez"), `@@unique` por `orderId + kind` (`buyer_confirmation`,
-  `admin_notification`).
+  "enviar una vez"), `@@unique` por `orderId + kind`. `kind` es un `String`
+  (default `buyer_confirmation`); valores en uso: `buyer_confirmation`,
+  `admin_notification`, `buyer_shipped`, `buyer_ready_for_pickup`.
 - **`StoreSettings`** — fila única `default` para settings operativos, hoy usada para
   `adminNotificationEmail`.
 
@@ -146,9 +147,17 @@ durante la reconciliación de pago (`payments/payment-reconciliation.ts` →
 
 Imágenes subidas por el admin se procesan con **sharp** generando renditions
 (card/detail/original) y se guardan en el filesystem bajo `IRRUPTIVO_MEDIA_ROOT`
-(default `/var/lib/irruptivo/media`). En Docker/VPS se montan en el volumen `media_data`
-para persistir entre redeploys. Las imágenes se sirven vía `/media/[...path]`. Soft-delete
-implementado; backup/cleanup del volumen es tarea humana pendiente.
+(default `/var/lib/irruptivo/media`). El admin puede subir imágenes **por lote**
+(hasta `MAX_IMAGE_UPLOAD_BATCH = 10`, ver `admin/product-image-upload-limits.ts`) con
+metadata por archivo. En Docker/VPS se montan en el volumen `media_data` para persistir
+entre redeploys. Las imágenes se sirven vía `/media/[...path]`.
+
+Hay dos modelos de borrado: **soft-delete por imagen** (`deletedAt`), que sólo la oculta del
+catálogo; y **borrado permanente de producto** (`deleteAdminProduct` → `deleteAdminProductRecord`),
+que elimina el producto de la DB en una transacción y, best-effort, borra **todo el directorio de
+media del producto** (`deleteProductMediaDirectory`, protegido por el validador de paths para que
+un id inseguro no escape del árbol de productos). El backup del volumen sigue siendo tarea humana
+pendiente.
 
 ## Notificaciones por email
 
@@ -172,8 +181,10 @@ emails caen en spam o el envío falla.
 
 ### Cuándo se envían
 
-Hay **un único momento de negocio** que dispara emails: cuando un pedido pasa de
-`pending_payment` a `paid` (pago aprobado por Mercado Pago). En ese instante
+Hay **dos momentos de negocio** que disparan emails: la confirmación de pago y los avisos de
+fulfillment. Cada email es idempotente por `EmailDelivery` con `@@unique(orderId, kind)`.
+
+**1. Pedido pasa a `paid`** (pago aprobado por Mercado Pago). En ese instante
 `reconcileApprovedPayment` (`payments/payment-reconciliation.ts`) manda **dos** emails en
 paralelo (`sendPaidOrderEmailsSafely`, un `Promise.all`):
 
@@ -189,19 +200,27 @@ gatillar los emails:
 2. **Retorno del comprador** a `/checkout/pago/*` (`reconcileMercadoPagoPaymentById`) — cubre el
    caso de que el webhook todavía no haya llegado.
 
-Garantías:
+**2. Transición de fulfillment a `shipped` o `ready_for_pickup`** (hecha por el admin). Cuando
+una transición exitosa deja el pedido en uno de esos estados (`admin/order-transitions.ts`),
+se dispara `sendFulfillmentUpdateOnce` (`notifications/fulfillment-update-email.ts`) con un email
+al comprador. El `kind` depende del estado: **`buyer_shipped`** (en camino) o
+**`buyer_ready_for_pickup`** (listo para retirar). El admin además puede **reenviarlo
+manualmente** desde el detalle del pedido (`resendFulfillmentUpdateEmail` en
+`admin/order-actions.ts`), reutilizando la misma idempotencia/retry.
 
-- **Una sola vez por `kind`**, aunque webhook y retorno reconcilien el mismo pedido:
-  idempotencia por `EmailDelivery` con `@@unique(orderId, kind)`.
-- **Sólo en la transición real a `paid`** (cuando `markOrderPaidAndDecrementStock` devuelve
-  `paid`). Si el pedido ya estaba reconciliado (`duplicate` / `already_reconciled`) o `expired`,
-  no se reenvía nada.
-- **No bloquean el flujo:** los envíos van "safe"; un fallo no afecta la reconciliación a `paid`
-  ni el decremento de stock, y el email del admin no bloquea al del comprador.
+Garantías (para todos los emails):
+
+- **Una sola vez por `kind`**, aunque webhook y retorno (o transición y reenvío manual)
+  apunten al mismo pedido: idempotencia por `EmailDelivery` con `@@unique(orderId, kind)`. El
+  reenvío manual reintenta envíos previos fallidos sin duplicar uno ya enviado.
+- **Sólo en la transición real:** los emails de pago, sólo cuando `markOrderPaidAndDecrementStock`
+  devuelve `paid` (no en `duplicate` / `already_reconciled` / `expired`); los de fulfillment,
+  sólo si el estado resultante es notificable (`isFulfillmentUpdateEmailStatus`).
+- **No bloquean el flujo:** todos los envíos van "safe"; un fallo no afecta la reconciliación a
+  `paid`, el decremento de stock ni la transición de fulfillment del admin.
 
 No se envían emails al crear el pedido, al expirar (30 min), en pago fallido, ni en las
-transiciones de fulfillment posteriores (`preparing` → `shipped`/`ready_for_pickup` →
-`delivered`/`picked_up`); esos avisos de envío/retiro están fuera del alcance del MVP.
+transiciones a `preparing`, `delivered` o `picked_up`.
 
 ## Deploy
 

@@ -44,7 +44,8 @@ informal de venta por WhatsApp.
 - Envío nacional (Correo Argentino) con tarifa fija de ARS 5.000.
 - Retiro local gratuito en Benavidez / Zona Norte, coordinado por WhatsApp luego del pago.
 - Fulfillment manual por el dueño/admin.
-- Email de confirmación tras pago verificado.
+- Email de confirmación tras pago verificado, más avisos al comprador cuando el pedido se
+  despacha (envío) o queda listo para retirar.
 - Link seguro de estado de pedido para invitados.
 
 ## Tensión central de producto

@@ -102,15 +102,22 @@ npx prisma db seed       # datos de demo (prisma/seed.ts)
   `buildOrderConfirmationEmailMessage`.
 - `admin-order-notification-email.ts` — `sendAdminOrderNotificationOnce` (aviso interno al
   admin del pedido pagado), `buildAdminOrderNotificationEmailMessage`.
+- `fulfillment-update-email.ts` — `sendFulfillmentUpdateOnce` (aviso al comprador en `shipped`/
+  `ready_for_pickup`, idempotente vía `EmailDelivery`), `buildFulfillmentUpdateEmailMessage`,
+  `isFulfillmentUpdateEmailStatus`, `getFulfillmentUpdateEmailDeliveryKind`.
 
 ### `src/admin/` — panel de admin
 
 - `session.ts` — config/sesión/cookies de admin; `getAdminRouteAccess` (usado por `proxy.ts`).
 - `auth.ts` — `getCurrentAdmin`, `requireAdmin`. `actions.ts` — `loginAdmin`/`logoutAdmin`.
-- `products.ts` + `product-actions.ts` — gestión de productos/variantes (CRUD, publicación).
-- `product-image-processing.ts` — procesa uploads con sharp (renditions).
+- `products.ts` + `product-actions.ts` — gestión de productos/variantes (CRUD, publicación,
+  borrado permanente vía `deleteAdminProduct`/`deleteAdminProductRecord`).
+- `product-image-processing.ts` — procesa uploads con sharp (renditions); borra el directorio
+  de media del producto en hard delete (`deleteProductMediaDirectory`).
+- `product-image-upload-limits.ts` — `MAX_IMAGE_UPLOAD_BATCH` (carga de imágenes por lote).
 - `orders.ts` — vistas de cola y detalle de pedidos (`listAdminOrders`, `getAdminOrderDetail`).
-- `order-transitions.ts` + `order-actions.ts` — transiciones de fulfillment.
+- `order-transitions.ts` + `order-actions.ts` — transiciones de fulfillment (disparan el email
+  de fulfillment al comprador; `resendFulfillmentUpdateEmail` lo reenvía manualmente).
 - `order-fulfillment-edits.ts` + `order-fulfillment-edit-actions.ts` — edición de contacto/envío.
 - `settings.ts` (`getStoreSettings`, `setAdminNotificationEmail`, `getAdminNotificationRecipient`)
   + `settings-actions.ts` + `settings-validation.ts` — `StoreSettings` de la tienda
