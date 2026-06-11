@@ -179,6 +179,59 @@ describe("product image management", () => {
     });
   });
 
+  it("threads sequential uploads so batch images get increasing order and duplicate upload ids are rejected", () => {
+    const firstUpload = uploadProductImage(
+      "training-tee",
+      {
+        id: "batch-first",
+        alt: "Primera imagen del batch",
+        renditions: renditionSet("training-tee", "batch-first")
+      },
+      products
+    );
+
+    if (!firstUpload.ok) {
+      throw new Error("Expected first image upload to succeed");
+    }
+
+    const secondUpload = uploadProductImage(
+      "training-tee",
+      {
+        id: "batch-second",
+        alt: "Segunda imagen del batch",
+        renditions: renditionSet("training-tee", "batch-second")
+      },
+      firstUpload.products
+    );
+
+    if (!secondUpload.ok) {
+      throw new Error("Expected second image upload to succeed");
+    }
+
+    expect(secondUpload.product.images).toMatchObject([
+      { id: "batch-first", sortOrder: 1 },
+      { id: "batch-second", sortOrder: 2 }
+    ]);
+
+    const duplicateUpload = uploadProductImage(
+      "training-tee",
+      {
+        id: "batch-first",
+        alt: "Imagen repetida",
+        renditions: renditionSet("training-tee", "batch-first")
+      },
+      secondUpload.products
+    );
+
+    expect(duplicateUpload).toEqual({
+      ok: false,
+      error: {
+        code: "image_validation",
+        message: "Revisá la imagen, el texto alternativo y la asociación elegida."
+      }
+    });
+  });
+
   it("reorders active gallery images and keeps public image order stable", () => {
     const withFirstImage = uploadProductImage(
       "training-tee",

@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { updateAdminProduct } from "../../../../../../src/admin/product-actions";
+import { MAX_IMAGE_UPLOAD_BATCH } from "../../../../../../src/admin/product-image-upload-limits";
 import {
   getAdminProductById,
   readAdminProductRecords,
@@ -23,6 +24,10 @@ type EditProductPageProps = {
     imageAlt?: string | string[];
     imageColor?: string | string[];
     imageVariantId?: string | string[];
+    cantidad?: string | string[];
+    subidas?: string | string[];
+    total?: string | string[];
+    motivo?: string | string[];
   }>;
 };
 
@@ -43,7 +48,11 @@ export default async function EditProductPage({
 
   const feedback = getProductFeedbackMessage({
     state: getFirstSearchParamValue(resolvedSearchParams?.estado),
-    error: getFirstSearchParamValue(resolvedSearchParams?.error)
+    error: getFirstSearchParamValue(resolvedSearchParams?.error),
+    uploadedCount: getFirstSearchParamValue(resolvedSearchParams?.cantidad),
+    batchUploadedCount: getFirstSearchParamValue(resolvedSearchParams?.subidas),
+    batchTotalCount: getFirstSearchParamValue(resolvedSearchParams?.total),
+    batchFailureReason: getFirstSearchParamValue(resolvedSearchParams?.motivo)
   });
 
   return (
@@ -113,11 +122,30 @@ export default async function EditProductPage({
 
 function getProductFeedbackMessage({
   state,
-  error
+  error,
+  uploadedCount,
+  batchUploadedCount,
+  batchTotalCount,
+  batchFailureReason
 }: {
   state: string | null;
   error: string | null;
+  uploadedCount: string | null;
+  batchUploadedCount: string | null;
+  batchTotalCount: string | null;
+  batchFailureReason: string | null;
 }): { tone: "success" | "error"; message: string } | null {
+  if (error === "image_batch_partial") {
+    return {
+      tone: "error",
+      message: getImageBatchPartialMessage({
+        uploadedCount: batchUploadedCount,
+        totalCount: batchTotalCount,
+        failureReason: batchFailureReason
+      })
+    };
+  }
+
   if (error) {
     return {
       tone: "error",
@@ -152,6 +180,18 @@ function getProductFeedbackMessage({
     return { tone: "success", message: "Imagen subida correctamente." };
   }
 
+  if (state === "imagenes-subidas") {
+    const count = parsePositiveInteger(uploadedCount);
+
+    return {
+      tone: "success",
+      message:
+        count && count > 1
+          ? `${count} imágenes subidas correctamente.`
+          : "Imágenes subidas correctamente."
+    };
+  }
+
   if (state === "imagenes-ordenadas") {
     return { tone: "success", message: "Galería reordenada correctamente." };
   }
@@ -181,6 +221,10 @@ function getProductErrorMessage(
       return "No pudimos procesar la imagen. Probá con otro archivo.";
     case "image_validation":
       return "Revisá la imagen, el texto alternativo y la asociación elegida.";
+    case "image_upload_batch_too_large":
+      return `Podés subir hasta ${MAX_IMAGE_UPLOAD_BATCH} imágenes por vez.`;
+    case "image_batch_partial":
+      return "Algunas imágenes no pudieron subirse.";
     case "not_found":
       return "No encontramos el producto solicitado.";
     case "validation":
@@ -195,4 +239,45 @@ function getFirstSearchParamValue(value: string | string[] | undefined): string 
   }
 
   return value ?? null;
+}
+
+function getImageBatchPartialMessage({
+  uploadedCount,
+  totalCount,
+  failureReason
+}: {
+  uploadedCount: string | null;
+  totalCount: string | null;
+  failureReason: string | null;
+}): string {
+  const uploaded = parseNonNegativeInteger(uploadedCount);
+  const total = parsePositiveInteger(totalCount);
+  const reason = failureReason
+    ? getProductErrorMessage(
+        failureReason as ProductManagementErrorCode | ProductImageManagementErrorCode
+      )
+    : null;
+
+  const summary =
+    typeof uploaded === "number" && total
+      ? uploaded > 0
+        ? `Se subieron ${uploaded} de ${total} imágenes.`
+        : `No se subió ninguna de las ${total} imágenes.`
+      : "Algunas imágenes no pudieron subirse.";
+
+  return reason
+    ? `${summary} Revisá las restantes. Primer error: ${reason}`
+    : `${summary} Revisá las restantes.`;
+}
+
+function parsePositiveInteger(value: string | null): number | null {
+  const parsed = Number(value);
+
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function parseNonNegativeInteger(value: string | null): number | null {
+  const parsed = Number(value);
+
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : null;
 }

@@ -25,6 +25,8 @@ export type ProductImageManagementErrorCode =
   | "not_found"
   | "image_not_found"
   | "image_validation"
+  | "image_upload_batch_too_large"
+  | "image_batch_partial"
   | "image_too_large"
   | "unsupported_image_type"
   | "image_processing_failed";

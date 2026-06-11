@@ -10,6 +10,7 @@ import {
   type ProductImageManagementErrorCode
 } from "../catalog/product-images";
 import {
+  PRODUCT_AREA,
   PRODUCT_STATUS,
   type CatalogProductImageRecord,
   type CatalogProductRecord,
@@ -38,8 +39,27 @@ import {
   type ProductVariantInput,
   type ProductManagementErrorCode
 } from "./products";
+import { MAX_IMAGE_UPLOAD_BATCH } from "./product-image-upload-limits";
 
 const ADMIN_PRODUCTS_PATH = "/admin/productos";
+
+type ProductImageBatchEntry = {
+  file: File;
+  alt: string;
+  associatedColor: string;
+  variantId: string;
+  imageUploadId: string;
+};
+
+type ProductImageBatchShapeResult =
+  | {
+      ok: true;
+      entries: ProductImageBatchEntry[];
+    }
+  | {
+      ok: false;
+      errorCode: ProductImageManagementErrorCode;
+    };
 
 export async function createAdminProduct(formData: FormData): Promise<void> {
   await requireAdmin();
@@ -266,74 +286,101 @@ export async function uploadAdminProductImage(formData: FormData): Promise<void>
     redirect(getEditErrorRedirect(productId, "not_found"));
   }
 
-  const imageUploadId = readStringField(formData, "imageUploadId").trim();
+  const batchShape = getProductImageBatchShape(formData, currentProduct);
 
-  if (!isValidImageUploadId(imageUploadId)) {
+  if (!batchShape.ok) {
     redirect(
       getEditErrorRedirect(
         productId,
-        "image_validation",
+        batchShape.errorCode,
         getImageFormStateParams(formData)
       )
     );
   }
 
-  const processedImage = await processProductImageUpload({
-    productId,
-    file: readFileField(formData, "image"),
-    alt: readStringField(formData, "alt"),
-    associatedColor: readStringField(formData, "associatedColor"),
-    variantId: readStringField(formData, "variantId"),
-    imageId: imageUploadId
-  });
+  let runningProducts = products;
+  let runningProduct = currentProduct;
+  const failedUploads: ProductImageManagementErrorCode[] = [];
+  let successfulUploads = 0;
 
-  if (!processedImage.ok) {
-    redirect(
-      getEditErrorRedirect(
-        productId,
-        processedImage.error.code,
-        getImageFormStateParams(formData)
-      )
-    );
-  }
-
-  const productsForImageValidation = getProductsWithoutImageId(
-    productId,
-    imageUploadId,
-    products
-  );
-  const result = uploadProductImage(
-    productId,
-    processedImage.image,
-    productsForImageValidation
-  );
-
-  if (!result.ok || !result.image) {
-    await deleteProcessedProductImageFiles(processedImage.image);
-    redirect(
-      getEditErrorRedirect(
-        productId,
-        result.ok ? "image_processing_failed" : result.error.code,
-        getImageFormStateParams(formData)
-      )
-    );
-  }
-
-  const saveResult = await saveUploadedProductImageRecordOrRedirect(
-    productId,
-    result.image,
-    processedImage.image,
-    getEditErrorRedirect(
+  for (const entry of batchShape.entries) {
+    const processedImage = await processProductImageUpload({
       productId,
-      "image_processing_failed",
-      getImageFormStateParams(formData)
+      file: entry.file,
+      alt: entry.alt,
+      associatedColor: entry.associatedColor,
+      variantId: entry.variantId,
+      imageId: entry.imageUploadId
+    });
+
+    if (!processedImage.ok) {
+      failedUploads.push(processedImage.error.code);
+      continue;
+    }
+
+    const productsForImageValidation = getProductsWithoutImageId(
+      productId,
+      entry.imageUploadId,
+      runningProducts
+    );
+    const result = uploadProductImage(
+      productId,
+      processedImage.image,
+      productsForImageValidation
+    );
+
+    if (!result.ok || !result.image) {
+      await deleteProcessedProductImageFiles(processedImage.image);
+      failedUploads.push(
+        result.ok ? "image_processing_failed" : result.error.code
+      );
+      continue;
+    }
+
+    const savedImage = await saveUploadedProductImageRecord(
+      productId,
+      result.image,
+      processedImage.image
+    );
+
+    if (!savedImage) {
+      failedUploads.push("image_processing_failed");
+      continue;
+    }
+
+    runningProducts = result.products;
+    runningProduct = result.product;
+    successfulUploads += 1;
+  }
+
+  if (successfulUploads > 0) {
+    revalidateCatalogPaths(runningProduct);
+  }
+
+  const firstFailure = failedUploads[0] ?? null;
+
+  if (!firstFailure) {
+    redirect(getImageUploadSuccessRedirect(productId, successfulUploads));
+  }
+
+  if (batchShape.entries.length === 1) {
+    redirect(
+      getEditErrorRedirect(
+        productId,
+        firstFailure,
+        getImageFormStateParams(formData)
+      )
+    );
+  }
+
+  redirect(
+    getImageBatchPartialRedirect(
+      productId,
+      successfulUploads,
+      batchShape.entries.length,
+      firstFailure
     )
   );
-  revalidateCatalogPaths(
-    saveResult.status === "created" ? result.product : currentProduct
-  );
-
-  redirect(getImageUploadSuccessRedirect(productId));
 }
 
 export async function reorderAdminProductImages(
@@ -404,17 +451,19 @@ async function saveAdminProductRecordsOrRedirect(
   }
 }
 
-async function saveUploadedProductImageRecordOrRedirect(
+async function saveUploadedProductImageRecord(
   productId: string,
   imageRecord: CatalogProductImageRecord,
-  processedImage: Parameters<typeof deleteProcessedProductImageFiles>[0],
-  imagePersistFailureRedirect: string
-): Promise<Awaited<ReturnType<typeof createAdminProductImageRecordOnce>>> {
+  processedImage: Parameters<typeof deleteProcessedProductImageFiles>[0]
+): Promise<boolean> {
   try {
-    return await createAdminProductImageRecordOnce(productId, imageRecord);
+    await createAdminProductImageRecordOnce(productId, imageRecord);
+
+    return true;
   } catch {
     await deleteProcessedProductImageFiles(processedImage);
-    redirect(imagePersistFailureRedirect);
+
+    return false;
   }
 }
 
@@ -433,16 +482,96 @@ function getProductsWithoutImageId(
   );
 }
 
+function getProductImageBatchShape(
+  formData: FormData,
+  product: CatalogProductRecord
+): ProductImageBatchShapeResult {
+  const imageValues = formData.getAll("image");
+  const altValues = readStringFields(formData, "alt");
+  const imageUploadIdValues = readStringFields(formData, "imageUploadId");
+  const associationValues =
+    product.area === PRODUCT_AREA.clothing
+      ? readStringFields(formData, "associatedColor")
+      : readStringFields(formData, "variantId");
+
+  if (imageValues.length === 0) {
+    return { ok: false, errorCode: "image_validation" };
+  }
+
+  if (imageValues.length > MAX_IMAGE_UPLOAD_BATCH) {
+    return { ok: false, errorCode: "image_upload_batch_too_large" };
+  }
+
+  if (
+    !altValues ||
+    !imageUploadIdValues ||
+    !associationValues ||
+    altValues.length !== imageValues.length ||
+    imageUploadIdValues.length !== imageValues.length ||
+    associationValues.length !== imageValues.length
+  ) {
+    return { ok: false, errorCode: "image_validation" };
+  }
+
+  if (typeof File === "undefined") {
+    return { ok: false, errorCode: "image_validation" };
+  }
+
+  const files: File[] = [];
+
+  for (const value of imageValues) {
+    if (!(value instanceof File)) {
+      return { ok: false, errorCode: "image_validation" };
+    }
+
+    files.push(value);
+  }
+
+  const normalizedUploadIds = imageUploadIdValues.map((value) => value.trim());
+  const uniqueUploadIds = new Set(normalizedUploadIds);
+
+  if (
+    uniqueUploadIds.size !== normalizedUploadIds.length ||
+    !normalizedUploadIds.every(isValidImageUploadId)
+  ) {
+    return { ok: false, errorCode: "image_validation" };
+  }
+
+  return {
+    ok: true,
+    entries: files.map((file, index) => ({
+      file,
+      alt: altValues[index] ?? "",
+      associatedColor:
+        product.area === PRODUCT_AREA.clothing
+          ? associationValues[index] ?? ""
+          : "",
+      variantId:
+        product.area === PRODUCT_AREA.supplement
+          ? associationValues[index] ?? ""
+          : "",
+      imageUploadId: normalizedUploadIds[index] ?? ""
+    }))
+  };
+}
+
 function readStringField(formData: FormData, name: string): string {
   const value = formData.get(name);
 
   return typeof value === "string" ? value : "";
 }
 
-function readFileField(formData: FormData, name: string): File | null {
-  const value = formData.get(name);
+function readStringFields(
+  formData: FormData,
+  name: string
+): string[] | null {
+  const values = formData.getAll(name);
 
-  return typeof File !== "undefined" && value instanceof File ? value : null;
+  if (!values.every((value) => typeof value === "string")) {
+    return null;
+  }
+
+  return values;
 }
 
 function isValidImageUploadId(value: string): boolean {
@@ -491,10 +620,39 @@ function getEditErrorRedirect(
   )}/editar?${params.toString()}`;
 }
 
-function getImageUploadSuccessRedirect(productId: string): string {
+function getImageUploadSuccessRedirect(
+  productId: string,
+  uploadedCount: number = 1
+): string {
+  const params = new URLSearchParams();
+
+  if (uploadedCount > 1) {
+    params.set("estado", "imagenes-subidas");
+    params.set("cantidad", String(uploadedCount));
+  } else {
+    params.set("estado", "imagen-subida");
+  }
+
   return `${ADMIN_PRODUCTS_PATH}/${encodeURIComponent(
     productId
-  )}/editar?estado=imagen-subida`;
+  )}/editar?${params.toString()}`;
+}
+
+function getImageBatchPartialRedirect(
+  productId: string,
+  uploadedCount: number,
+  totalCount: number,
+  firstFailure: ProductImageManagementErrorCode
+): string {
+  const params = new URLSearchParams();
+  params.set("error", "image_batch_partial");
+  params.set("subidas", String(uploadedCount));
+  params.set("total", String(totalCount));
+  params.set("motivo", firstFailure);
+
+  return `${ADMIN_PRODUCTS_PATH}/${encodeURIComponent(
+    productId
+  )}/editar?${params.toString()}`;
 }
 
 function getImageFormStateParams(formData: FormData): URLSearchParams {

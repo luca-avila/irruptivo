@@ -8,6 +8,7 @@ import {
 } from "../catalog/catalog";
 import { type ProductImageUploadInput } from "../catalog/product-images";
 import { deleteAdminProduct, uploadAdminProductImage } from "./product-actions";
+import { MAX_IMAGE_UPLOAD_BATCH } from "./product-image-upload-limits";
 
 const mocks = vi.hoisted(() => ({
   deleteProductMediaDirectory: vi.fn(),
@@ -68,10 +69,12 @@ describe("admin product image actions", () => {
     vi.clearAllMocks();
     mocks.requireAdmin.mockResolvedValue(undefined);
     mocks.isDuplicateVariantSkuPersistenceError.mockReturnValue(false);
-    mocks.createAdminProductImageRecordOnce.mockResolvedValue({
-      status: "created",
-      image: createImageRecord()
-    });
+    mocks.createAdminProductImageRecordOnce.mockImplementation(
+      async (_productId: string, image: CatalogProductImageRecord) => ({
+        status: "created",
+        image
+      })
+    );
     mocks.deleteAdminProductRecord.mockResolvedValue(null);
   });
 
@@ -158,6 +161,48 @@ describe("admin product image actions", () => {
     expect(mocks.saveAdminProductImageRecord).not.toHaveBeenCalled();
   });
 
+  it("rejects batch uploads when the metadata arrays do not match the file count", async () => {
+    const formData = createUploadFormData();
+    formData.append(
+      "image",
+      new File([new Uint8Array([2])], "training-tee-back.jpg", {
+        type: "image/jpeg"
+      })
+    );
+    formData.append("imageUploadId", "22222222-2222-4222-8222-222222222222");
+    mocks.readAdminProductRecords.mockResolvedValue([createProductRecord()]);
+
+    await expect(uploadAdminProductImage(formData)).rejects.toMatchObject({
+      message: "NEXT_REDIRECT",
+      url: "/admin/productos/irruptivo-training-tee/editar?imageAlt=Frente&imageColor=Negro&error=image_validation"
+    });
+
+    expect(mocks.processProductImageUpload).not.toHaveBeenCalled();
+    expect(mocks.createAdminProductImageRecordOnce).not.toHaveBeenCalled();
+  });
+
+  it("rejects batch uploads over the configured limit before processing files", async () => {
+    mocks.readAdminProductRecords.mockResolvedValue([createProductRecord()]);
+
+    await expect(
+      uploadAdminProductImage(
+        createBatchUploadFormData(
+          Array.from({ length: MAX_IMAGE_UPLOAD_BATCH + 1 }, (_, index) => ({
+            imageUploadId: getUploadId(index + 1),
+            alt: `Imagen ${index + 1}`,
+            associatedColor: "Negro"
+          }))
+        )
+      )
+    ).rejects.toMatchObject({
+      message: "NEXT_REDIRECT",
+      url: "/admin/productos/irruptivo-training-tee/editar?imageAlt=Imagen+1&imageColor=Negro&error=image_upload_batch_too_large"
+    });
+
+    expect(mocks.processProductImageUpload).not.toHaveBeenCalled();
+    expect(mocks.createAdminProductImageRecordOnce).not.toHaveBeenCalled();
+  });
+
   it("leaves repeated upload id ownership decisions to the database claim", async () => {
     const image = createProcessedImage();
     mocks.processProductImageUpload.mockResolvedValue({
@@ -188,6 +233,78 @@ describe("admin product image actions", () => {
       })
     );
     expect(mocks.deleteProcessedProductImageFiles).not.toHaveBeenCalled();
+  });
+
+  it("persists successful files and reports a partial batch failure", async () => {
+    const firstImage = createProcessedImage({
+      id: IMAGE_UPLOAD_ID,
+      alt: "Frente"
+    });
+    const thirdImage = createProcessedImage({
+      id: "33333333-3333-4333-8333-333333333333",
+      alt: "Detalle"
+    });
+    mocks.processProductImageUpload
+      .mockResolvedValueOnce({
+        ok: true,
+        image: firstImage
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        error: {
+          code: "unsupported_image_type",
+          message: "El formato de imagen no está permitido."
+        }
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        image: thirdImage
+      });
+    mocks.readAdminProductRecords.mockResolvedValue([createProductRecord()]);
+
+    await expect(
+      uploadAdminProductImage(
+        createBatchUploadFormData([
+          {
+            imageUploadId: IMAGE_UPLOAD_ID,
+            alt: "Frente",
+            associatedColor: "Negro"
+          },
+          {
+            imageUploadId: "22222222-2222-4222-8222-222222222222",
+            alt: "Dorso",
+            associatedColor: "Negro"
+          },
+          {
+            imageUploadId: "33333333-3333-4333-8333-333333333333",
+            alt: "Detalle",
+            associatedColor: "Negro"
+          }
+        ])
+      )
+    ).rejects.toMatchObject({
+      message: "NEXT_REDIRECT",
+      url: "/admin/productos/irruptivo-training-tee/editar?error=image_batch_partial&subidas=2&total=3&motivo=unsupported_image_type"
+    });
+
+    expect(mocks.processProductImageUpload).toHaveBeenCalledTimes(3);
+    expect(mocks.createAdminProductImageRecordOnce).toHaveBeenCalledTimes(2);
+    expect(mocks.createAdminProductImageRecordOnce).toHaveBeenNthCalledWith(
+      1,
+      "irruptivo-training-tee",
+      expect.objectContaining({ id: IMAGE_UPLOAD_ID, sortOrder: 1 })
+    );
+    expect(mocks.createAdminProductImageRecordOnce).toHaveBeenNthCalledWith(
+      2,
+      "irruptivo-training-tee",
+      expect.objectContaining({
+        id: "33333333-3333-4333-8333-333333333333",
+        sortOrder: 2
+      })
+    );
+    expect(mocks.revalidatePath).toHaveBeenCalledWith(
+      "/admin/productos/irruptivo-training-tee/editar"
+    );
   });
 
   it("deletes processed files when image metadata persistence fails after upload processing", async () => {
@@ -296,9 +413,13 @@ describe("admin product delete action", () => {
 const IMAGE_UPLOAD_ID = "11111111-1111-4111-8111-111111111111";
 
 function createUploadFormData({
-  imageUploadId = IMAGE_UPLOAD_ID
+  imageUploadId = IMAGE_UPLOAD_ID,
+  alt = "Frente",
+  associatedColor = "Negro"
 }: {
   imageUploadId?: string;
+  alt?: string;
+  associatedColor?: string;
 } = {}): FormData {
   const formData = new FormData();
   formData.set("productId", "irruptivo-training-tee");
@@ -309,10 +430,41 @@ function createUploadFormData({
       type: "image/jpeg"
     })
   );
-  formData.set("alt", "Frente");
-  formData.set("associatedColor", "Negro");
+  formData.set("alt", alt);
+  formData.set("associatedColor", associatedColor);
 
   return formData;
+}
+
+function createBatchUploadFormData(
+  entries: readonly {
+    imageUploadId: string;
+    alt: string;
+    associatedColor: string;
+  }[]
+): FormData {
+  const formData = new FormData();
+  formData.set("productId", "irruptivo-training-tee");
+
+  for (const [index, entry] of entries.entries()) {
+    formData.append("imageUploadId", entry.imageUploadId);
+    formData.append(
+      "image",
+      new File([new Uint8Array([index + 1])], `training-tee-${index + 1}.jpg`, {
+        type: "image/jpeg"
+      })
+    );
+    formData.append("alt", entry.alt);
+    formData.append("associatedColor", entry.associatedColor);
+  }
+
+  return formData;
+}
+
+function getUploadId(index: number): string {
+  const paddedIndex = String(index).padStart(12, "0");
+
+  return `11111111-1111-4111-8111-${paddedIndex}`;
 }
 
 function createDeleteFormData(): FormData {
@@ -346,25 +498,31 @@ function createProductRecord({
   };
 }
 
-function createProcessedImage(): ProductImageUploadInput {
+function createProcessedImage({
+  id = IMAGE_UPLOAD_ID,
+  alt = "Frente"
+}: {
+  id?: string;
+  alt?: string;
+} = {}): ProductImageUploadInput {
   return {
-    id: IMAGE_UPLOAD_ID,
-    alt: "Frente",
+    id,
+    alt,
     associatedColor: "Negro",
     variantId: null,
     renditions: {
       card: {
-        path: `products/irruptivo-training-tee/${IMAGE_UPLOAD_ID}/card.webp`,
+        path: `products/irruptivo-training-tee/${id}/card.webp`,
         width: 640,
         height: 900
       },
       detail: {
-        path: `products/irruptivo-training-tee/${IMAGE_UPLOAD_ID}/detail.webp`,
+        path: `products/irruptivo-training-tee/${id}/detail.webp`,
         width: 1200,
         height: 1600
       },
       original: {
-        path: `products/irruptivo-training-tee/${IMAGE_UPLOAD_ID}/original.webp`,
+        path: `products/irruptivo-training-tee/${id}/original.webp`,
         width: 1800,
         height: 2400
       }

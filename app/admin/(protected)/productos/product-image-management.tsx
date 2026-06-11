@@ -7,15 +7,11 @@ import {
 } from "../../../../src/admin/product-actions";
 import { getPublicImageSet } from "../../../../src/catalog/product-images";
 import {
-  PRODUCT_AREA,
   type CatalogProductRecord,
   type PublicProductImageView
 } from "../../../../src/catalog/catalog";
 import styles from "../admin.module.css";
-import {
-  ProductImageFileInput,
-  ProductImageUploadSubmitButton
-} from "./product-image-upload-controls";
+import { ProductImageFileInput } from "./product-image-upload-controls";
 
 type ProductImageManagementProps = {
   product: CatalogProductRecord;
@@ -59,31 +55,21 @@ export function ProductImageManagement({
           </div>
         </div>
 
-        <div className={styles.variantFormGrid}>
-          <ProductImageFileInput />
-
-          <label className={styles.field}>
-            <span>Texto alternativo</span>
-            <input
-              name="alt"
-              type="text"
-              defaultValue={formState?.alt ?? ""}
-              required
-              maxLength={140}
-              placeholder="Ej: Remera negra Irruptivo frente"
-            />
-          </label>
-
-          <ImageAssociationFields product={product} formState={formState} />
-        </div>
+        <ProductImageFileInput
+          productArea={product.area}
+          colors={getDistinctVariantOptionValues(product, "color")}
+          variants={product.variants.map((variant) => ({
+            id: variant.id,
+            name: variant.name,
+            sku: variant.sku
+          }))}
+          formState={formState}
+        />
 
         <p className={styles.formHint}>
           Formatos permitidos: JPG, PNG, WEBP o AVIF. Tamaño máximo: 8 MB.
         </p>
 
-        <div className={styles.formActions}>
-          <ProductImageUploadSubmitButton />
-        </div>
       </form>
 
       {images.length > 0 ? (
@@ -107,50 +93,6 @@ export function ProductImageManagement({
         </div>
       )}
     </section>
-  );
-}
-
-function ImageAssociationFields({
-  product,
-  formState
-}: ProductImageManagementProps) {
-  if (product.area === PRODUCT_AREA.clothing) {
-    const colors = getDistinctVariantOptionValues(product, "color");
-
-    return (
-      <label className={styles.field}>
-        <span>Color visual asociado</span>
-        <input
-          name="associatedColor"
-          type="text"
-          list={colors.length > 0 ? "product-image-colors" : undefined}
-          defaultValue={formState?.associatedColor ?? ""}
-          maxLength={60}
-          placeholder="Opcional"
-        />
-        {colors.length > 0 ? (
-          <datalist id="product-image-colors">
-            {colors.map((color) => (
-              <option value={color} key={color} />
-            ))}
-          </datalist>
-        ) : null}
-      </label>
-    );
-  }
-
-  return (
-    <label className={styles.field}>
-      <span>Variante asociada</span>
-      <select name="variantId" defaultValue={formState?.variantId ?? ""}>
-        <option value="">Sin variante específica</option>
-        {product.variants.map((variant) => (
-          <option value={variant.id} key={variant.id}>
-            {variant.name} / {variant.sku}
-          </option>
-        ))}
-      </select>
-    </label>
   );
 }
 
