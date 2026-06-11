@@ -1,6 +1,5 @@
 .shell {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  display: block;
   min-height: 100svh;
   background: #f3f1ec;
   color: #111111;
@@ -8,8 +7,13 @@
 
 .sidebar {
   display: grid;
+  position: sticky;
+  top: 0;
+  z-index: 30;
   align-content: start;
   gap: 1rem;
+  max-height: 100svh;
+  overflow-y: auto;
   padding: 1rem;
   border-bottom: 1px solid rgba(17, 17, 17, 0.1);
   background: #111111;
@@ -1199,6 +1203,7 @@
 
 @media (min-width: 48rem) {
   .shell {
+    display: grid;
     grid-template-columns: 17rem minmax(0, 1fr);
   }
 
