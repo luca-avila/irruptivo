@@ -88,7 +88,7 @@ describe("admin product image actions", () => {
 
     await expect(uploadAdminProductImage(createUploadFormData())).rejects.toMatchObject({
       message: "NEXT_REDIRECT",
-      url: "/admin/productos/irruptivo-training-tee/editar?estado=imagen-subida"
+      url: "/admin/productos/irruptivo-training-tee/editar?estado=imagen-subida#image-section-title"
     });
 
     expect(mocks.processProductImageUpload).toHaveBeenCalledWith(
@@ -128,7 +128,7 @@ describe("admin product image actions", () => {
 
     await expect(uploadAdminProductImage(createUploadFormData())).rejects.toMatchObject({
       message: "NEXT_REDIRECT",
-      url: "/admin/productos/irruptivo-training-tee/editar?estado=imagen-subida"
+      url: "/admin/productos/irruptivo-training-tee/editar?estado=imagen-subida#image-section-title"
     });
 
     expect(mocks.processProductImageUpload).toHaveBeenCalledWith(
@@ -223,7 +223,7 @@ describe("admin product image actions", () => {
 
     await expect(uploadAdminProductImage(createUploadFormData())).rejects.toMatchObject({
       message: "NEXT_REDIRECT",
-      url: "/admin/productos/irruptivo-training-tee/editar?estado=imagen-subida"
+      url: "/admin/productos/irruptivo-training-tee/editar?estado=imagen-subida#image-section-title"
     });
 
     expect(mocks.createAdminProductImageRecordOnce).toHaveBeenCalledWith(

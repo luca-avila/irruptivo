@@ -633,9 +633,11 @@ function getImageUploadSuccessRedirect(
     params.set("estado", "imagen-subida");
   }
 
+  // Anclar a la sección de galería para que el redirect no salte al tope de la
+  // página (evita el scroll-up tras subir una imagen).
   return `${ADMIN_PRODUCTS_PATH}/${encodeURIComponent(
     productId
-  )}/editar?${params.toString()}`;
+  )}/editar?${params.toString()}#image-section-title`;
 }
 
 function getImageBatchPartialRedirect(
