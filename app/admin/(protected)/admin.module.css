@@ -8,6 +8,7 @@
 
 .sidebar {
   display: grid;
+  align-content: start;
   gap: 1rem;
   padding: 1rem;
   border-bottom: 1px solid rgba(17, 17, 17, 0.1);
@@ -16,16 +17,17 @@
 }
 
 .brandRow {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
+  gap: 0.65rem 1rem;
 }
 
 .brand {
   display: inline-flex;
   align-items: center;
   gap: 0.55rem;
+  min-width: 0;
   font-size: 0.84rem;
   font-weight: 850;
   letter-spacing: 0.12em;
@@ -42,6 +44,7 @@
 }
 
 .session {
+  grid-column: 1 / -1;
   margin: 0;
   color: rgba(255, 255, 255, 0.66);
   font-size: 0.83rem;
@@ -54,11 +57,31 @@
   font-size: 0.9rem;
 }
 
+.mobileMenuButton {
+  display: inline-flex;
+  width: 2.5rem;
+  height: 2.5rem;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  background: transparent;
+  color: #ffffff;
+  cursor: pointer;
+}
+
+.sidebarMenu {
+  display: none;
+  gap: 1rem;
+}
+
+.sidebarMenu[data-open="true"] {
+  display: grid;
+}
+
 .nav {
-  display: flex;
-  gap: 0.45rem;
-  overflow-x: auto;
-  padding-bottom: 0.1rem;
+  display: grid;
+  gap: 0.5rem;
 }
 
 .navLink {
@@ -76,6 +99,7 @@
 }
 
 .navLink:focus-visible,
+.mobileMenuButton:focus-visible,
 .storeLink:focus-visible,
 .logoutButton:focus-visible,
 .actionLink:focus-visible,
@@ -1179,15 +1203,27 @@
   }
 
   .sidebar {
-    align-content: start;
-    min-height: 100svh;
+    position: sticky;
+    top: 0;
+    align-self: start;
+    height: 100svh;
+    overflow-y: auto;
     border-right: 1px solid rgba(17, 17, 17, 0.18);
     border-bottom: 0;
   }
 
   .brandRow {
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     gap: 1rem;
+  }
+
+  .mobileMenuButton {
+    display: none;
+  }
+
+  .sidebarMenu {
+    display: grid;
   }
 
   .nav {
