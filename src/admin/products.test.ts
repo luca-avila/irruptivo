@@ -14,6 +14,7 @@ import {
   createProduct,
   getAdminProductVariantViews,
   isDuplicateVariantSkuPersistenceError,
+  listAdminProducts,
   setProductStatus,
   updateProduct,
   updateProductVariant,
@@ -57,6 +58,347 @@ const baseProducts = [
     images: []
   }
 ] satisfies CatalogProductRecord[];
+
+const productListFilterProducts = [
+  {
+    id: "buzo-training",
+    slug: "buzo-training",
+    name: "Buzo Training",
+    description: "Buzo de entrenamiento.",
+    area: PRODUCT_AREA.clothing,
+    status: PRODUCT_STATUS.inactive,
+    basePriceArs: 52000,
+    clothingSubcategory: "Remeras",
+    variants: [],
+    images: []
+  },
+  {
+    id: "creatina-monohidrato",
+    slug: "creatina-monohidrato",
+    name: "Creatina Monohidrato",
+    description: "Creatina.",
+    area: PRODUCT_AREA.supplement,
+    status: PRODUCT_STATUS.active,
+    basePriceArs: 31000,
+    supplementType: "Creatina",
+    variants: [],
+    images: []
+  },
+  {
+    id: "musculosa-lisa",
+    slug: "musculosa-lisa",
+    name: "Musculosa Lisa",
+    description: "Musculosa sin subcategoría.",
+    area: PRODUCT_AREA.clothing,
+    status: PRODUCT_STATUS.active,
+    basePriceArs: 24000,
+    clothingSubcategory: null,
+    variants: [],
+    images: []
+  },
+  {
+    id: "proteina-whey",
+    slug: "proteina-whey",
+    name: "Proteína Whey",
+    description: "Proteína en polvo.",
+    area: PRODUCT_AREA.supplement,
+    status: PRODUCT_STATUS.active,
+    basePriceArs: 42000,
+    supplementType: "Proteína",
+    variants: [],
+    images: []
+  },
+  {
+    id: "remera-oversize",
+    slug: "remera-oversize",
+    name: "Remera Oversize",
+    description: "Remera oversize.",
+    area: PRODUCT_AREA.clothing,
+    status: PRODUCT_STATUS.active,
+    basePriceArs: 26000,
+    clothingSubcategory: "Remeras",
+    variants: [],
+    images: []
+  },
+  {
+    id: "short-runner",
+    slug: "short-runner",
+    name: "Short Runner",
+    description: "Short deportivo.",
+    area: PRODUCT_AREA.clothing,
+    status: PRODUCT_STATUS.active,
+    basePriceArs: 28000,
+    clothingSubcategory: "Short",
+    variants: [],
+    images: []
+  },
+  {
+    id: "suplemento-pendiente",
+    slug: "suplemento-pendiente",
+    name: "Suplemento Pendiente",
+    description: "Suplemento inactivo.",
+    area: PRODUCT_AREA.supplement,
+    status: PRODUCT_STATUS.inactive,
+    basePriceArs: 39000,
+    supplementType: "Proteína",
+    variants: [],
+    images: []
+  },
+  {
+    id: "vitamina-daily",
+    slug: "vitamina-daily",
+    name: "Vitamina Daily",
+    description: "Suplemento sin tipo.",
+    area: PRODUCT_AREA.supplement,
+    status: PRODUCT_STATUS.active,
+    basePriceArs: 18000,
+    supplementType: null,
+    variants: [],
+    images: []
+  }
+] satisfies CatalogProductRecord[];
+
+function productIds(view: ReturnType<typeof listAdminProducts>): string[] {
+  return view.products.map((product) => product.id);
+}
+
+function productStatusMetricCounts(
+  view: ReturnType<typeof listAdminProducts>
+): [number, number, number] {
+  return [
+    view.totalProductCount,
+    view.activeProductCount,
+    view.inactiveProductCount
+  ];
+}
+
+describe("admin product list filters", () => {
+  it("filters products by area and treats todas as unfiltered", () => {
+    const allProducts = listAdminProducts(productListFilterProducts, {
+      area: "todas"
+    });
+    const clothingProducts = listAdminProducts(productListFilterProducts, {
+      area: "coleccion"
+    });
+    const supplementProducts = listAdminProducts(productListFilterProducts, {
+      area: "suplementos"
+    });
+
+    expect(productIds(allProducts)).toEqual([
+      "buzo-training",
+      "creatina-monohidrato",
+      "musculosa-lisa",
+      "proteina-whey",
+      "remera-oversize",
+      "short-runner",
+      "suplemento-pendiente",
+      "vitamina-daily"
+    ]);
+    expect(productIds(clothingProducts)).toEqual([
+      "buzo-training",
+      "musculosa-lisa",
+      "remera-oversize",
+      "short-runner"
+    ]);
+    expect(productIds(supplementProducts)).toEqual([
+      "creatina-monohidrato",
+      "proteina-whey",
+      "suplemento-pendiente",
+      "vitamina-daily"
+    ]);
+  });
+
+  it("scopes status metrics to the selected area", () => {
+    const view = listAdminProducts(productListFilterProducts, {
+      area: "coleccion"
+    });
+
+    expect(productStatusMetricCounts(view)).toEqual([4, 3, 1]);
+  });
+
+  it("scopes status metrics to the selected area and category", () => {
+    const view = listAdminProducts(productListFilterProducts, {
+      area: "coleccion",
+      category: "remeras"
+    });
+
+    expect(productStatusMetricCounts(view)).toEqual([2, 1, 1]);
+    expect(view.activeProductCount + view.inactiveProductCount).toBe(
+      view.totalProductCount
+    );
+  });
+
+  it("keeps status metrics global when all areas are selected", () => {
+    const view = listAdminProducts(productListFilterProducts, {
+      area: "todas"
+    });
+
+    expect(productStatusMetricCounts(view)).toEqual([8, 6, 2]);
+  });
+
+  it("keeps status metrics independent from the selected status", () => {
+    const metricCounts = ["todos", "activos", "inactivos"].map((status) =>
+      productStatusMetricCounts(
+        listAdminProducts(productListFilterProducts, {
+          status,
+          area: "coleccion",
+          category: "remeras"
+        })
+      )
+    );
+
+    expect(metricCounts).toEqual([
+      [2, 1, 1],
+      [2, 1, 1],
+      [2, 1, 1]
+    ]);
+  });
+
+  it("filters categories within one area and normalizes accented admin text", () => {
+    const view = listAdminProducts(productListFilterProducts, {
+      area: "suplementos",
+      category: "PROTEÍNA"
+    });
+
+    expect(view.selectedCategory).toBe("proteina");
+    expect(productIds(view)).toEqual(["proteina-whey", "suplemento-pendiente"]);
+    expect(view.categoryFilters).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          label: "Proteína",
+          value: "proteina",
+          count: 2,
+          isActive: true
+        })
+      ])
+    );
+  });
+
+  it("selects uncategorized products through the Sin asignar bucket only when it exists", () => {
+    const view = listAdminProducts(productListFilterProducts, {
+      area: "coleccion"
+    });
+    const unassignedFilter = view.categoryFilters.find(
+      (filter) => filter.label === "Sin subcategoría"
+    );
+
+    expect(unassignedFilter).toEqual(
+      expect.objectContaining({
+        count: 1,
+        isActive: false
+      })
+    );
+    expect(unassignedFilter?.value).toBeTruthy();
+
+    const selectedView = listAdminProducts(productListFilterProducts, {
+      area: "coleccion",
+      category: unassignedFilter?.value
+    });
+
+    expect(productIds(selectedView)).toEqual(["musculosa-lisa"]);
+    expect(
+      selectedView.categoryFilters.find(
+        (filter) => filter.label === "Sin subcategoría"
+      )
+    ).toEqual(expect.objectContaining({ isActive: true }));
+
+    const categorizedOnlyView = listAdminProducts(
+      productListFilterProducts.filter(
+        (product) => product.id !== "musculosa-lisa"
+      ),
+      {
+        area: "coleccion"
+      }
+    );
+
+    expect(
+      categorizedOnlyView.categoryFilters.some(
+        (filter) => filter.label === "Sin subcategoría"
+      )
+    ).toBe(false);
+  });
+
+  it("composes status, area and category as AND filters", () => {
+    const view = listAdminProducts(productListFilterProducts, {
+      status: "activos",
+      area: "suplementos",
+      category: "proteina"
+    });
+
+    expect(productIds(view)).toEqual(["proteina-whey"]);
+    expect(view.areaFilters).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          value: "coleccion",
+          count: 3
+        }),
+        expect.objectContaining({
+          value: "suplementos",
+          count: 3
+        })
+      ])
+    );
+    expect(view.categoryFilters).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          label: "Proteína",
+          count: 1,
+          isActive: true
+        })
+      ])
+    );
+  });
+
+  it("hides category filters under todas and reports area/category counts from the active set", () => {
+    const allAreasView = listAdminProducts(productListFilterProducts, {
+      status: "activos",
+      area: "todas"
+    });
+    const supplementsView = listAdminProducts(productListFilterProducts, {
+      status: "activos",
+      area: "suplementos"
+    });
+
+    expect(allAreasView.categoryFilters).toEqual([]);
+    expect(allAreasView.areaFilters).toEqual([
+      expect.objectContaining({
+        value: "todas",
+        count: 6,
+        isActive: true
+      }),
+      expect.objectContaining({
+        value: "coleccion",
+        count: 3,
+        isActive: false
+      }),
+      expect.objectContaining({
+        value: "suplementos",
+        count: 3,
+        isActive: false
+      })
+    ]);
+    expect(supplementsView.categoryFilters).toEqual([
+      expect.objectContaining({
+        value: null,
+        label: "Todos",
+        count: 3,
+        isActive: true
+      }),
+      expect.objectContaining({
+        label: "Creatina",
+        count: 1
+      }),
+      expect.objectContaining({
+        label: "Proteína",
+        count: 1
+      }),
+      expect.objectContaining({
+        label: "Sin tipo",
+        count: 1
+      })
+    ]);
+  });
+});
 
 describe("admin product management", () => {
   it("preserves product description line breaks while normalizing horizontal whitespace", () => {

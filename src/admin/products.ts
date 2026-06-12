@@ -89,11 +89,40 @@ export type AdminProductListItemView = {
   canActivate: boolean;
 };
 
+export type AdminProductStatusFilter = "todos" | "activos" | "inactivos";
+
+export type AdminProductAreaFilterValue = "todas" | "coleccion" | "suplementos";
+
+export type AdminProductListFilters = {
+  status?: string | null;
+  area?: string | null;
+  category?: string | null;
+};
+
+export type AdminProductAreaFilterOptionView = {
+  value: AdminProductAreaFilterValue;
+  label: string;
+  count: number;
+  isActive: boolean;
+};
+
+export type AdminProductCategoryFilterOptionView = {
+  value: string | null;
+  label: string;
+  count: number;
+  isActive: boolean;
+};
+
 export type AdminProductListView = {
   products: AdminProductListItemView[];
   totalProductCount: number;
   activeProductCount: number;
   inactiveProductCount: number;
+  selectedStatus: AdminProductStatusFilter;
+  selectedArea: AdminProductAreaFilterValue;
+  selectedCategory: string | null;
+  areaFilters: AdminProductAreaFilterOptionView[];
+  categoryFilters: AdminProductCategoryFilterOptionView[];
 };
 
 export type AdminProductVariantView = {
@@ -175,6 +204,8 @@ const variantInputSchema = z.object({
 });
 
 type NormalizedVariantInput = z.infer<typeof variantInputSchema>;
+
+const ADMIN_PRODUCT_CATEGORY_UNASSIGNED_FILTER_VALUE = "__sin-asignar";
 
 export async function readAdminProductRecords(): Promise<CatalogProductRecord[]> {
   const products = await prisma.product.findMany({
@@ -440,22 +471,252 @@ export function isDuplicateVariantSkuPersistenceError(error: unknown): boolean {
 }
 
 export function listAdminProducts(
-  products: readonly CatalogProductRecord[]
+  products: readonly CatalogProductRecord[],
+  filters: AdminProductListFilters = {}
 ): AdminProductListView {
-  const productViews = [...products]
+  const selectedStatus = getAdminProductStatusFilter(filters.status);
+  const selectedArea = getAdminProductAreaFilter(filters.area);
+  const selectedCategory =
+    selectedArea === "todas"
+      ? null
+      : getAdminProductCategoryFilterValue(filters.category);
+  const areaScopedProducts = products.filter((product) =>
+    matchesAdminProductAreaFilter(product, selectedArea)
+  );
+  const categoryScopedProducts = selectedCategory
+    ? areaScopedProducts.filter(
+        (product) => getProductCategoryFilterValue(product) === selectedCategory
+      )
+    : areaScopedProducts;
+  const statusFilteredProducts = products.filter((product) =>
+    matchesAdminProductStatusFilter(product, selectedStatus)
+  );
+  const areaFilteredProducts = statusFilteredProducts.filter((product) =>
+    matchesAdminProductAreaFilter(product, selectedArea)
+  );
+  const visibleProducts = selectedCategory
+    ? areaFilteredProducts.filter(
+        (product) => getProductCategoryFilterValue(product) === selectedCategory
+      )
+    : areaFilteredProducts;
+  const productViews = [...visibleProducts]
     .sort((first, second) => first.name.localeCompare(second.name, "es-AR"))
     .map(getAdminProductListItemView);
 
   return {
     products: productViews,
-    totalProductCount: productViews.length,
-    activeProductCount: productViews.filter(
+    totalProductCount: categoryScopedProducts.length,
+    activeProductCount: categoryScopedProducts.filter(
       (product) => product.status === PRODUCT_STATUS.active
     ).length,
-    inactiveProductCount: productViews.filter(
+    inactiveProductCount: categoryScopedProducts.filter(
       (product) => product.status === PRODUCT_STATUS.inactive
-    ).length
+    ).length,
+    selectedStatus,
+    selectedArea,
+    selectedCategory,
+    areaFilters: getAdminProductAreaFilters(statusFilteredProducts, selectedArea),
+    categoryFilters: getAdminProductCategoryFilters(
+      areaFilteredProducts,
+      selectedArea,
+      selectedCategory
+    )
   };
+}
+
+function getAdminProductStatusFilter(
+  value: string | null | undefined
+): AdminProductStatusFilter {
+  if (value === "activos" || value === "inactivos") {
+    return value;
+  }
+
+  return "todos";
+}
+
+function matchesAdminProductStatusFilter(
+  product: CatalogProductRecord,
+  filter: AdminProductStatusFilter
+): boolean {
+  if (filter === "activos") {
+    return product.status === PRODUCT_STATUS.active;
+  }
+
+  if (filter === "inactivos") {
+    return product.status === PRODUCT_STATUS.inactive;
+  }
+
+  return true;
+}
+
+function getAdminProductAreaFilter(
+  value: string | null | undefined
+): AdminProductAreaFilterValue {
+  if (value === "coleccion" || value === "suplementos") {
+    return value;
+  }
+
+  return "todas";
+}
+
+function matchesAdminProductAreaFilter(
+  product: CatalogProductRecord,
+  filter: AdminProductAreaFilterValue
+): boolean {
+  if (filter === "todas") {
+    return true;
+  }
+
+  return getProductAreaFilterValue(product.area) === filter;
+}
+
+function getProductAreaFilterValue(area: ProductArea): AdminProductAreaFilterValue {
+  if (area === PRODUCT_AREA.clothing) {
+    return "coleccion";
+  }
+
+  return "suplementos";
+}
+
+function getAdminProductAreaFilters(
+  products: readonly CatalogProductRecord[],
+  selectedArea: AdminProductAreaFilterValue
+): AdminProductAreaFilterOptionView[] {
+  return [
+    {
+      value: "todas",
+      label: "Todas",
+      count: products.length,
+      isActive: selectedArea === "todas"
+    },
+    {
+      value: "coleccion",
+      label: getAdminProductAreaLabel(PRODUCT_AREA.clothing),
+      count: products.filter((product) => product.area === PRODUCT_AREA.clothing)
+        .length,
+      isActive: selectedArea === "coleccion"
+    },
+    {
+      value: "suplementos",
+      label: getAdminProductAreaLabel(PRODUCT_AREA.supplement),
+      count: products.filter((product) => product.area === PRODUCT_AREA.supplement)
+        .length,
+      isActive: selectedArea === "suplementos"
+    }
+  ];
+}
+
+function getAdminProductCategoryFilterValue(
+  value: string | null | undefined
+): string | null {
+  const rawValue = value?.trim();
+
+  if (!rawValue) {
+    return null;
+  }
+
+  if (
+    rawValue.toLocaleLowerCase("es-AR") ===
+    ADMIN_PRODUCT_CATEGORY_UNASSIGNED_FILTER_VALUE
+  ) {
+    return ADMIN_PRODUCT_CATEGORY_UNASSIGNED_FILTER_VALUE;
+  }
+
+  return slugify(rawValue) || null;
+}
+
+function getAdminProductCategoryFilters(
+  products: readonly CatalogProductRecord[],
+  selectedArea: AdminProductAreaFilterValue,
+  selectedCategory: string | null
+): AdminProductCategoryFilterOptionView[] {
+  const productArea = getProductAreaFromFilter(selectedArea);
+
+  if (!productArea) {
+    return [];
+  }
+
+  const allLabel = productArea === PRODUCT_AREA.clothing ? "Todas" : "Todos";
+  const categoryFilters = [...getAdminProductCategoryEntries(products).values()]
+    .sort((first, second) => first.label.localeCompare(second.label, "es-AR"))
+    .map((entry) => ({
+      value: entry.value,
+      label: entry.label,
+      count: entry.count,
+      isActive: selectedCategory === entry.value
+    }));
+
+  return [
+    {
+      value: null,
+      label: allLabel,
+      count: products.length,
+      isActive: selectedCategory === null
+    },
+    ...categoryFilters
+  ];
+}
+
+function getProductAreaFromFilter(
+  filter: AdminProductAreaFilterValue
+): ProductArea | null {
+  if (filter === "coleccion") {
+    return PRODUCT_AREA.clothing;
+  }
+
+  if (filter === "suplementos") {
+    return PRODUCT_AREA.supplement;
+  }
+
+  return null;
+}
+
+type AdminProductCategoryEntry = {
+  value: string;
+  label: string;
+  count: number;
+};
+
+function getAdminProductCategoryEntries(
+  products: readonly CatalogProductRecord[]
+): Map<string, AdminProductCategoryEntry> {
+  return products.reduce((entries, product) => {
+    const entry = getAdminProductCategoryEntry(product);
+    const existingEntry = entries.get(entry.value);
+
+    if (existingEntry) {
+      existingEntry.count += 1;
+    } else {
+      entries.set(entry.value, entry);
+    }
+
+    return entries;
+  }, new Map<string, AdminProductCategoryEntry>());
+}
+
+function getAdminProductCategoryEntry(
+  product: CatalogProductRecord
+): AdminProductCategoryEntry {
+  const label = getAdminProductAssignedCategoryLabel(product);
+  const value = label ? slugify(label) : "";
+
+  if (!label || !value) {
+    return {
+      value: ADMIN_PRODUCT_CATEGORY_UNASSIGNED_FILTER_VALUE,
+      label: getAdminProductContextLabel(product),
+      count: 1
+    };
+  }
+
+  return {
+    value,
+    label,
+    count: 1
+  };
+}
+
+function getProductCategoryFilterValue(product: CatalogProductRecord): string {
+  return getAdminProductCategoryEntry(product).value;
 }
 
 export function getAdminProductById(
@@ -881,6 +1142,16 @@ function getAdminProductContextLabel(product: CatalogProductRecord): string {
   }
 
   return product.supplementType?.trim() || "Sin tipo";
+}
+
+function getAdminProductAssignedCategoryLabel(
+  product: CatalogProductRecord
+): string | null {
+  if (product.area === PRODUCT_AREA.clothing) {
+    return product.clothingSubcategory?.trim() || null;
+  }
+
+  return product.supplementType?.trim() || null;
 }
 
 function getVariantOptionSummary(

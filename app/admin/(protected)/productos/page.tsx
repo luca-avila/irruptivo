@@ -4,16 +4,18 @@ import Link from "next/link";
 import {
   listAdminProducts,
   readAdminProductRecords,
+  type AdminProductAreaFilterValue,
+  type AdminProductStatusFilter,
   type ProductManagementErrorCode
 } from "../../../../src/admin/products";
 import { PRODUCT_STATUS } from "../../../../src/catalog/catalog";
 import styles from "../admin.module.css";
 import { ProductStatusToggle } from "./product-status-toggle";
 
-type ProductFilter = "todos" | "activos" | "inactivos";
-
 type AdminProductsPageProps = {
   searchParams?: Promise<{
+    area?: string | string[];
+    categoria?: string | string[];
     estado?: string | string[];
     error?: string | string[];
     filtro?: string | string[];
@@ -28,20 +30,10 @@ export default async function AdminProductsPage({
     state: getFirstSearchParamValue(params?.estado),
     error: getFirstSearchParamValue(params?.error)
   });
-  const productList = listAdminProducts(await readAdminProductRecords());
-  const activeFilter = getActiveProductFilter(
-    getFirstSearchParamValue(params?.filtro)
-  );
-  const visibleProducts = productList.products.filter((product) => {
-    if (activeFilter === "activos") {
-      return product.status === PRODUCT_STATUS.active;
-    }
-
-    if (activeFilter === "inactivos") {
-      return product.status === PRODUCT_STATUS.inactive;
-    }
-
-    return true;
+  const productList = listAdminProducts(await readAdminProductRecords(), {
+    status: getFirstSearchParamValue(params?.filtro),
+    area: getFirstSearchParamValue(params?.area),
+    category: getFirstSearchParamValue(params?.categoria)
   });
 
   return (
@@ -74,23 +66,66 @@ export default async function AdminProductsPage({
           label="Total"
           value={productList.totalProductCount}
           filter="todos"
-          activeFilter={activeFilter}
+          activeFilter={productList.selectedStatus}
+          selectedArea={productList.selectedArea}
+          selectedCategory={productList.selectedCategory}
         />
         <ProductMetric
           label="Activos"
           value={productList.activeProductCount}
           filter="activos"
-          activeFilter={activeFilter}
+          activeFilter={productList.selectedStatus}
+          selectedArea={productList.selectedArea}
+          selectedCategory={productList.selectedCategory}
         />
         <ProductMetric
           label="Inactivos"
           value={productList.inactiveProductCount}
           filter="inactivos"
-          activeFilter={activeFilter}
+          activeFilter={productList.selectedStatus}
+          selectedArea={productList.selectedArea}
+          selectedCategory={productList.selectedCategory}
         />
       </section>
 
-      {productList.products.length === 0 ? (
+      <section className={styles.filterBar} aria-label="Filtrar productos por área">
+        {productList.areaFilters.map((filter) => (
+          <ProductFilterLink
+            key={filter.value}
+            href={buildAdminProductsHref({
+              status: productList.selectedStatus,
+              area: filter.value,
+              category: null
+            })}
+            label={filter.label}
+            count={filter.count}
+            isActive={filter.isActive}
+          />
+        ))}
+      </section>
+
+      {productList.categoryFilters.length > 0 ? (
+        <section
+          className={styles.filterBar}
+          aria-label="Filtrar productos por categoría"
+        >
+          {productList.categoryFilters.map((filter) => (
+            <ProductFilterLink
+              key={filter.value ? `categoria-${filter.value}` : "categoria-todas"}
+              href={buildAdminProductsHref({
+                status: productList.selectedStatus,
+                area: productList.selectedArea,
+                category: filter.value
+              })}
+              label={filter.label}
+              count={filter.count}
+              isActive={filter.isActive}
+            />
+          ))}
+        </section>
+      ) : null}
+
+      {productList.totalProductCount === 0 ? (
         <section className={styles.emptyPanel} aria-live="polite">
           <CircleOff aria-hidden="true" size={24} strokeWidth={1.9} />
           <h2>Todavía no hay productos cargados.</h2>
@@ -99,10 +134,10 @@ export default async function AdminProductsPage({
             Nuevo producto
           </Link>
         </section>
-      ) : visibleProducts.length === 0 ? (
+      ) : productList.products.length === 0 ? (
         <section className={styles.emptyPanel} aria-live="polite">
           <CircleOff aria-hidden="true" size={24} strokeWidth={1.9} />
-          <h2>No hay productos {activeFilter} para mostrar.</h2>
+          <h2>No hay productos para este filtro.</h2>
           <p>Probá con otro filtro o creá un producto nuevo.</p>
         </section>
       ) : (
@@ -115,7 +150,7 @@ export default async function AdminProductsPage({
             <span>Acciones</span>
           </div>
 
-          {visibleProducts.map((product) => {
+          {productList.products.map((product) => {
             const nextStatus =
               product.status === PRODUCT_STATUS.active
                 ? PRODUCT_STATUS.inactive
@@ -169,31 +204,31 @@ export default async function AdminProductsPage({
   );
 }
 
-function getActiveProductFilter(value: string | null): ProductFilter {
-  if (value === "activos" || value === "inactivos") {
-    return value;
-  }
-
-  return "todos";
-}
-
 function ProductMetric({
   label,
   value,
   filter,
-  activeFilter
+  activeFilter,
+  selectedArea,
+  selectedCategory
 }: {
   label: string;
   value: number;
-  filter: ProductFilter;
-  activeFilter: ProductFilter;
+  filter: AdminProductStatusFilter;
+  activeFilter: AdminProductStatusFilter;
+  selectedArea: AdminProductAreaFilterValue;
+  selectedCategory: string | null;
 }) {
   const isActive = activeFilter === filter;
 
   return (
     <Link
       className={styles.metric}
-      href={filter === "todos" ? "/admin/productos" : `/admin/productos?filtro=${filter}`}
+      href={buildAdminProductsHref({
+        status: filter,
+        area: selectedArea,
+        category: selectedCategory
+      })}
       data-active={isActive}
       aria-current={isActive ? "true" : undefined}
       scroll={false}
@@ -202,6 +237,59 @@ function ProductMetric({
       <strong>{value}</strong>
     </Link>
   );
+}
+
+function ProductFilterLink({
+  href,
+  label,
+  count,
+  isActive
+}: {
+  href: string;
+  label: string;
+  count: number;
+  isActive: boolean;
+}) {
+  return (
+    <Link
+      className={styles.filterLink}
+      href={href}
+      data-active={isActive}
+      aria-current={isActive ? "true" : undefined}
+      scroll={false}
+    >
+      <span>{label}</span>
+      <strong>{count}</strong>
+    </Link>
+  );
+}
+
+function buildAdminProductsHref({
+  status,
+  area,
+  category
+}: {
+  status: AdminProductStatusFilter;
+  area: AdminProductAreaFilterValue;
+  category: string | null;
+}): string {
+  const params = new URLSearchParams();
+
+  if (status !== "todos") {
+    params.set("filtro", status);
+  }
+
+  if (area !== "todas") {
+    params.set("area", area);
+  }
+
+  if (area !== "todas" && category) {
+    params.set("categoria", category);
+  }
+
+  const queryString = params.toString();
+
+  return queryString ? `/admin/productos?${queryString}` : "/admin/productos";
 }
 
 function getProductFeedbackMessage({
