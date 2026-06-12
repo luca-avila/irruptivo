@@ -1,4 +1,4 @@
-import { ArrowRight, CircleOff, PackagePlus } from "lucide-react";
+import { CircleOff, PackagePlus } from "lucide-react";
 import Link from "next/link";
 
 import {
@@ -8,9 +8,8 @@ import {
   type AdminProductStatusFilter,
   type ProductManagementErrorCode
 } from "../../../../src/admin/products";
-import { PRODUCT_STATUS } from "../../../../src/catalog/catalog";
 import styles from "../admin.module.css";
-import { ProductStatusToggle } from "./product-status-toggle";
+import { ProductSearchList } from "./product-search-list";
 
 type AdminProductsPageProps = {
   searchParams?: Promise<{
@@ -141,64 +140,7 @@ export default async function AdminProductsPage({
           <p>Probá con otro filtro o creá un producto nuevo.</p>
         </section>
       ) : (
-        <section className={styles.tablePanel} aria-label="Listado de productos">
-          <div className={styles.tableHeader}>
-            <span>Producto</span>
-            <span>Área</span>
-            <span>Estado</span>
-            <span>Precio base</span>
-            <span>Acciones</span>
-          </div>
-
-          {productList.products.map((product) => {
-            const nextStatus =
-              product.status === PRODUCT_STATUS.active
-                ? PRODUCT_STATUS.inactive
-                : PRODUCT_STATUS.active;
-            const statusActionLabel =
-              nextStatus === PRODUCT_STATUS.active ? "Activar" : "Desactivar";
-
-            return (
-              <article className={styles.tableRow} key={product.id}>
-                <div>
-                  <strong>{product.name}</strong>
-                  <span>{product.slug}</span>
-                  <small>{product.variantCountLabel}</small>
-                  {!product.canActivate ? (
-                    <small>Necesita variantes/SKU para activarse.</small>
-                  ) : null}
-                </div>
-                <div>
-                  <span>{product.areaLabel}</span>
-                  <small>{product.contextLabel}</small>
-                </div>
-                <div>
-                  <span
-                    className={styles.statusPill}
-                    data-status={product.status}
-                  >
-                    {product.statusLabel}
-                  </span>
-                </div>
-                <div>{product.basePriceLabel}</div>
-                <div className={styles.rowActions}>
-                  <Link
-                    className={styles.iconLink}
-                    href={`/admin/productos/${encodeURIComponent(product.id)}/editar`}
-                  >
-                    <span>Editar</span>
-                    <ArrowRight aria-hidden="true" size={17} strokeWidth={2.1} />
-                  </Link>
-                  <ProductStatusToggle
-                    productId={product.id}
-                    nextStatus={nextStatus}
-                    label={statusActionLabel}
-                  />
-                </div>
-              </article>
-            );
-          })}
-        </section>
+        <ProductSearchList products={productList.products} />
       )}
     </>
   );
