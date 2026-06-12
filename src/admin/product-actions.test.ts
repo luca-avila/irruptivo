@@ -7,7 +7,11 @@ import {
   type CatalogProductRecord
 } from "../catalog/catalog";
 import { type ProductImageUploadInput } from "../catalog/product-images";
-import { deleteAdminProduct, uploadAdminProductImage } from "./product-actions";
+import {
+  deleteAdminProduct,
+  updateAdminProductImageAssociation,
+  uploadAdminProductImage
+} from "./product-actions";
 import { MAX_IMAGE_UPLOAD_BATCH } from "./product-image-upload-limits";
 
 const mocks = vi.hoisted(() => ({
@@ -333,6 +337,66 @@ describe("admin product image actions", () => {
     expect(mocks.revalidatePath).not.toHaveBeenCalled();
     expect(mocks.saveAdminProductRecords).not.toHaveBeenCalled();
   });
+
+  it("updates an uploaded collection image color association", async () => {
+    mocks.readAdminProductRecords.mockResolvedValue([
+      createProductRecord({
+        images: [
+          {
+            ...createImageRecord(),
+            associatedColor: null,
+            variantId: null
+          }
+        ]
+      })
+    ]);
+
+    await expect(
+      updateAdminProductImageAssociation(
+        createImageAssociationFormData({
+          associatedColor: "Negro"
+        })
+      )
+    ).rejects.toMatchObject({
+      message: "NEXT_REDIRECT",
+      url: "/admin/productos/irruptivo-training-tee/editar?estado=imagen-asociacion-actualizada#image-section-title"
+    });
+
+    expect(mocks.saveAdminProductImageRecord).toHaveBeenCalledWith(
+      "irruptivo-training-tee",
+      expect.objectContaining({
+        id: IMAGE_UPLOAD_ID,
+        associatedColor: "Negro",
+        variantId: null
+      })
+    );
+    expect(mocks.revalidatePath).toHaveBeenCalledWith(
+      "/admin/productos/irruptivo-training-tee/editar"
+    );
+    expect(mocks.createAdminProductImageRecordOnce).not.toHaveBeenCalled();
+  });
+
+  it("rejects image association updates with colors outside the product variants", async () => {
+    mocks.readAdminProductRecords.mockResolvedValue([
+      createProductRecord({
+        images: [createImageRecord()]
+      })
+    ]);
+
+    await expect(
+      updateAdminProductImageAssociation(
+        createImageAssociationFormData({
+          associatedColor: "Rojo"
+        })
+      )
+    ).rejects.toMatchObject({
+      message: "NEXT_REDIRECT",
+      url: "/admin/productos/irruptivo-training-tee/editar?error=image_validation"
+    });
+
+    expect(mocks.saveAdminProductImageRecord).not.toHaveBeenCalled();
+    expect(mocks.revalidatePath).not.toHaveBeenCalled();
+  });
 });
 
 describe("admin product delete action", () => {
@@ -461,6 +525,28 @@ function createBatchUploadFormData(
   return formData;
 }
 
+function createImageAssociationFormData({
+  associatedColor = "",
+  variantId = ""
+}: {
+  associatedColor?: string;
+  variantId?: string;
+} = {}): FormData {
+  const formData = new FormData();
+  formData.set("productId", "irruptivo-training-tee");
+  formData.set("imageId", IMAGE_UPLOAD_ID);
+
+  if (associatedColor) {
+    formData.set("associatedColor", associatedColor);
+  }
+
+  if (variantId) {
+    formData.set("variantId", variantId);
+  }
+
+  return formData;
+}
+
 function getUploadId(index: number): string {
   const paddedIndex = String(index).padStart(12, "0");
 
@@ -493,7 +579,28 @@ function createProductRecord({
     basePriceArs: 26000,
     clothingSubcategory: "Remeras",
     supplementType: null,
-    variants: [],
+    variants: [
+      {
+        id: "tee-black-s",
+        sku: "TEE-BLK-S",
+        name: "Negro / S",
+        stock: 4,
+        options: {
+          color: "Negro",
+          size: "S"
+        }
+      },
+      {
+        id: "tee-black-m",
+        sku: "TEE-BLK-M",
+        name: "Negro / M",
+        stock: 2,
+        options: {
+          color: "Negro",
+          size: "M"
+        }
+      }
+    ],
     images
   };
 }

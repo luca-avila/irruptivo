@@ -1,8 +1,9 @@
-import { ArrowDown, ArrowUp, ImagePlus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ImagePlus, Save, Trash2 } from "lucide-react";
 
 import {
   reorderAdminProductImages,
   softDeleteAdminProductImage,
+  updateAdminProductImageAssociation,
   uploadAdminProductImage
 } from "../../../../src/admin/product-actions";
 import { getPublicImageSet } from "../../../../src/catalog/product-images";
@@ -28,6 +29,12 @@ export function ProductImageManagement({
 }: ProductImageManagementProps) {
   const images = getPublicImageSet(product.images, { usage: "card" });
   const imageIds = images.map((image) => image.id);
+  const colors = getDistinctVariantOptionValues(product, "color");
+  const variants = product.variants.map((variant) => ({
+    id: variant.id,
+    name: variant.name,
+    sku: variant.sku
+  }));
 
   return (
     <section className={styles.imageSection} aria-labelledby="image-section-title">
@@ -57,12 +64,8 @@ export function ProductImageManagement({
 
         <ProductImageFileInput
           productArea={product.area}
-          colors={getDistinctVariantOptionValues(product, "color")}
-          variants={product.variants.map((variant) => ({
-            id: variant.id,
-            name: variant.name,
-            sku: variant.sku
-          }))}
+          colors={colors}
+          variants={variants}
           formState={formState}
         />
 
@@ -81,6 +84,8 @@ export function ProductImageManagement({
               index={index}
               product={product}
               productId={product.id}
+              colors={colors}
+              variants={variants}
               key={image.id}
             />
           ))}
@@ -101,13 +106,21 @@ function ProductImageCard({
   imageIds,
   index,
   product,
-  productId
+  productId,
+  colors,
+  variants
 }: {
   image: PublicProductImageView;
   imageIds: readonly string[];
   index: number;
   product: CatalogProductRecord;
   productId: string;
+  colors: readonly string[];
+  variants: readonly {
+    id: string;
+    name: string;
+    sku: string;
+  }[];
 }) {
   const associationLabel = getImageAssociationLabel(product, image);
 
@@ -123,6 +136,14 @@ function ProductImageCard({
           <span>{getImageMetaLabel(image)}</span>
           {associationLabel ? <span>{associationLabel}</span> : null}
         </div>
+
+        <ImageAssociationForm
+          image={image}
+          product={product}
+          productId={productId}
+          colors={colors}
+          variants={variants}
+        />
 
         <div className={styles.imageActions}>
           <form action={reorderAdminProductImages}>
@@ -173,11 +194,80 @@ function ProductImageCard({
   );
 }
 
+function ImageAssociationForm({
+  image,
+  product,
+  productId,
+  colors,
+  variants
+}: {
+  image: PublicProductImageView;
+  product: CatalogProductRecord;
+  productId: string;
+  colors: readonly string[];
+  variants: readonly {
+    id: string;
+    name: string;
+    sku: string;
+  }[];
+}) {
+  return (
+    <form
+      className={styles.imageAssociationForm}
+      action={updateAdminProductImageAssociation}
+    >
+      <input type="hidden" name="productId" value={productId} />
+      <input type="hidden" name="imageId" value={image.id} />
+
+      {product.area === "clothing" ? (
+        <label className={styles.field}>
+          <span>Color asociado</span>
+          <select
+            name="associatedColor"
+            defaultValue={getSelectedImageColorValue(colors, image)}
+          >
+            <option value="">Sin color específico</option>
+            {colors.map((color) => (
+              <option value={color} key={color}>
+                {color}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : (
+        <label className={styles.field}>
+          <span>Variante asociada</span>
+          <select
+            name="variantId"
+            defaultValue={getSelectedImageVariantId(variants, image)}
+          >
+            <option value="">Sin variante específica</option>
+            {variants.map((variant) => (
+              <option value={variant.id} key={variant.id}>
+                {variant.name} / {variant.sku}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+
+      <button className={styles.secondaryButton} type="submit">
+        <Save aria-hidden="true" size={16} strokeWidth={2.1} />
+        <span>Guardar asociación</span>
+      </button>
+    </form>
+  );
+}
+
 function getImageAssociationLabel(
   product: CatalogProductRecord,
   image: PublicProductImageView
 ): string | null {
-  if (image.associatedColor) {
+  if (product.area === "clothing") {
+    if (!image.associatedColor) {
+      return null;
+    }
+
     return `Color: ${image.associatedColor}`;
   }
 
@@ -192,6 +282,38 @@ function getImageAssociationLabel(
   return variant
     ? `Variante: ${variant.name} / ${variant.sku}`
     : "Variante asociada no encontrada";
+}
+
+function getSelectedImageColorValue(
+  colors: readonly string[],
+  image: PublicProductImageView
+): string {
+  const currentColor = image.associatedColor?.trim();
+
+  if (!currentColor) {
+    return "";
+  }
+
+  return (
+    colors.find(
+      (color) =>
+        color.toLocaleLowerCase("es-AR") ===
+        currentColor.toLocaleLowerCase("es-AR")
+    ) ?? ""
+  );
+}
+
+function getSelectedImageVariantId(
+  variants: readonly { id: string }[],
+  image: PublicProductImageView
+): string {
+  const variantId = image.variantId?.trim();
+
+  if (!variantId) {
+    return "";
+  }
+
+  return variants.some((variant) => variant.id === variantId) ? variantId : "";
 }
 
 function moveImageId(

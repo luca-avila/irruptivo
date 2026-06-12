@@ -100,14 +100,6 @@ export function ProductImageFileInput({
         </div>
       ) : null}
 
-      {productArea === "clothing" && colors.length > 0 ? (
-        <datalist id="product-image-colors">
-          {colors.map((color) => (
-            <option value={color} key={color} />
-          ))}
-        </datalist>
-      ) : null}
-
       {exceedsBatchLimit ? (
         <p className={styles.formHint} role="alert">
           Podés subir hasta {MAX_IMAGE_UPLOAD_BATCH} imágenes por vez. Sacá
@@ -140,15 +132,18 @@ function ImageAssociationFields({
   if (productArea === "clothing") {
     return (
       <label className={styles.field}>
-        <span>Color visual asociado</span>
-        <input
+        <span>Color asociado</span>
+        <select
           name="associatedColor"
-          type="text"
-          list={colors.length > 0 ? "product-image-colors" : undefined}
           defaultValue={formState?.associatedColor ?? ""}
-          maxLength={60}
-          placeholder="Opcional"
-        />
+        >
+          <option value="">Sin color específico</option>
+          {colors.map((color) => (
+            <option value={color} key={color}>
+              {color}
+            </option>
+          ))}
+        </select>
       </label>
     );
   }

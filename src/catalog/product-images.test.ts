@@ -10,6 +10,7 @@ import {
   getVariantAwarePublicImageSet,
   reorderProductImages,
   softDeleteProductImage,
+  updateProductImageAssociation,
   uploadProductImage
 } from "./product-images";
 
@@ -173,6 +174,115 @@ describe("product image management", () => {
           {
             variantId: "whey-pouch-1kg",
             associatedColor: null
+          }
+        ]
+      }
+    });
+  });
+
+  it("updates collection image association by color and ignores size-specific variants", () => {
+    const withImage = uploadProductImage(
+      "training-tee",
+      {
+        id: "tee-front",
+        alt: "Remera negra frente",
+        renditions: renditionSet("training-tee", "tee-front")
+      },
+      products
+    );
+
+    if (!withImage.ok) {
+      throw new Error("Expected image setup to succeed");
+    }
+
+    const result = updateProductImageAssociation(
+      "training-tee",
+      "tee-front",
+      {
+        associatedColor: " negro "
+      },
+      withImage.products
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      product: {
+        images: [
+          {
+            id: "tee-front",
+            associatedColor: "Negro",
+            variantId: null
+          }
+        ]
+      }
+    });
+  });
+
+  it("rejects collection image color associations that are not product variant colors", () => {
+    const withImage = uploadProductImage(
+      "training-tee",
+      {
+        id: "tee-front",
+        alt: "Remera frente",
+        renditions: renditionSet("training-tee", "tee-front")
+      },
+      products
+    );
+
+    if (!withImage.ok) {
+      throw new Error("Expected image setup to succeed");
+    }
+
+    const result = updateProductImageAssociation(
+      "training-tee",
+      "tee-front",
+      {
+        associatedColor: "Rojo"
+      },
+      withImage.products
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: "image_validation",
+        message: "Revisá la imagen, el texto alternativo y la asociación elegida."
+      }
+    });
+  });
+
+  it("updates supplement image association by variant and clears color associations", () => {
+    const withImage = uploadProductImage(
+      "whey",
+      {
+        id: "whey-front",
+        alt: "Whey frente",
+        renditions: renditionSet("whey", "whey-front")
+      },
+      products
+    );
+
+    if (!withImage.ok) {
+      throw new Error("Expected image setup to succeed");
+    }
+
+    const result = updateProductImageAssociation(
+      "whey",
+      "whey-front",
+      {
+        variantId: "whey-pouch-1kg"
+      },
+      withImage.products
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      product: {
+        images: [
+          {
+            id: "whey-front",
+            associatedColor: null,
+            variantId: "whey-pouch-1kg"
           }
         ]
       }

@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import {
   reorderProductImages,
   softDeleteProductImage,
+  updateProductImageAssociation,
   uploadProductImage,
   type ProductImageManagementErrorCode
 } from "../catalog/product-images";
@@ -433,6 +434,42 @@ export async function softDeleteAdminProductImage(
 
   redirect(
     `${ADMIN_PRODUCTS_PATH}/${encodeURIComponent(productId)}/editar?estado=imagen-eliminada`
+  );
+}
+
+export async function updateAdminProductImageAssociation(
+  formData: FormData
+): Promise<void> {
+  await requireAdmin();
+
+  const productId = readStringField(formData, "productId");
+  const imageId = readStringField(formData, "imageId");
+  const products = await readAdminProductRecords();
+  const result = updateProductImageAssociation(
+    productId,
+    imageId,
+    {
+      associatedColor: readStringField(formData, "associatedColor"),
+      variantId: readStringField(formData, "variantId")
+    },
+    products
+  );
+
+  if (!result.ok) {
+    redirect(getEditErrorRedirect(productId, result.error.code));
+  }
+
+  if (!result.image) {
+    redirect(getEditErrorRedirect(productId, "image_not_found"));
+  }
+
+  await saveAdminProductImageRecord(productId, result.image);
+  revalidateCatalogPaths(result.product);
+
+  redirect(
+    `${ADMIN_PRODUCTS_PATH}/${encodeURIComponent(
+      productId
+    )}/editar?estado=imagen-asociacion-actualizada#image-section-title`
   );
 }
 

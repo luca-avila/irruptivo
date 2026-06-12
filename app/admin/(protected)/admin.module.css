@@ -819,6 +819,20 @@
   overflow-wrap: anywhere;
 }
 
+.imageAssociationForm {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.75rem;
+  border: 1px solid rgba(17, 17, 17, 0.1);
+  border-radius: 8px;
+  background: #f8f5ee;
+}
+
+.imageAssociationForm button {
+  width: fit-content;
+  gap: 0.4rem;
+}
+
 .imageActions {
   display: flex;
   flex-wrap: wrap;

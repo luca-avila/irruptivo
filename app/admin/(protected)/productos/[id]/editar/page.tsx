@@ -200,6 +200,13 @@ function getProductFeedbackMessage({
     return { tone: "success", message: "Imagen eliminada de la galería." };
   }
 
+  if (state === "imagen-asociacion-actualizada") {
+    return {
+      tone: "success",
+      message: "Asociación de imagen actualizada correctamente."
+    };
+  }
+
   return null;
 }
 

@@ -21,6 +21,11 @@ export type ProductImageUploadInput = {
   variantId?: string | null;
 };
 
+export type ProductImageAssociationInput = {
+  associatedColor?: string | null;
+  variantId?: string | null;
+};
+
 export type ProductImageManagementErrorCode =
   | "not_found"
   | "image_not_found"
@@ -72,8 +77,9 @@ export function uploadProductImage(
   }
 
   const currentProduct = products[productIndex];
+  const association = resolveImageAssociation(currentProduct, input);
 
-  if (!isValidImageUploadInput(input, currentProduct)) {
+  if (!association || !isValidImageUploadInput(input)) {
     return getImageValidationError();
   }
 
@@ -90,8 +96,8 @@ export function uploadProductImage(
     width: detailRendition.width,
     height: detailRendition.height,
     renditions: cloneRenditions(input.renditions),
-    associatedColor: normalizeOptionalText(input.associatedColor),
-    variantId: normalizeOptionalText(input.variantId),
+    associatedColor: association.associatedColor,
+    variantId: association.variantId,
     deletedAt: null
   };
   const nextProduct: CatalogProductRecord = {
@@ -106,6 +112,55 @@ export function uploadProductImage(
     product: nextProduct,
     products: nextProducts,
     image
+  };
+}
+
+export function updateProductImageAssociation(
+  productId: string,
+  imageId: string,
+  input: ProductImageAssociationInput,
+  products: readonly CatalogProductRecord[]
+): ProductImageManagementResult {
+  const productIndex = products.findIndex((product) => product.id === productId);
+
+  if (productIndex === -1) {
+    return getNotFoundError();
+  }
+
+  const currentProduct = products[productIndex];
+  const imageIndex = currentProduct.images.findIndex((image) => image.id === imageId);
+
+  if (imageIndex === -1) {
+    return getImageNotFoundError();
+  }
+
+  const association = resolveImageAssociation(currentProduct, input);
+
+  if (!association) {
+    return getImageValidationError();
+  }
+
+  const nextImages = currentProduct.images.map((image, index) =>
+    index === imageIndex
+      ? {
+          ...cloneImageRecord(image),
+          associatedColor: association.associatedColor,
+          variantId: association.variantId
+        }
+      : cloneImageRecord(image)
+  );
+  const nextProduct: CatalogProductRecord = {
+    ...currentProduct,
+    images: nextImages
+  };
+  const nextProducts = cloneProductRecords(products);
+  nextProducts[productIndex] = nextProduct;
+
+  return {
+    ok: true,
+    product: nextProduct,
+    products: nextProducts,
+    image: nextImages[imageIndex]
   };
 }
 
@@ -272,8 +327,7 @@ function getPublicImagePath(path: string): string {
 }
 
 function isValidImageUploadInput(
-  input: ProductImageUploadInput,
-  product: CatalogProductRecord
+  input: ProductImageUploadInput
 ): boolean {
   const normalizedAlt = normalizeText(input.alt);
 
@@ -281,11 +335,72 @@ function isValidImageUploadInput(
     return false;
   }
 
-  if (input.variantId && !product.variants.some((variant) => variant.id === input.variantId)) {
-    return false;
+  return Object.values(input.renditions).every(isValidRendition);
+}
+
+function resolveImageAssociation(
+  product: CatalogProductRecord,
+  input: ProductImageAssociationInput
+): { associatedColor: string | null; variantId: string | null } | null {
+  const associatedColor = normalizeOptionalText(input.associatedColor);
+  const variantId = normalizeOptionalText(input.variantId);
+
+  if (product.area === "clothing") {
+    if (variantId) {
+      return null;
+    }
+
+    if (!associatedColor) {
+      return {
+        associatedColor: null,
+        variantId: null
+      };
+    }
+
+    const canonicalColor = findVariantColor(product, associatedColor);
+
+    return canonicalColor
+      ? {
+          associatedColor: canonicalColor,
+          variantId: null
+        }
+      : null;
   }
 
-  return Object.values(input.renditions).every(isValidRendition);
+  if (associatedColor) {
+    return null;
+  }
+
+  if (!variantId) {
+    return {
+      associatedColor: null,
+      variantId: null
+    };
+  }
+
+  return product.variants.some((variant) => variant.id === variantId)
+    ? {
+        associatedColor: null,
+        variantId
+      }
+    : null;
+}
+
+function findVariantColor(
+  product: CatalogProductRecord,
+  requestedColor: string
+): string | null {
+  const normalizedRequestedColor = normalizeImageMatchText(requestedColor);
+
+  for (const variant of product.variants) {
+    const color = normalizeOptionalText(variant.options?.color);
+
+    if (color && normalizeImageMatchText(color) === normalizedRequestedColor) {
+      return color;
+    }
+  }
+
+  return null;
 }
 
 function isValidRendition(
