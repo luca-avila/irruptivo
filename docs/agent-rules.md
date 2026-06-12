@@ -57,6 +57,8 @@ Do not over-test visual components.
 - Low visual density
 - Strong product hierarchy
 - Clothing-first brand emphasis
+- Neutral cream/white/black visual base with orange accent (`--accent: #ff6a1a`) for
+  focused highlights only.
 - Clear loading/error/empty states
 - Preserve trust signals during checkout
 - All customer-facing and admin-facing UI copy must be Spanish for Argentina (`es-AR`), including labels, buttons, headings, errors, loading/empty/success states, email copy, metadata descriptions, and status text.

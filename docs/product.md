@@ -63,8 +63,9 @@ información de cambios, acción de compra y vía de contacto.
 ## Dirección de UX y marca
 
 - **Mobile-first**, baja densidad visual, jerarquía de producto fuerte.
-- Base neutra/minimal, mucho whitespace, acentos oscuros para contraste, fotografía de
-  producto grande, tipografía con jerarquía clara.
+- Base neutra/minimal, mucho whitespace, acentos oscuros para contraste y acento naranja
+  (`--accent: #ff6a1a`) para señales puntuales, fotografía de producto grande, tipografía
+  con jerarquía clara.
 - Tono: minimal, directo, premium, atlético, confiado, limpio.
 - Evitar sentirse: corporativo, frío, llamativo, sobrediseñado, barato, genérico, o como
   un marketplace de suplementos.

@@ -30,13 +30,13 @@ negocio vive en módulos profundos bajo `src/`; las rutas y la UI bajo `app/`.
 | Módulo | Rol |
 |---|---|
 | `domain/rules.ts` | **Kernel de reglas de negocio.** Estados de pedido, transiciones de fulfillment, métodos y costos de envío, cálculo de precios/subtotales/totales, labels de disponibilidad, labels `es-AR` de estados. Fuente única de verdad de los invariantes. |
-| `catalog/` | Lectura de catálogo: productos, detalle, variantes, imágenes, stock, suplementos. `product-repository.ts` lee de la DB; `demo-catalog-data.ts` es fixture de seed/test, **no** fallback de runtime. |
+| `catalog/` | Lectura de catálogo: productos, detalle, variantes, imágenes, stock, suplementos. `product-images.ts` también contiene la lógica pura de asociación/selección de imágenes. `product-repository.ts` lee de la DB; `demo-catalog-data.ts` es fixture de seed/test, **no** fallback de runtime. |
 | `cart/` | Carrito (LocalStorage): modelo, validación de add-to-cart, revalidación contra stock/precio, server actions. |
 | `checkout/` | Formulario de checkout, métodos de entrega, handoff de pago. |
 | `orders/` | Creación de pedido, store de pedidos (Prisma), expiración de pendientes, token de acceso de invitado y proyección de estado de pedido. |
 | `payments/` | Preferencia de Mercado Pago, webhook, reconciliación de pago, eventos de pago (idempotencia), páginas de resultado de pago. |
 | `notifications/` | Emails transaccionales (confirmación al comprador, aviso al admin, y aviso de fulfillment al comprador en envío/retiro) y adaptador agnóstico de proveedor de email: modos `local` (outbox de dev), `http` (genérico) y `resend` (producción). |
-| `admin/` | Auth/sesión de admin, gestión de productos/variantes/imágenes (incluye carga por lote y borrado permanente de producto), cola y detalle de pedidos, transiciones de fulfillment, edición de contacto/fulfillment. |
+| `admin/` | Auth/sesión de admin, gestión de productos/variantes/imágenes (incluye filtros, búsqueda instantánea, carga por lote, asociación de imágenes y borrado permanente de producto), cola y detalle de pedidos, transiciones de fulfillment, edición de contacto/fulfillment. |
 | `storefront/` | Homepage, navegación, páginas de confianza (trust), y `components/` (UI compartida del storefront). |
 | `media/` | Resolución y servido de media de producto desde el filesystem. |
 | `db/client.ts` | Singleton del cliente Prisma. |
@@ -64,9 +64,10 @@ Protege `/admin/:path*`: valida la cookie de sesión de admin y redirige a login
 Entidades principales (`prisma/schema.prisma`):
 
 - **`Product`** → `ProductVariant` (1:N) → stock por variante, override de precio,
-  opciones (color/talle/sabor/peso/presentación). `ProductImage` se asocia a producto y
-  opcionalmente a variante, con `renditions` (JSON: card/detail/original) y soft-delete
-  (`deletedAt`).
+  opciones (color/talle/sabor/peso/presentación). `ProductImage` se asocia a producto,
+  con `associatedColor` para imágenes de Colección (color visual, ignorando talle) o
+  `variantId` para imágenes específicas de Suplementos, más `renditions` (JSON:
+  card/detail/original) y soft-delete (`deletedAt`).
 - **`Order`** — incluye número de pedido, **token de acceso de invitado**, **clave de
   idempotencia**, estado, datos de contacto, método/dirección de entrega, montos
   (subtotal/envío/total) y campos de pago de Mercado Pago (preference id, init points,
@@ -110,8 +111,11 @@ Estados con pago bloqueado para el admin (`isAdminPaymentLockedOrderStatus`):
 3. **Checkout (invitado).** Formulario de contacto + método de entrega (envío ARS 5.000 /
    retiro ARS 0). Se crea el `Order` en estado `pending_payment` **antes** del redirect a
    Mercado Pago, con clave de idempotencia y token de acceso de invitado.
-4. **Mercado Pago.** Se crea una preference y se redirige al checkout de MP. Las páginas de
-   retorno (`/checkout/pago/*`) **solo muestran el estado conocido**, no confirman pagos.
+4. **Mercado Pago.** Se crea una preference y se redirige al checkout de MP. La preference
+   usa `expires: true` y cierra 5 minutos antes que la ventana interna de pago pendiente:
+   la orden vence a los 30 min desde `order.createdAt`, MP deja de aceptar el pago a los
+   25 min. Las páginas de retorno (`/checkout/pago/*`) **solo muestran el estado conocido**,
+   no confirman pagos.
 5. **Confirmación (server-side).** La fuente de verdad es el **webhook**
    (`/api/mercado-pago/webhook`) con verificación de firma. La reconciliación
    (`payments/payment-reconciliation.ts`) actualiza el pedido a `paid`, registra el
@@ -142,6 +146,26 @@ pedido (`app/checkout/pago/payment-result-route.tsx`, `app/pedido/[token]/page.t
 durante la reconciliación de pago (`payments/payment-reconciliation.ts` →
 `orders/order-expiration.ts`). Un pago tardío después de expirar no pasa automáticamente a
 `paid`: va a revisión manual del admin.
+
+Para reducir ese caso, la preference de Mercado Pago se calcula desde el mismo
+`order.createdAt` y vence con un margen de seguridad de 5 minutos antes de la expiración
+interna (`MERCADO_PAGO_EXPIRATION_SAFETY_MARGIN_MS` en
+`payments/payment-preference.ts`).
+
+## Admin de catálogo
+
+La lista de productos combina filtros server-side por estado/área/categoría con búsqueda
+instantánea client-side por nombre sobre el resultado ya filtrado (`product-search.ts`). Las
+métricas de total/activos/inactivos también son links de filtro y preservan área/categoría.
+
+En la edición de producto, las imágenes se suben por lote con metadata por archivo y la
+asociación se puede cambiar luego sin reprocesar media:
+
+- **Colección:** el admin elige un color derivado de las variantes del producto. Se persiste
+  como `associatedColor`; el talle no participa de la asociación visual.
+- **Suplementos:** el admin puede asociar una imagen a una variante/SKU concreta cuando cambia
+  packaging/presentación. Se persiste como `variantId`.
+- En ambos casos existe opción de dejar la imagen sin asociación específica.
 
 ## Media
 

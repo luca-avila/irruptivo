@@ -71,11 +71,13 @@ Users may see pending/confirming states while payment confirmation arrives.
 
 A more advanced payment orchestration or reconciliation system is introduced.
 
-# Decision 004: Order Lifecycle And Stock Reservation
+# Decision 004: Order Lifecycle And Stock Validation
 
 ## Context
 
-The original status list included cancellation, but MVP cancellation/refund handling is excluded. The MVP also needs to prevent overselling scarce variants while handling abandoned Mercado Pago checkouts.
+The original status list included cancellation, but MVP cancellation/refund handling is
+excluded. The MVP also needs to keep scarce variant stock correct while handling abandoned
+Mercado Pago checkouts.
 
 ## Decision
 
@@ -93,21 +95,37 @@ The MVP uses one simplified order status model:
 
 `cancelled` is excluded from MVP.
 
-Stock is reserved when an order is created as `pending_payment`.
+Stock is not reserved when an order is created as `pending_payment`. Cart and checkout
+validate current variant stock before order creation, and stock is decremented once,
+server-side, only when Mercado Pago payment is verified as approved.
 
-Unpaid `pending_payment` orders expire after 30 minutes, move to `expired`, and release reserved stock.
+Unpaid `pending_payment` orders expire after 30 minutes and move to `expired`. There is no
+stock release step because no stock was reserved.
 
-A verified payment failure moves the order to `payment_failed`, releases reserved stock immediately, and requires a fresh checkout/order for retry.
+A verified payment failure moves the order to `payment_failed` and requires a fresh
+checkout/order for retry.
 
-Late payment confirmation for an expired order is treated as manual payment review required. It does not automatically become `paid` or enter fulfillment.
+Mercado Pago preferences expire before the internal pending-payment window: the order
+remains valid for 30 minutes, but the MP checkout closes 5 minutes earlier (effective MP
+payment window: 25 minutes from `order.createdAt`). This prevents MP from accepting a
+payment after the lazy internal expirer could mark the order as `expired`.
+
+Late payment confirmation for an expired order is treated as manual payment review
+required. It does not automatically become `paid` or enter fulfillment.
 
 ## Why
 
-This status model reflects supported MVP behavior only. Reserving stock prevents overselling, while expiration prevents abandoned checkouts from locking inventory indefinitely.
+This status model reflects supported MVP behavior only. Avoiding stock reservation keeps
+the MVP simpler and prevents abandoned checkouts from locking inventory. The tradeoff is
+handled by revalidating stock before order creation and decrementing stock atomically when
+payment is approved.
 
 ## Tradeoffs
 
-The single status model mixes payment and fulfillment concepts, but it is simpler for MVP. Expiration and late-payment handling require careful implementation.
+The single status model mixes payment and fulfillment concepts, but it is simpler for MVP.
+Without reservation, very scarce variants can still race between checkout and payment
+approval; payment reconciliation must be the final stock gate. Expiration and late-payment
+handling require careful implementation.
 
 ## Revisit if
 
@@ -391,9 +409,15 @@ Product visuals are central to trust and brand perception.
 
 ## Decision
 
-Clothing images are grouped by visual variant/color, not duplicated per size variant. Supplements may use variant-specific images when packaging differs.
+Clothing images are grouped by visual variant/color, not duplicated per size variant. In
+admin, Colección image association is a dropdown of colors derived from the product's
+variants and persists as `associatedColor`; size is intentionally ignored.
 
-Admin galleries support manual ordering.
+Supplements may use variant-specific images when packaging differs. In admin, Suplementos
+image association is a variant/SKU dropdown and persists as `variantId`.
+
+Admin galleries support manual ordering, batch upload metadata per file, and
+editing/clearing image association after upload.
 
 ## Why
 

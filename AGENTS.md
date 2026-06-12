@@ -54,10 +54,12 @@ npx prisma db seed       # datos de demo (prisma/seed.ts)
   `searchActiveProductsByName`, `getPublicProductBySlug`, `getProductCardView/DetailView`.
 - `product-repository.ts` — `loadCatalogProducts` (lee de la DB).
 - `product-detail.ts` — `getProductDetailPageView`, `resolveSelectedVariant`.
-- `supplements.ts` — `listSupplementProducts` (listado + filtros de suplementos).
+- `supplements.ts` — `listSupplementProducts` (listado + filtros de suplementos derivados
+  del `supplementType` administrado).
 - `variants.ts` — create/update de variantes, `getVariantAvailability`.
 - `stock.ts` — `getAvailableStock`, `setVariantStock`.
-- `product-images.ts` — upload/reorder/soft-delete + `getPublicImageSet`.
+- `product-images.ts` — upload/reorder/soft-delete, edición de asociación de imagen
+  (`updateProductImageAssociation`) + `getPublicImageSet`/`getVariantAwarePublicImageSet`.
 - `demo-catalog-data.ts` — fixture de seed/test (`demoCatalogProducts`), **no** fallback runtime.
 
 ### `src/cart/` — carrito (LocalStorage)
@@ -86,7 +88,8 @@ npx prisma db seed       # datos de demo (prisma/seed.ts)
 
 ### `src/payments/` — Mercado Pago
 
-- `payment-preference.ts` — `createPaymentPreferenceForOrder` / `createMercadoPagoPreference`.
+- `payment-preference.ts` — `createPaymentPreferenceForOrder` / `createMercadoPagoPreference`;
+  la preference de MP vence 5 min antes que la orden interna.
 - `mercado-pago-webhook.ts` — parseo + verificación de firma + fetch del pago.
 - `payment-reconciliation.ts` — **fuente de verdad del pago**: `reconcileMercadoPagoEvent`,
   `reconcileMercadoPagoPaymentById` (pasa a `paid`, decrementa stock, dispara email).
@@ -111,7 +114,9 @@ npx prisma db seed       # datos de demo (prisma/seed.ts)
 - `session.ts` — config/sesión/cookies de admin; `getAdminRouteAccess` (usado por `proxy.ts`).
 - `auth.ts` — `getCurrentAdmin`, `requireAdmin`. `actions.ts` — `loginAdmin`/`logoutAdmin`.
 - `products.ts` + `product-actions.ts` — gestión de productos/variantes (CRUD, publicación,
-  borrado permanente vía `deleteAdminProduct`/`deleteAdminProductRecord`).
+  borrado permanente vía `deleteAdminProduct`/`deleteAdminProductRecord`, carga y asociación
+  de imágenes).
+- `product-search.ts` — búsqueda instantánea por nombre dentro de la lista admin ya filtrada.
 - `product-image-processing.ts` — procesa uploads con sharp (renditions); borra el directorio
   de media del producto en hard delete (`deleteProductMediaDirectory`).
 - `product-image-upload-limits.ts` — `MAX_IMAGE_UPLOAD_BATCH` (carga de imágenes por lote).
@@ -151,8 +156,14 @@ npx prisma db seed       # datos de demo (prisma/seed.ts)
 
 - **No hay reserva de stock.** El stock se decrementa al confirmarse el pago, no al crear el
   pedido. Ver `docs/architecture.md` → "Modelo de stock".
+- **Mercado Pago cierra antes que la orden interna.** La orden expira a los 30 min, pero la
+  preference de MP vence 5 min antes (ventana efectiva: 25 min) para evitar pagos tardíos
+  contra pedidos ya vencidos.
 - **La expiración es lazy/on-read** (no hay cron): se dispara al cargar páginas de estado de
   pago/pedido y en la reconciliación.
 - **El pago se confirma server-side** vía webhook + reconciliación; las páginas de retorno solo
   muestran estado conocido.
+- **Asociación de imágenes:** en Colección se asocia por color visual (`associatedColor`),
+  ignorando talle; en Suplementos se asocia por variante/SKU (`variantId`). El admin puede
+  cambiar o limpiar esa asociación después de subir la imagen.
 - Los `OrderItem` son **snapshots** (no FKs a producto/variante).
