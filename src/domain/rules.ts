@@ -52,6 +52,12 @@ export const DELIVERY_COST_ARS = {
   [DELIVERY_METHOD.pickup]: 0
 } as const satisfies Record<DeliveryMethod, number>;
 
+// How long a `pending_payment` order stays valid before it expires (lazy/on-read).
+// Single source of truth: the lazy expirer measures this from `order.createdAt`, and the
+// Mercado Pago preference closes its checkout slightly earlier (see the safety margin in
+// `payment-preference.ts`) so MP can't accept a payment after we've already expired the order.
+export const PENDING_PAYMENT_EXPIRATION_MS = 30 * 60 * 1000;
+
 export const AVAILABILITY_LABEL = {
   available: "Disponible",
   lowStock: "Últimas unidades",

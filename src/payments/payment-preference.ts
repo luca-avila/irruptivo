@@ -1,9 +1,17 @@
+import { PENDING_PAYMENT_EXPIRATION_MS } from "../domain/rules";
 import {
   type PendingOrder,
   type PendingOrderPaymentPreference
 } from "../orders/order-creation";
 
 const MERCADO_PAGO_API_BASE_URL = "https://api.mercadopago.com";
+
+// Close the Mercado Pago checkout this much earlier than our internal pending-payment window.
+// Anchored to the same `order.createdAt` clock, this makes MP stop accepting the payment before
+// our lazy expirer flips the order to `expired`, removing the desync that would otherwise push a
+// late (minute 31) payment into `expired` + `manual_review_required`. Must stay strictly between
+// 0 and PENDING_PAYMENT_EXPIRATION_MS. Effective MP window = 30 - 5 = 25 min.
+export const MERCADO_PAGO_EXPIRATION_SAFETY_MARGIN_MS = 5 * 60 * 1000;
 
 export const PAYMENT_PREFERENCE_ERROR_MESSAGE =
   "No pudimos iniciar Mercado Pago. El pedido quedó pendiente; reintentá para continuar al pago.";
@@ -41,6 +49,9 @@ export type MercadoPagoPreferenceRequest = {
     internal_order_id: string;
     order_number: string;
   };
+  expires: true;
+  expiration_date_from: string;
+  expiration_date_to: string;
   notification_url?: string;
 };
 
@@ -173,6 +184,18 @@ function buildMercadoPagoPreferenceRequest(
     throw new Error("Mercado Pago preference total must match order total.");
   }
 
+  const createdAtDate = getDate(order.createdAt, "order.createdAt");
+  const expirationMs =
+    PENDING_PAYMENT_EXPIRATION_MS - MERCADO_PAGO_EXPIRATION_SAFETY_MARGIN_MS;
+
+  if (expirationMs <= 0) {
+    throw new Error(
+      "Mercado Pago expiration window must be positive (safety margin too large)."
+    );
+  }
+
+  const expirationDate = new Date(createdAtDate.getTime() + expirationMs);
+
   return {
     items,
     payer: {
@@ -202,6 +225,9 @@ function buildMercadoPagoPreferenceRequest(
       internal_order_id: order.id,
       order_number: order.orderNumber
     },
+    expires: true,
+    expiration_date_from: formatMercadoPagoDateTime(createdAtDate),
+    expiration_date_to: formatMercadoPagoDateTime(expirationDate),
     ...(config.notificationUrl
       ? {
           notification_url: config.notificationUrl
@@ -350,4 +376,33 @@ function getDate(value: Date | string, name: string): Date {
   }
 
   return date;
+}
+
+// Argentina has no DST and sits at a fixed UTC-03:00.
+const MERCADO_PAGO_TIMEZONE_OFFSET_MINUTES = -3 * 60;
+
+// Mercado Pago preferences require ISO 8601 with milliseconds AND an explicit timezone offset
+// (e.g. "2026-06-11T15:30:00.000-03:00"); a plain "Z" / Date.toISOString() is not the format MP
+// documents, so we render the instant in Argentina local time with an explicit offset.
+function formatMercadoPagoDateTime(date: Date): string {
+  const offsetMinutes = MERCADO_PAGO_TIMEZONE_OFFSET_MINUTES;
+  const local = new Date(date.getTime() + offsetMinutes * 60 * 1000);
+
+  const year = local.getUTCFullYear();
+  const month = pad2(local.getUTCMonth() + 1);
+  const day = pad2(local.getUTCDate());
+  const hours = pad2(local.getUTCHours());
+  const minutes = pad2(local.getUTCMinutes());
+  const seconds = pad2(local.getUTCSeconds());
+  const millis = String(local.getUTCMilliseconds()).padStart(3, "0");
+
+  const sign = offsetMinutes >= 0 ? "+" : "-";
+  const absOffset = Math.abs(offsetMinutes);
+  const offset = `${sign}${pad2(Math.floor(absOffset / 60))}:${pad2(absOffset % 60)}`;
+
+  return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}.${millis}${offset}`;
+}
+
+function pad2(value: number): string {
+  return String(value).padStart(2, "0");
 }

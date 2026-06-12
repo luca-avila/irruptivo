@@ -1,14 +1,20 @@
 import { describe, expect, it } from "vitest";
 
-import { DELIVERY_METHOD, ORDER_STATUS } from "../domain/rules";
+import {
+  DELIVERY_METHOD,
+  ORDER_STATUS,
+  PENDING_PAYMENT_EXPIRATION_MS
+} from "../domain/rules";
 import { type PendingOrder } from "../orders/order-creation";
 import {
   createPaymentPreferenceForOrder,
+  MERCADO_PAGO_EXPIRATION_SAFETY_MARGIN_MS,
   type MercadoPagoPreferenceRequest,
   type PaymentPreferenceProvider
 } from "./payment-preference";
 
 const now = "2026-05-30T12:00:00.000Z";
+const createdAt = now;
 
 describe("Mercado Pago payment preference", () => {
   it("maps a pending order to a Mercado Pago payload using snapshotted items and the order total", async () => {
@@ -113,6 +119,74 @@ describe("Mercado Pago payment preference", () => {
       auto_return: "approved"
     });
     expect(order.status).toBe(ORDER_STATUS.pendingPayment);
+  });
+
+  it("closes the Mercado Pago checkout earlier than the internal pending-payment window, anchored to order.createdAt", async () => {
+    let request: MercadoPagoPreferenceRequest | null = null;
+    const provider: PaymentPreferenceProvider = async (nextRequest) => {
+      request = nextRequest;
+
+      return {
+        preferenceId: "pref-789",
+        initPoint: "https://www.mercadopago.com.ar/init/pref-789",
+        sandboxInitPoint: null
+      };
+    };
+
+    await createPaymentPreferenceForOrder(getPendingOrder(), {
+      config: {
+        accessToken: "APP_USR-123",
+        appUrl: "https://irruptivo.test"
+      },
+      provider,
+      // Deliberately different from createdAt to prove the MP window anchors to createdAt, not now.
+      now: "2026-05-30T12:10:00.000Z"
+    });
+
+    const builtRequest = request as MercadoPagoPreferenceRequest | null;
+    expect(builtRequest).not.toBeNull();
+    expect(builtRequest?.expires).toBe(true);
+    expect(builtRequest?.expiration_date_to).toBeTruthy();
+
+    const createdAtMs = new Date(createdAt).getTime();
+    const effectiveWindowMs =
+      PENDING_PAYMENT_EXPIRATION_MS - MERCADO_PAGO_EXPIRATION_SAFETY_MARGIN_MS;
+
+    // 25 min after createdAt for defaults (30 - 5).
+    expect(effectiveWindowMs).toBe(25 * 60 * 1000);
+
+    const mpExpirationMs = new Date(
+      builtRequest?.expiration_date_to ?? ""
+    ).getTime();
+    expect(mpExpirationMs).toBe(createdAtMs + effectiveWindowMs);
+
+    // Core invariant: MP closes strictly before our internal expiration instant.
+    const internalExpirationMs = createdAtMs + PENDING_PAYMENT_EXPIRATION_MS;
+    expect(mpExpirationMs).toBeLessThan(internalExpirationMs);
+
+    // expiration_date_from anchors to createdAt itself.
+    expect(new Date(builtRequest?.expiration_date_from ?? "").getTime()).toBe(
+      createdAtMs
+    );
+
+    // Verified MP datetime format: ISO 8601 with milliseconds AND an explicit offset (not "Z").
+    // createdAt 2026-05-30T12:00:00.000Z + 25 min = 12:25 UTC -> 09:25 in Argentina (-03:00).
+    expect(builtRequest?.expiration_date_to).toBe(
+      "2026-05-30T09:25:00.000-03:00"
+    );
+    expect(builtRequest?.expiration_date_from).toBe(
+      "2026-05-30T09:00:00.000-03:00"
+    );
+    expect(builtRequest?.expiration_date_to).toMatch(
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}[+-]\d{2}:\d{2}$/
+    );
+  });
+
+  it("keeps the Mercado Pago safety margin strictly between zero and the internal window", () => {
+    expect(MERCADO_PAGO_EXPIRATION_SAFETY_MARGIN_MS).toBeGreaterThan(0);
+    expect(MERCADO_PAGO_EXPIRATION_SAFETY_MARGIN_MS).toBeLessThan(
+      PENDING_PAYMENT_EXPIRATION_MS
+    );
   });
 });
 

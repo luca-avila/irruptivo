@@ -1,11 +1,13 @@
-import { ORDER_STATUS, type OrderStatus } from "../domain/rules";
+import {
+  ORDER_STATUS,
+  PENDING_PAYMENT_EXPIRATION_MS,
+  type OrderStatus
+} from "../domain/rules";
 import { type Order } from "./order-creation";
 import {
   readOrderStoreSnapshot,
   updateOrderStatusInStore
 } from "./order-store";
-
-const PENDING_PAYMENT_EXPIRATION_MS = 30 * 60 * 1000;
 
 export type PendingPaymentExpirationOrderRepository = {
   listOrders: () => Promise<readonly Order[]>;
