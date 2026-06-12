@@ -44,7 +44,7 @@ const primaryActionClass = `${baseActionClass} font-[850] border border-[#101010
 const secondaryActionClass = `${baseActionClass} font-[850] border border-[#c9c5bc] bg-white text-[#101010]! hover:border-[#101010] hover:bg-[#f0f0ec]`;
 
 const availabilityBadgeClass =
-  "absolute top-[0.45rem] left-[0.45rem] max-w-[calc(100%-0.9rem)] py-[0.28rem] px-[0.38rem] [overflow-wrap:anywhere] bg-[rgba(199,242,58,0.95)] text-[#101010] text-[0.62rem] font-[850] tracking-[0.04em] leading-none uppercase";
+  "absolute top-[0.45rem] left-[0.45rem] max-w-[calc(100%-0.9rem)] py-[0.28rem] px-[0.38rem] [overflow-wrap:anywhere] bg-[rgba(255,106,26,0.95)] text-[#101010] text-[0.62rem] font-[850] tracking-[0.04em] leading-none uppercase";
 
 export default async function SearchPage({ searchParams }: SearchPageProps) {
   const params = await searchParams;

@@ -43,7 +43,7 @@
   height: 2.25rem;
   place-items: center;
   border-radius: 8px;
-  background: #c7f23a;
+  background: #ff6a1a;
   color: #111111;
 }
 
@@ -117,7 +117,7 @@
 .field input:focus-visible,
 .field textarea:focus-visible,
 .field select:focus-visible {
-  outline: 2px solid #c7f23a;
+  outline: 2px solid #ff6a1a;
   outline-offset: 2px;
 }
 
@@ -135,9 +135,9 @@
   gap: 0.45rem;
   min-height: 2.55rem;
   padding: 0 0.85rem;
-  border: 1px solid #c7f23a;
+  border: 1px solid #ff6a1a;
   border-radius: 8px;
-  background: #c7f23a;
+  background: #ff6a1a;
   color: #111111;
   font-size: 0.9rem;
   font-weight: 750;

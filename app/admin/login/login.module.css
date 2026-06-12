@@ -34,7 +34,7 @@
   height: 2.2rem;
   place-items: center;
   border-radius: 8px;
-  background: #c7f23a;
+  background: #ff6a1a;
   color: #111111;
 }
 
@@ -120,7 +120,7 @@
 
 .input:focus {
   border-color: #111111;
-  outline: 2px solid rgba(199, 242, 58, 0.7);
+  outline: 2px solid rgba(255, 106, 26, 0.7);
   outline-offset: 2px;
 }
 
