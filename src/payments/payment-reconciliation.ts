@@ -43,7 +43,7 @@ export type PaymentReconciliationOrderRepository = {
     reason?: string;
     actor?: string;
   }) => Promise<Order | null>;
-  markOrderPaidAndDecrementStock?: (input: {
+  markOrderPaidAndDecrementStock: (input: {
     orderId: string;
     reason?: string;
     actor?: string;
@@ -237,12 +237,11 @@ export async function reconcileMercadoPagoEvent(
     processingResult,
     receivedAt: getDate(now, "now").toISOString()
   });
-  const shouldClaimApprovedPaymentInSettlement =
+  const recordsPaymentEventInSettlement =
     providerStatus === "approved" &&
-    reconciledOrder.status === ORDER_STATUS.pendingPayment &&
-    Boolean(orderRepository.markOrderPaidAndDecrementStock);
+    reconciledOrder.status === ORDER_STATUS.pendingPayment;
 
-  if (!shouldClaimApprovedPaymentInSettlement) {
+  if (!recordsPaymentEventInSettlement) {
     const recordResult = await eventRecorder(paymentEventRecord);
 
     if (recordResult.status === "duplicate") {
@@ -268,7 +267,7 @@ export async function reconcileMercadoPagoEvent(
       notification,
       payment,
       providerEventId,
-      paymentEventRecord: shouldClaimApprovedPaymentInSettlement
+      paymentEventRecord: recordsPaymentEventInSettlement
         ? paymentEventRecord
         : null,
       orderRepository,
@@ -390,88 +389,57 @@ async function reconcileApprovedPayment({
     };
   }
 
-  if (orderRepository.markOrderPaidAndDecrementStock) {
-    const settlementResult =
-      await orderRepository.markOrderPaidAndDecrementStock({
-        orderId: order.id,
-        reason: "payment_approved",
-        paymentEvent: paymentEventRecord ?? undefined,
-        paymentEventRecorder: eventRecorder
-      });
+  const settlementResult = await orderRepository.markOrderPaidAndDecrementStock({
+    orderId: order.id,
+    reason: "payment_approved",
+    paymentEvent: paymentEventRecord ?? undefined,
+    paymentEventRecorder: eventRecorder
+  });
 
-    if (settlementResult.status === "insufficient_stock") {
-      await orderRepository.updateOrderStatus({
+  if (settlementResult.status === "insufficient_stock") {
+    await orderRepository.updateOrderStatus({
+      orderId: settlementResult.order.id,
+      status: ORDER_STATUS.expired,
+      reason: "insufficient_stock_on_payment"
+    });
+    await eventRecorder(
+      buildPaymentEventRecord({
+        notification,
+        payment,
         orderId: settlementResult.order.id,
-        status: ORDER_STATUS.expired,
-        reason: "insufficient_stock_on_payment"
-      });
-      await eventRecorder(
-        buildPaymentEventRecord({
-          notification,
-          payment,
-          orderId: settlementResult.order.id,
-          providerEventId: getInsufficientStockProviderEventId(providerEventId),
-          processingResult: PAYMENT_MANUAL_REVIEW_PROCESSING_RESULT,
-          receivedAt: getDate(now, "now").toISOString()
-        })
-      );
-
-      return {
-        status: "manual_review_required",
-        orderId: settlementResult.order.id,
-        providerPaymentId: payment.id,
-        orderStatus: ORDER_STATUS.expired
-      };
-    }
-
-    if (settlementResult.status === "already_reconciled") {
-      return {
-        status: "ignored",
-        reason: "already_reconciled",
-        providerPaymentId: payment.id
-      };
-    }
-
-    if (settlementResult.status === "duplicate") {
-      return {
-        status: "duplicate",
-        orderId: settlementResult.event.orderId,
-        providerPaymentId: settlementResult.event.providerPaymentId
-      };
-    }
-
-    const { confirmationEmail, adminNotification } =
-      await sendPaidOrderEmailsSafely({
-        order: settlementResult.order,
-        confirmationEmailSender,
-        adminNotificationEmailSender
-      });
+        providerEventId: getInsufficientStockProviderEventId(providerEventId),
+        processingResult: PAYMENT_MANUAL_REVIEW_PROCESSING_RESULT,
+        receivedAt: getDate(now, "now").toISOString()
+      })
+    );
 
     return {
-      status: "paid",
-      orderId: order.id,
+      status: "manual_review_required",
+      orderId: settlementResult.order.id,
       providerPaymentId: payment.id,
-      orderStatus: ORDER_STATUS.paid,
-      confirmationEmail,
-      adminNotification
+      orderStatus: ORDER_STATUS.expired
     };
   }
 
-  const updatedOrder = await orderRepository.updateOrderStatus({
-    orderId: order.id,
-    status: ORDER_STATUS.paid,
-    reason: "payment_approved"
-  });
-  const paidOrder =
-    updatedOrder?.status === ORDER_STATUS.paid
-      ? updatedOrder
-      : {
-          ...order,
-          status: ORDER_STATUS.paid
-        };
+  if (settlementResult.status === "already_reconciled") {
+    return {
+      status: "ignored",
+      reason: "already_reconciled",
+      providerPaymentId: payment.id
+    };
+  }
+
+  if (settlementResult.status === "duplicate") {
+    return {
+      status: "duplicate",
+      orderId: settlementResult.event.orderId,
+      providerPaymentId: settlementResult.event.providerPaymentId
+    };
+  }
+
   const { confirmationEmail, adminNotification } =
     await sendPaidOrderEmailsSafely({
-      order: paidOrder,
+      order: settlementResult.order,
       confirmationEmailSender,
       adminNotificationEmailSender
     });
@@ -480,9 +448,7 @@ async function reconcileApprovedPayment({
     status: "paid",
     orderId: order.id,
     providerPaymentId: payment.id,
-    orderStatus: updatedOrder?.status === ORDER_STATUS.paid
-      ? updatedOrder.status
-      : ORDER_STATUS.paid,
+    orderStatus: ORDER_STATUS.paid,
     confirmationEmail,
     adminNotification
   };

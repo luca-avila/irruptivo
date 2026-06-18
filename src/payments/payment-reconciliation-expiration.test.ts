@@ -9,6 +9,7 @@ import {
 } from "./payment-events";
 import {
   reconcileMercadoPagoEvent,
+  type ApprovedPaymentSettlementResult,
   type MercadoPagoPayment,
   type PaymentEventRecorder,
   type PaymentReconciliationOrderRepository
@@ -177,6 +178,11 @@ function createOrderRepository(order: Order | null): TestOrderRepository {
       };
 
       return cloneOrder(currentOrder);
+    },
+    async markOrderPaidAndDecrementStock(): Promise<ApprovedPaymentSettlementResult> {
+      throw new Error(
+        "markOrderPaidAndDecrementStock should not run in expiration tests"
+      );
     },
     getOrder(): Order | null {
       return currentOrder ? cloneOrder(currentOrder) : null;
