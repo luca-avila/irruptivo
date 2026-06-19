@@ -7,6 +7,7 @@ import {
 import { type AdminOrderNotificationResult } from "../notifications/admin-order-notification-email";
 import { type Order } from "../orders/order-creation";
 import {
+  type PaymentEventIdentity,
   type PaymentEventRecord,
   type RecordPaymentEventOnceResult
 } from "./payment-events";
@@ -14,8 +15,7 @@ import {
   reconcileMercadoPagoEvent,
   reconcileMercadoPagoPaymentById,
   type MercadoPagoPayment,
-  type PaymentEventRecorder,
-  type PaymentReconciliationOrderRepository
+  type PaymentReconciliationRepository
 } from "./payment-reconciliation";
 
 const now = "2026-05-30T12:00:00.000Z";
@@ -23,14 +23,12 @@ const now = "2026-05-30T12:00:00.000Z";
 describe("Mercado Pago payment reconciliation", () => {
   it("moves a pending order to paid and sends buyer and admin emails after verified server-side approved payment", async () => {
     const repository = createOrderRepository(getOrder(ORDER_STATUS.pendingPayment));
-    const eventRecorder = createTestPaymentEventRecorder();
     const confirmationEmails: Order[] = [];
     const adminNotifications: Order[] = [];
 
     const result = await reconcileMercadoPagoEvent(getNotification(), {
       paymentProvider: async () => getPayment({ status: "approved" }),
-      orderRepository: repository,
-      eventRecorder: eventRecorder.record,
+      repository,
       confirmationEmailSender: async (order) => {
         confirmationEmails.push(order);
 
@@ -79,7 +77,7 @@ describe("Mercado Pago payment reconciliation", () => {
       id: "order-001",
       status: ORDER_STATUS.paid
     });
-    expect(eventRecorder.read()).toMatchObject([
+    expect(repository.readEvents()).toMatchObject([
       {
         providerEventId: "event-001",
         providerPaymentId: "payment-001",
@@ -92,12 +90,10 @@ describe("Mercado Pago payment reconciliation", () => {
 
   it("moves a pending order to payment_failed after verified failure", async () => {
     const repository = createOrderRepository(getOrder(ORDER_STATUS.pendingPayment));
-    const eventRecorder = createTestPaymentEventRecorder();
 
     const result = await reconcileMercadoPagoEvent(getNotification(), {
       paymentProvider: async () => getPayment({ status: "rejected" }),
-      orderRepository: repository,
-      eventRecorder: eventRecorder.record,
+      repository,
       now
     });
 
@@ -115,7 +111,6 @@ describe("Mercado Pago payment reconciliation", () => {
 
   it("does not repeat a paid transition for a duplicate success event", async () => {
     const repository = createOrderRepository(getOrder(ORDER_STATUS.pendingPayment));
-    const eventRecorder = createTestPaymentEventRecorder();
     const notification = getNotification();
     const confirmationEmails: Order[] = [];
     const confirmationEmailSender = async (
@@ -128,8 +123,7 @@ describe("Mercado Pago payment reconciliation", () => {
 
     await reconcileMercadoPagoEvent(notification, {
       paymentProvider: async () => getPayment({ status: "approved" }),
-      orderRepository: repository,
-      eventRecorder: eventRecorder.record,
+      repository,
       confirmationEmailSender,
       adminNotificationEmailSender: async (order) =>
         getSkippedAdminNotificationResult(order),
@@ -137,8 +131,7 @@ describe("Mercado Pago payment reconciliation", () => {
     });
     const duplicateResult = await reconcileMercadoPagoEvent(notification, {
       paymentProvider: async () => getPayment({ status: "approved" }),
-      orderRepository: repository,
-      eventRecorder: eventRecorder.record,
+      repository,
       confirmationEmailSender,
       adminNotificationEmailSender: async (order) =>
         getSkippedAdminNotificationResult(order),
@@ -157,7 +150,6 @@ describe("Mercado Pago payment reconciliation", () => {
 
   it("retries an approved payment when settlement rolls back before commit", async () => {
     const repository = createOrderRepository(getOrder(ORDER_STATUS.pendingPayment));
-    const eventRecorder = createTestPaymentEventRecorder();
     const notification = getNotification();
     const failingRepository: TestOrderRepository = {
       ...repository,
@@ -169,23 +161,21 @@ describe("Mercado Pago payment reconciliation", () => {
     await expect(
       reconcileMercadoPagoEvent(notification, {
         paymentProvider: async () => getPayment({ status: "approved" }),
-        orderRepository: failingRepository,
-        eventRecorder: eventRecorder.record,
+        repository: failingRepository,
         adminNotificationEmailSender: async (order) =>
           getSkippedAdminNotificationResult(order),
         now
       })
     ).rejects.toThrow("Simulated settlement rollback.");
 
-    expect(eventRecorder.read()).toEqual([]);
+    expect(repository.readEvents()).toEqual([]);
     expect(repository.getOrder()?.status).toBe(ORDER_STATUS.pendingPayment);
     expect(repository.readVariantStock("tee-black-s")).toBe(10);
     expect(repository.readVariantStock("creatina-300g")).toBe(10);
 
     const retryResult = await reconcileMercadoPagoEvent(notification, {
       paymentProvider: async () => getPayment({ status: "approved" }),
-      orderRepository: repository,
-      eventRecorder: eventRecorder.record,
+      repository,
       adminNotificationEmailSender: async (order) =>
         getSkippedAdminNotificationResult(order),
       now
@@ -196,7 +186,7 @@ describe("Mercado Pago payment reconciliation", () => {
       orderId: "order-001",
       providerPaymentId: "payment-001"
     });
-    expect(eventRecorder.read()).toMatchObject([
+    expect(repository.readEvents()).toMatchObject([
       {
         providerEventId: "event-001",
         processingResult: "paid"
@@ -209,14 +199,12 @@ describe("Mercado Pago payment reconciliation", () => {
 
   it("does not decrement stock again for a second approved event with a different event id", async () => {
     const repository = createOrderRepository(getOrder(ORDER_STATUS.pendingPayment));
-    const eventRecorder = createTestPaymentEventRecorder();
 
     const firstResult = await reconcileMercadoPagoEvent(
       getNotification({ id: "event-001" }),
       {
         paymentProvider: async () => getPayment({ status: "approved" }),
-        orderRepository: repository,
-        eventRecorder: eventRecorder.record,
+        repository,
         adminNotificationEmailSender: async (order) =>
           getSkippedAdminNotificationResult(order),
         now
@@ -226,8 +214,7 @@ describe("Mercado Pago payment reconciliation", () => {
       getNotification({ id: "event-002" }),
       {
         paymentProvider: async () => getPayment({ status: "approved" }),
-        orderRepository: repository,
-        eventRecorder: eventRecorder.record,
+        repository,
         adminNotificationEmailSender: async (order) =>
           getSkippedAdminNotificationResult(order),
         now
@@ -247,26 +234,23 @@ describe("Mercado Pago payment reconciliation", () => {
     expect(repository.transitionCount).toBe(1);
     expect(repository.readVariantStock("tee-black-s")).toBe(8);
     expect(repository.readVariantStock("creatina-300g")).toBe(9);
-    expect(eventRecorder.read()).toHaveLength(2);
+    expect(repository.readEvents()).toHaveLength(2);
   });
 
   it("does not repeat a failed transition for a duplicate failure event", async () => {
     const repository = createOrderRepository(getOrder(ORDER_STATUS.pendingPayment));
-    const eventRecorder = createTestPaymentEventRecorder();
     const notification = getNotification();
 
     await reconcileMercadoPagoEvent(notification, {
       paymentProvider: async () => getPayment({ status: "rejected" }),
-      orderRepository: repository,
-      eventRecorder: eventRecorder.record,
+      repository,
       adminNotificationEmailSender: async (order) =>
         getSkippedAdminNotificationResult(order),
       now
     });
     const duplicateResult = await reconcileMercadoPagoEvent(notification, {
       paymentProvider: async () => getPayment({ status: "rejected" }),
-      orderRepository: repository,
-      eventRecorder: eventRecorder.record,
+      repository,
       adminNotificationEmailSender: async (order) =>
         getSkippedAdminNotificationResult(order),
       now
@@ -283,12 +267,10 @@ describe("Mercado Pago payment reconciliation", () => {
 
   it("does not mark an order paid when the provider payment cannot be verified", async () => {
     const repository = createOrderRepository(getOrder(ORDER_STATUS.pendingPayment));
-    const eventRecorder = createTestPaymentEventRecorder();
 
     const result = await reconcileMercadoPagoEvent(getNotification(), {
       paymentProvider: async () => null,
-      orderRepository: repository,
-      eventRecorder: eventRecorder.record,
+      repository,
       now
     });
 
@@ -297,12 +279,11 @@ describe("Mercado Pago payment reconciliation", () => {
       providerPaymentId: "payment-001"
     });
     expect(repository.getOrder()?.status).toBe(ORDER_STATUS.pendingPayment);
-    expect(eventRecorder.read()).toEqual([]);
+    expect(repository.readEvents()).toEqual([]);
   });
 
   it("ignores unknown webhook topics without mutating the order", async () => {
     const repository = createOrderRepository(getOrder(ORDER_STATUS.pendingPayment));
-    const eventRecorder = createTestPaymentEventRecorder();
 
     const result = await reconcileMercadoPagoEvent(
       getNotification({
@@ -313,8 +294,7 @@ describe("Mercado Pago payment reconciliation", () => {
         paymentProvider: async () => {
           throw new Error("Payment provider should not be called");
         },
-        orderRepository: repository,
-        eventRecorder: eventRecorder.record,
+        repository,
         now
       }
     );
@@ -329,7 +309,6 @@ describe("Mercado Pago payment reconciliation", () => {
 
   it("does not let an earlier pending provider status block a later approved update for the same payment", async () => {
     const repository = createOrderRepository(getOrder(ORDER_STATUS.pendingPayment));
-    const eventRecorder = createTestPaymentEventRecorder();
     const notification = getNotification({
       id: "payment-001",
       dataId: "payment-001"
@@ -337,14 +316,12 @@ describe("Mercado Pago payment reconciliation", () => {
 
     const pendingResult = await reconcileMercadoPagoEvent(notification, {
       paymentProvider: async () => getPayment({ status: "pending" }),
-      orderRepository: repository,
-      eventRecorder: eventRecorder.record,
+      repository,
       now
     });
     const approvedResult = await reconcileMercadoPagoEvent(notification, {
       paymentProvider: async () => getPayment({ status: "approved" }),
-      orderRepository: repository,
-      eventRecorder: eventRecorder.record,
+      repository,
       adminNotificationEmailSender: async (order) =>
         getSkippedAdminNotificationResult(order),
       now
@@ -361,17 +338,15 @@ describe("Mercado Pago payment reconciliation", () => {
       providerPaymentId: "payment-001"
     });
     expect(repository.getOrder()?.status).toBe(ORDER_STATUS.paid);
-    expect(eventRecorder.read()).toHaveLength(2);
+    expect(repository.readEvents()).toHaveLength(2);
   });
 
   it("does not automatically mark an expired order paid after a late success", async () => {
     const repository = createOrderRepository(getOrder(ORDER_STATUS.expired));
-    const eventRecorder = createTestPaymentEventRecorder();
 
     const result = await reconcileMercadoPagoEvent(getNotification(), {
       paymentProvider: async () => getPayment({ status: "approved" }),
-      orderRepository: repository,
-      eventRecorder: eventRecorder.record,
+      repository,
       now
     });
 
@@ -391,14 +366,12 @@ describe("Mercado Pago payment reconciliation", () => {
         "creatina-300g": 5
       }
     });
-    const eventRecorder = createTestPaymentEventRecorder();
     const confirmationEmails: Order[] = [];
     const adminNotifications: Order[] = [];
 
     const result = await reconcileMercadoPagoEvent(getNotification(), {
       paymentProvider: async () => getPayment({ status: "approved" }),
-      orderRepository: repository,
-      eventRecorder: eventRecorder.record,
+      repository,
       confirmationEmailSender: async (order) => {
         confirmationEmails.push(order);
 
@@ -428,7 +401,7 @@ describe("Mercado Pago payment reconciliation", () => {
     expect(repository.readVariantStock("creatina-300g")).toBe(5);
     expect(confirmationEmails).toEqual([]);
     expect(adminNotifications).toEqual([]);
-    expect(eventRecorder.read()).toMatchObject([
+    expect(repository.readEvents()).toMatchObject([
       {
         providerEventId: "event-001:insufficient_stock",
         providerPaymentId: "payment-001",
@@ -446,12 +419,10 @@ describe("Mercado Pago payment reconciliation", () => {
         "creatina-300g": 0
       }
     });
-    const eventRecorder = createTestPaymentEventRecorder();
 
     const result = await reconcileMercadoPagoEvent(getNotification(), {
       paymentProvider: async () => getPayment({ status: "approved" }),
-      orderRepository: repository,
-      eventRecorder: eventRecorder.record,
+      repository,
       adminNotificationEmailSender: async (order) =>
         getSkippedAdminNotificationResult(order),
       now
@@ -474,7 +445,6 @@ describe("Mercado Pago payment reconciliation", () => {
         "creatina-300g": 5
       }
     });
-    const eventRecorder = createTestPaymentEventRecorder();
     const notification = getNotification();
     const confirmationEmails: Order[] = [];
     const confirmationEmailSender = async (
@@ -487,8 +457,7 @@ describe("Mercado Pago payment reconciliation", () => {
 
     await reconcileMercadoPagoEvent(notification, {
       paymentProvider: async () => getPayment({ status: "approved" }),
-      orderRepository: repository,
-      eventRecorder: eventRecorder.record,
+      repository,
       confirmationEmailSender,
       adminNotificationEmailSender: async (order) =>
         getSkippedAdminNotificationResult(order),
@@ -496,8 +465,7 @@ describe("Mercado Pago payment reconciliation", () => {
     });
     const duplicateResult = await reconcileMercadoPagoEvent(notification, {
       paymentProvider: async () => getPayment({ status: "approved" }),
-      orderRepository: repository,
-      eventRecorder: eventRecorder.record,
+      repository,
       confirmationEmailSender,
       adminNotificationEmailSender: async (order) =>
         getSkippedAdminNotificationResult(order),
@@ -515,17 +483,15 @@ describe("Mercado Pago payment reconciliation", () => {
     expect(repository.readVariantStock("tee-black-s")).toBe(1);
     expect(repository.readVariantStock("creatina-300g")).toBe(5);
     expect(confirmationEmails).toEqual([]);
-    expect(eventRecorder.read()).toHaveLength(2);
+    expect(repository.readEvents()).toHaveLength(2);
   });
 
   it("surfaces confirmation email failure without rolling back the paid transition", async () => {
     const repository = createOrderRepository(getOrder(ORDER_STATUS.pendingPayment));
-    const eventRecorder = createTestPaymentEventRecorder();
 
     const result = await reconcileMercadoPagoEvent(getNotification(), {
       paymentProvider: async () => getPayment({ status: "approved" }),
-      orderRepository: repository,
-      eventRecorder: eventRecorder.record,
+      repository,
       confirmationEmailSender: async (order) => ({
         status: "failed",
         orderId: order.id,
@@ -559,7 +525,6 @@ describe("Mercado Pago payment reconciliation", () => {
 
   it("reconciles to paid from only a payment id on the buyer's return", async () => {
     const repository = createOrderRepository(getOrder(ORDER_STATUS.pendingPayment));
-    const eventRecorder = createTestPaymentEventRecorder();
     const fetchedPaymentIds: string[] = [];
 
     const result = await reconcileMercadoPagoPaymentById("payment-001", {
@@ -568,8 +533,7 @@ describe("Mercado Pago payment reconciliation", () => {
 
         return getPayment({ status: "approved" });
       },
-      orderRepository: repository,
-      eventRecorder: eventRecorder.record,
+      repository,
       confirmationEmailSender: async (order) =>
         getSentConfirmationEmailResult(order),
       adminNotificationEmailSender: async (order) =>
@@ -597,7 +561,7 @@ describe("Mercado Pago payment reconciliation", () => {
 
         return getPayment({ status: "approved" });
       },
-      orderRepository: repository,
+      repository,
       now
     });
 
@@ -609,40 +573,6 @@ describe("Mercado Pago payment reconciliation", () => {
     expect(repository.getOrder()?.status).toBe(ORDER_STATUS.pendingPayment);
   });
 });
-
-function createTestPaymentEventRecorder(): {
-  record: PaymentEventRecorder;
-  read: () => PaymentEventRecord[];
-} {
-  const events: PaymentEventRecord[] = [];
-
-  return {
-    record: async (
-      event: PaymentEventRecord
-    ): Promise<RecordPaymentEventOnceResult> => {
-      const existingEvent = events.find(
-        (candidateEvent) =>
-          candidateEvent.provider === event.provider &&
-          candidateEvent.providerEventId === event.providerEventId
-      );
-
-      if (existingEvent) {
-        return {
-          status: "duplicate",
-          event: clonePaymentEvent(existingEvent)
-        };
-      }
-
-      events.push(clonePaymentEvent(event));
-
-      return {
-        status: "recorded",
-        event: clonePaymentEvent(event)
-      };
-    },
-    read: () => events.map(clonePaymentEvent)
-  };
-}
 
 function clonePaymentEvent(event: PaymentEventRecord): PaymentEventRecord {
   return {
@@ -736,6 +666,35 @@ function createOrderRepository(
   const variantStock = new Map<string, number>(
     Object.entries(stockByVariantId ?? getDefaultVariantStock(order))
   );
+  const events: PaymentEventRecord[] = [];
+  const findStoredPaymentEvent = ({
+    provider,
+    providerEventId
+  }: PaymentEventIdentity): PaymentEventRecord | null =>
+    events.find(
+      (candidateEvent) =>
+        candidateEvent.provider === provider &&
+        candidateEvent.providerEventId === providerEventId
+    ) ?? null;
+  const recordPaymentEvent = async (
+    event: PaymentEventRecord
+  ): Promise<RecordPaymentEventOnceResult> => {
+    const existingEvent = findStoredPaymentEvent(event);
+
+    if (existingEvent) {
+      return {
+        status: "duplicate",
+        event: clonePaymentEvent(existingEvent)
+      };
+    }
+
+    events.push(clonePaymentEvent(event));
+
+    return {
+      status: "recorded",
+      event: clonePaymentEvent(event)
+    };
+  };
 
   return {
     transitionCount: 0,
@@ -764,12 +723,19 @@ function createOrderRepository(
 
       return cloneOrder(currentOrder);
     },
+    async findPaymentEvent(
+      identity: PaymentEventIdentity
+    ): Promise<PaymentEventRecord | null> {
+      const event = findStoredPaymentEvent(identity);
+
+      return event ? clonePaymentEvent(event) : null;
+    },
+    recordPaymentEvent,
     async markOrderPaidAndDecrementStock(input: {
       orderId: string;
       reason?: string;
       actor?: string;
       paymentEvent?: PaymentEventRecord;
-      paymentEventRecorder?: PaymentEventRecorder;
     }) {
       const { orderId } = input;
 
@@ -798,8 +764,8 @@ function createOrderRepository(
         }
       }
 
-      if (input.paymentEvent && input.paymentEventRecorder) {
-        const claimResult = await input.paymentEventRecorder(input.paymentEvent);
+      if (input.paymentEvent) {
+        const claimResult = await recordPaymentEvent(input.paymentEvent);
 
         if (claimResult.status === "duplicate") {
           return {
@@ -835,11 +801,14 @@ function createOrderRepository(
     },
     readVariantStock(variantId: string): number | null {
       return variantStock.get(variantId) ?? null;
+    },
+    readEvents(): PaymentEventRecord[] {
+      return events.map(clonePaymentEvent);
     }
   };
 }
 
-type TestOrderRepository = PaymentReconciliationOrderRepository & {
+type TestOrderRepository = PaymentReconciliationRepository & {
   transitionCount: number;
   lastUpdate: {
     orderId: string;
@@ -849,6 +818,7 @@ type TestOrderRepository = PaymentReconciliationOrderRepository & {
   } | null;
   getOrder: () => Order | null;
   readVariantStock: (variantId: string) => number | null;
+  readEvents: () => PaymentEventRecord[];
 };
 
 function getDefaultVariantStock(order: Order | null): Record<string, number> {

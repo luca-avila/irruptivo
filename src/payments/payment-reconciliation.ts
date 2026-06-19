@@ -35,7 +35,7 @@ import {
 
 export type { MercadoPagoPayment } from "./mercado-pago-webhook";
 
-export type PaymentReconciliationOrderRepository = {
+export type PaymentReconciliationRepository = {
   findOrderById: (orderId: string) => Promise<Order | null>;
   updateOrderStatus: (input: {
     orderId: string;
@@ -48,8 +48,9 @@ export type PaymentReconciliationOrderRepository = {
     reason?: string;
     actor?: string;
     paymentEvent?: PaymentEventRecord;
-    paymentEventRecorder?: PaymentEventRecorder;
   }) => Promise<ApprovedPaymentSettlementResult>;
+  findPaymentEvent: PaymentEventFinder;
+  recordPaymentEvent: PaymentEventRecorder;
 };
 
 export type MercadoPagoPaymentProvider = (
@@ -89,9 +90,7 @@ export type PaymentReconciliationConfig = {
 
 export type ReconcileMercadoPagoEventOptions = {
   paymentProvider?: MercadoPagoPaymentProvider;
-  orderRepository?: PaymentReconciliationOrderRepository;
-  eventRecorder?: PaymentEventRecorder;
-  eventFinder?: PaymentEventFinder;
+  repository?: PaymentReconciliationRepository;
   confirmationEmailSender?: OrderConfirmationEmailSender;
   adminNotificationEmailSender?: AdminOrderNotificationEmailSender;
   config?: PaymentReconciliationConfig;
@@ -138,19 +137,19 @@ export type PaymentReconciliationResult =
       providerPaymentId: string;
     };
 
-const defaultOrderRepository: PaymentReconciliationOrderRepository = {
+const defaultRepository: PaymentReconciliationRepository = {
   findOrderById: findOrderByIdInStore,
   updateOrderStatus: updateOrderStatusInStore,
-  markOrderPaidAndDecrementStock: markOrderPaidAndDecrementStockInStore
+  markOrderPaidAndDecrementStock: markOrderPaidAndDecrementStockInStore,
+  findPaymentEvent: findPaymentEventByIdentity,
+  recordPaymentEvent: recordPaymentEventOnce
 };
 
 export async function reconcileMercadoPagoEvent(
   notification: MercadoPagoWebhookNotification,
   {
     paymentProvider,
-    orderRepository = defaultOrderRepository,
-    eventRecorder = recordPaymentEventOnce,
-    eventFinder,
+    repository = defaultRepository,
     confirmationEmailSender = sendOrderConfirmationOnce,
     adminNotificationEmailSender = sendConfiguredAdminOrderNotificationOnce,
     config = {},
@@ -185,7 +184,7 @@ export async function reconcileMercadoPagoEvent(
     };
   }
 
-  const order = await orderRepository.findOrderById(orderId);
+  const order = await repository.findOrderById(orderId);
 
   if (!order || !isPaymentForOrder(payment, order)) {
     return !order
@@ -201,12 +200,7 @@ export async function reconcileMercadoPagoEvent(
   }
 
   const providerEventId = getProviderEventId(notification, payment);
-  const findRecordedEvent =
-    eventFinder ??
-    (eventRecorder === recordPaymentEventOnce
-      ? findPaymentEventByIdentity
-      : async () => null);
-  const existingEvent = await findRecordedEvent({
+  const existingEvent = await repository.findPaymentEvent({
     provider: "mercado_pago",
     providerEventId
   });
@@ -222,7 +216,7 @@ export async function reconcileMercadoPagoEvent(
   const providerStatus = mapMercadoPagoPaymentStatus(payment.status);
   const reconciledOrder = await expirePendingPaymentOrderIfNeeded({
     order,
-    orderRepository,
+    repository,
     now
   });
   const processingResult = getProcessingResult(
@@ -242,7 +236,7 @@ export async function reconcileMercadoPagoEvent(
     reconciledOrder.status === ORDER_STATUS.pendingPayment;
 
   if (!recordsPaymentEventInSettlement) {
-    const recordResult = await eventRecorder(paymentEventRecord);
+    const recordResult = await repository.recordPaymentEvent(paymentEventRecord);
 
     if (recordResult.status === "duplicate") {
       return {
@@ -270,8 +264,7 @@ export async function reconcileMercadoPagoEvent(
       paymentEventRecord: recordsPaymentEventInSettlement
         ? paymentEventRecord
         : null,
-      orderRepository,
-      eventRecorder,
+      repository,
       confirmationEmailSender,
       adminNotificationEmailSender,
       now
@@ -281,7 +274,7 @@ export async function reconcileMercadoPagoEvent(
   return reconcileFailedPayment({
     order: reconciledOrder,
     payment,
-    orderRepository
+    repository
   });
 }
 
@@ -322,18 +315,18 @@ export async function reconcileMercadoPagoPaymentById(
 
 async function expirePendingPaymentOrderIfNeeded({
   order,
-  orderRepository,
+  repository,
   now
 }: {
   order: Order;
-  orderRepository: PaymentReconciliationOrderRepository;
+  repository: PaymentReconciliationRepository;
   now: Date | string;
 }): Promise<Order> {
   const expirationResult = await expirePendingPaymentOrders({
     now,
     orderRepository: {
       listOrders: async () => [order],
-      updateOrderStatus: (input) => orderRepository.updateOrderStatus(input)
+      updateOrderStatus: (input) => repository.updateOrderStatus(input)
     }
   });
 
@@ -342,7 +335,7 @@ async function expirePendingPaymentOrderIfNeeded({
   }
 
   return (
-    (await orderRepository.findOrderById(order.id)) ?? {
+    (await repository.findOrderById(order.id)) ?? {
       ...order,
       status: ORDER_STATUS.expired
     }
@@ -355,8 +348,7 @@ async function reconcileApprovedPayment({
   payment,
   providerEventId,
   paymentEventRecord,
-  orderRepository,
-  eventRecorder,
+  repository,
   confirmationEmailSender,
   adminNotificationEmailSender,
   now
@@ -366,8 +358,7 @@ async function reconcileApprovedPayment({
   payment: MercadoPagoPayment;
   providerEventId: string;
   paymentEventRecord: PaymentEventRecord | null;
-  orderRepository: PaymentReconciliationOrderRepository;
-  eventRecorder: PaymentEventRecorder;
+  repository: PaymentReconciliationRepository;
   confirmationEmailSender: OrderConfirmationEmailSender;
   adminNotificationEmailSender: AdminOrderNotificationEmailSender;
   now: Date | string;
@@ -389,20 +380,19 @@ async function reconcileApprovedPayment({
     };
   }
 
-  const settlementResult = await orderRepository.markOrderPaidAndDecrementStock({
+  const settlementResult = await repository.markOrderPaidAndDecrementStock({
     orderId: order.id,
     reason: "payment_approved",
-    paymentEvent: paymentEventRecord ?? undefined,
-    paymentEventRecorder: eventRecorder
+    paymentEvent: paymentEventRecord ?? undefined
   });
 
   if (settlementResult.status === "insufficient_stock") {
-    await orderRepository.updateOrderStatus({
+    await repository.updateOrderStatus({
       orderId: settlementResult.order.id,
       status: ORDER_STATUS.expired,
       reason: "insufficient_stock_on_payment"
     });
-    await eventRecorder(
+    await repository.recordPaymentEvent(
       buildPaymentEventRecord({
         notification,
         payment,
@@ -686,11 +676,11 @@ async function sendConfiguredAdminOrderNotificationOnce(
 async function reconcileFailedPayment({
   order,
   payment,
-  orderRepository
+  repository
 }: {
   order: Order;
   payment: MercadoPagoPayment;
-  orderRepository: PaymentReconciliationOrderRepository;
+  repository: PaymentReconciliationRepository;
 }): Promise<PaymentReconciliationResult> {
   if (order.status !== ORDER_STATUS.pendingPayment) {
     return {
@@ -700,7 +690,7 @@ async function reconcileFailedPayment({
     };
   }
 
-  const updatedOrder = await orderRepository.updateOrderStatus({
+  const updatedOrder = await repository.updateOrderStatus({
     orderId: order.id,
     status: ORDER_STATUS.paymentFailed,
     reason: "payment_failed"

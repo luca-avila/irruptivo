@@ -4,6 +4,7 @@ import { DELIVERY_METHOD, ORDER_STATUS, type OrderStatus } from "../domain/rules
 import { type Order } from "../orders/order-creation";
 import {
   buildPaymentManualReviewState,
+  type PaymentEventIdentity,
   type PaymentEventRecord,
   type RecordPaymentEventOnceResult
 } from "./payment-events";
@@ -11,8 +12,7 @@ import {
   reconcileMercadoPagoEvent,
   type ApprovedPaymentSettlementResult,
   type MercadoPagoPayment,
-  type PaymentEventRecorder,
-  type PaymentReconciliationOrderRepository
+  type PaymentReconciliationRepository
 } from "./payment-reconciliation";
 
 const createdAt = "2026-05-30T12:00:00.000Z";
@@ -20,12 +20,10 @@ const createdAt = "2026-05-30T12:00:00.000Z";
 describe("Mercado Pago reconciliation with pending-payment expiration", () => {
   it("keeps an already expired order out of automatic fulfillment after a late success", async () => {
     const repository = createOrderRepository(getOrder(ORDER_STATUS.expired));
-    const eventRecorder = createTestPaymentEventRecorder();
 
     const result = await reconcileMercadoPagoEvent(getNotification(), {
       paymentProvider: async () => getPayment({ status: "approved" }),
-      orderRepository: repository,
-      eventRecorder: eventRecorder.record,
+      repository,
       now: createdAt
     });
 
@@ -37,7 +35,7 @@ describe("Mercado Pago reconciliation with pending-payment expiration", () => {
     });
     expect(repository.getOrder()?.status).toBe(ORDER_STATUS.expired);
     expect(
-      buildPaymentManualReviewState("order-001", eventRecorder.read())
+      buildPaymentManualReviewState("order-001", repository.readEvents())
     ).toMatchObject({
       required: true,
       label: "Revisión manual requerida",
@@ -48,12 +46,10 @@ describe("Mercado Pago reconciliation with pending-payment expiration", () => {
 
   it("expires a still-pending order before a late success can enter fulfillment", async () => {
     const repository = createOrderRepository(getOrder(ORDER_STATUS.pendingPayment));
-    const eventRecorder = createTestPaymentEventRecorder();
 
     const result = await reconcileMercadoPagoEvent(getNotification(), {
       paymentProvider: async () => getPayment({ status: "approved" }),
-      orderRepository: repository,
-      eventRecorder: eventRecorder.record,
+      repository,
       now: "2026-05-30T12:31:00.000Z"
     });
 
@@ -66,7 +62,7 @@ describe("Mercado Pago reconciliation with pending-payment expiration", () => {
     expect(repository.getOrder()?.status).toBe(ORDER_STATUS.expired);
     expect(repository.transitionCount).toBe(1);
     expect(
-      buildPaymentManualReviewState("order-001", eventRecorder.read())
+      buildPaymentManualReviewState("order-001", repository.readEvents())
     ).toMatchObject({
       required: true,
       label: "Revisión manual requerida",
@@ -74,40 +70,6 @@ describe("Mercado Pago reconciliation with pending-payment expiration", () => {
     });
   });
 });
-
-function createTestPaymentEventRecorder(): {
-  record: PaymentEventRecorder;
-  read: () => PaymentEventRecord[];
-} {
-  const events: PaymentEventRecord[] = [];
-
-  return {
-    record: async (
-      event: PaymentEventRecord
-    ): Promise<RecordPaymentEventOnceResult> => {
-      const existingEvent = events.find(
-        (candidateEvent) =>
-          candidateEvent.provider === event.provider &&
-          candidateEvent.providerEventId === event.providerEventId
-      );
-
-      if (existingEvent) {
-        return {
-          status: "duplicate",
-          event: clonePaymentEvent(existingEvent)
-        };
-      }
-
-      events.push(clonePaymentEvent(event));
-
-      return {
-        status: "recorded",
-        event: clonePaymentEvent(event)
-      };
-    },
-    read: () => events.map(clonePaymentEvent)
-  };
-}
 
 function clonePaymentEvent(event: PaymentEventRecord): PaymentEventRecord {
   return {
@@ -150,6 +112,35 @@ function getPayment({
 function createOrderRepository(order: Order | null): TestOrderRepository {
   let currentOrder = order ? cloneOrder(order) : null;
   let transitionCount = 0;
+  const events: PaymentEventRecord[] = [];
+  const findStoredPaymentEvent = ({
+    provider,
+    providerEventId
+  }: PaymentEventIdentity): PaymentEventRecord | null =>
+    events.find(
+      (candidateEvent) =>
+        candidateEvent.provider === provider &&
+        candidateEvent.providerEventId === providerEventId
+    ) ?? null;
+  const recordPaymentEvent = async (
+    event: PaymentEventRecord
+  ): Promise<RecordPaymentEventOnceResult> => {
+    const existingEvent = findStoredPaymentEvent(event);
+
+    if (existingEvent) {
+      return {
+        status: "duplicate",
+        event: clonePaymentEvent(existingEvent)
+      };
+    }
+
+    events.push(clonePaymentEvent(event));
+
+    return {
+      status: "recorded",
+      event: clonePaymentEvent(event)
+    };
+  };
 
   return {
     get transitionCount() {
@@ -179,6 +170,14 @@ function createOrderRepository(order: Order | null): TestOrderRepository {
 
       return cloneOrder(currentOrder);
     },
+    async findPaymentEvent(
+      identity: PaymentEventIdentity
+    ): Promise<PaymentEventRecord | null> {
+      const event = findStoredPaymentEvent(identity);
+
+      return event ? clonePaymentEvent(event) : null;
+    },
+    recordPaymentEvent,
     async markOrderPaidAndDecrementStock(): Promise<ApprovedPaymentSettlementResult> {
       throw new Error(
         "markOrderPaidAndDecrementStock should not run in expiration tests"
@@ -186,13 +185,17 @@ function createOrderRepository(order: Order | null): TestOrderRepository {
     },
     getOrder(): Order | null {
       return currentOrder ? cloneOrder(currentOrder) : null;
+    },
+    readEvents(): PaymentEventRecord[] {
+      return events.map(clonePaymentEvent);
     }
   };
 }
 
-type TestOrderRepository = PaymentReconciliationOrderRepository & {
+type TestOrderRepository = PaymentReconciliationRepository & {
   readonly transitionCount: number;
   getOrder: () => Order | null;
+  readEvents: () => PaymentEventRecord[];
 };
 
 function getOrder(status: OrderStatus): Order {
