@@ -91,7 +91,12 @@ export async function createCheckoutPaymentHandoff({
   if (orderResult.order.paymentPreference) {
     return {
       status: "created",
-      order: getOrderHandoff(orderResult.order),
+      order: {
+        orderId: orderResult.order.id,
+        orderNumber: orderResult.order.orderNumber,
+        guestAccessToken: orderResult.order.guestAccessToken,
+        totalArs: orderResult.order.totalArs
+      },
       payment: orderResult.order.paymentPreference,
       updatedCart: cloneCart(orderResult.updatedCart),
       isDuplicate: orderResult.isDuplicate
@@ -119,24 +124,15 @@ export async function createCheckoutPaymentHandoff({
 
   return {
     status: "created",
-    order: getOrderHandoff(orderResult.order),
+    order: {
+      orderId: orderResult.order.id,
+      orderNumber: orderResult.order.orderNumber,
+      guestAccessToken: orderResult.order.guestAccessToken,
+      totalArs: orderResult.order.totalArs
+    },
     payment: paymentPreferenceResult.preference,
     updatedCart: cloneCart(orderResult.updatedCart),
     isDuplicate: orderResult.isDuplicate
-  };
-}
-
-function getOrderHandoff(order: {
-  id: string;
-  orderNumber: string;
-  guestAccessToken: string;
-  totalArs: number;
-}): PendingOrderPaymentHandoff {
-  return {
-    orderId: order.id,
-    orderNumber: order.orderNumber,
-    guestAccessToken: order.guestAccessToken,
-    totalArs: order.totalArs
   };
 }
 

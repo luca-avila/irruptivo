@@ -1,5 +1,9 @@
 import { randomUUID } from "node:crypto";
 
+import { getDate } from "../shared/date-utils";
+import { assertNonEmptyString } from "../shared/string-utils";
+import { normalizeAbsoluteUrlHref } from "../shared/url-utils";
+
 export type EmailRecipient = {
   email: string;
   name?: string;
@@ -287,7 +291,7 @@ function normalizeHttpEmailProviderConfig(config: EmailProviderConfig):
       status: "missing";
       missingConfig: string[];
     } {
-  const providerUrl = normalizeAbsoluteUrl(config.providerUrl);
+  const providerUrl = normalizeAbsoluteUrlHref(config.providerUrl);
   const providerToken = config.providerToken?.trim() ?? "";
   const fromEmail = config.fromEmail?.trim() ?? "";
   const fromName = config.fromName?.trim() || DEFAULT_FROM_NAME;
@@ -407,26 +411,6 @@ function formatEmailAddress(recipient: EmailRecipient): string {
     : recipient.email;
 }
 
-function normalizeAbsoluteUrl(value: string | null | undefined): string | null {
-  const trimmedValue = value?.trim();
-
-  if (!trimmedValue) {
-    return null;
-  }
-
-  try {
-    const url = new URL(trimmedValue);
-
-    if (url.protocol !== "https:" && url.protocol !== "http:") {
-      return null;
-    }
-
-    return url.toString();
-  } catch {
-    return null;
-  }
-}
-
 function cloneLocalEmailOutboxRecord(
   record: LocalEmailOutboxRecord
 ): LocalEmailOutboxRecord {
@@ -451,20 +435,4 @@ function cloneEmailMessage(message: EmailMessage): EmailMessage {
         }
       : {})
   };
-}
-
-function getDate(value: Date | string, name: string): Date {
-  const date = typeof value === "string" ? new Date(value) : value;
-
-  if (Number.isNaN(date.getTime())) {
-    throw new RangeError(`${name} must be a valid date`);
-  }
-
-  return date;
-}
-
-function assertNonEmptyString(value: string, name: string): void {
-  if (value.trim().length === 0) {
-    throw new RangeError(`${name} must be a non-empty string`);
-  }
 }

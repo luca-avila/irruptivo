@@ -1,6 +1,8 @@
 import { type Prisma, type PaymentEvent as PaymentEventRow } from "@prisma/client";
 
 import { prisma, type PrismaClient } from "../db/client";
+import { isUniqueConstraintError } from "../shared/prisma-utils";
+import { assertNonEmptyString } from "../shared/string-utils";
 
 export type PaymentEventProvider = "mercado_pago";
 
@@ -296,23 +298,4 @@ function getLatestReceivedAt(
   }
 
   return latestReceivedAt;
-}
-
-function assertNonEmptyString(value: string, name: string): void {
-  if (value.trim().length === 0) {
-    throw new RangeError(`${name} must be a non-empty string`);
-  }
-}
-
-function isUniqueConstraintError(error: unknown): boolean {
-  return isPrismaKnownError(error, "P2002");
-}
-
-function isPrismaKnownError(error: unknown, code: string): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    (error as { code?: unknown }).code === code
-  );
 }

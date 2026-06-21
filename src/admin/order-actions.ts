@@ -1,5 +1,7 @@
 "use server";
 
+import { readStringField } from "../shared/form-utils";
+
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
@@ -80,12 +82,6 @@ export async function resendFulfillmentUpdateEmail(
       result
     )}`
   );
-}
-
-function readStringField(formData: FormData, name: string): string {
-  const value = formData.get(name);
-
-  return typeof value === "string" ? value : "";
 }
 
 function getTransitionErrorRedirect(

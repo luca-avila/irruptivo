@@ -1,5 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
+import { normalizeAbsoluteUrlOrigin } from "../shared/url-utils";
+
 const MERCADO_PAGO_API_BASE_URL = "https://api.mercadopago.com";
 const WEBHOOK_SIGNATURE_TOLERANCE_MS = 10 * 60 * 1000;
 
@@ -66,7 +68,7 @@ export function normalizeMercadoPagoWebhookConfig(
   const accessToken = config.accessToken?.trim() ?? "";
   const webhookSecret = config.webhookSecret?.trim() ?? "";
   const apiBaseUrl =
-    normalizeAbsoluteUrl(config.apiBaseUrl) ?? MERCADO_PAGO_API_BASE_URL;
+    normalizeAbsoluteUrlOrigin(config.apiBaseUrl) ?? MERCADO_PAGO_API_BASE_URL;
 
   if (!accessToken || !webhookSecret) {
     return null;
@@ -159,7 +161,7 @@ export async function fetchMercadoPagoPayment(
   const normalizedPaymentId = paymentId.trim();
   const normalizedAccessToken = accessToken.trim();
   const normalizedApiBaseUrl =
-    normalizeAbsoluteUrl(apiBaseUrl) ?? MERCADO_PAGO_API_BASE_URL;
+    normalizeAbsoluteUrlOrigin(apiBaseUrl) ?? MERCADO_PAGO_API_BASE_URL;
 
   if (!normalizedPaymentId || !normalizedAccessToken) {
     return null;
@@ -289,24 +291,4 @@ function readRequiredWebhookString(value: unknown): string | null {
 
 function readOptionalWebhookString(value: unknown): string | null {
   return readRequiredWebhookString(value);
-}
-
-function normalizeAbsoluteUrl(value: string | null | undefined): string | null {
-  const trimmedValue = value?.trim();
-
-  if (!trimmedValue) {
-    return null;
-  }
-
-  try {
-    const url = new URL(trimmedValue);
-
-    if (url.protocol !== "https:" && url.protocol !== "http:") {
-      return null;
-    }
-
-    return url.origin;
-  } catch {
-    return null;
-  }
 }

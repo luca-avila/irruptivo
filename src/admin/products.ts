@@ -23,6 +23,12 @@ import {
 } from "../catalog/variants";
 import { prisma } from "../db/client";
 import { type AvailabilityLabel } from "../domain/rules";
+import { generateUniqueId } from "../shared/id-utils";
+import {
+  normalizeOptionalText,
+  normalizeText,
+  slugify
+} from "../shared/string-utils";
 
 export type ProductCreateInput = {
   name: string;
@@ -1177,19 +1183,7 @@ function generateUniqueProductId(
   const baseId = `product-${slugify(productName) || "producto"}`;
   const existingIds = new Set(products.map((product) => product.id));
 
-  if (!existingIds.has(baseId)) {
-    return baseId;
-  }
-
-  let suffix = 2;
-  let candidate = `${baseId}-${suffix}`;
-
-  while (existingIds.has(candidate)) {
-    suffix += 1;
-    candidate = `${baseId}-${suffix}`;
-  }
-
-  return candidate;
+  return generateUniqueId(baseId, existingIds);
 }
 
 function generateUniqueSlug(
@@ -1199,33 +1193,7 @@ function generateUniqueSlug(
   const baseSlug = slugify(productName) || "producto";
   const existingSlugs = new Set(products.map((product) => product.slug));
 
-  if (!existingSlugs.has(baseSlug)) {
-    return baseSlug;
-  }
-
-  let suffix = 2;
-  let candidate = `${baseSlug}-${suffix}`;
-
-  while (existingSlugs.has(candidate)) {
-    suffix += 1;
-    candidate = `${baseSlug}-${suffix}`;
-  }
-
-  return candidate;
-}
-
-function slugify(value: string): string {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
-
-function normalizeText(value: string): string {
-  return value.trim().replace(/\s+/g, " ");
+  return generateUniqueId(baseSlug, existingSlugs);
 }
 
 function normalizeDescription(value: string): string {
@@ -1239,12 +1207,6 @@ function normalizeDescription(value: string): string {
 
 function normalizeSku(value: string): string {
   return normalizeText(value).toLocaleUpperCase("es-AR");
-}
-
-function normalizeOptionalText(value: string | null | undefined): string | null {
-  const normalizedValue = value?.trim().replace(/\s+/g, " ") ?? "";
-
-  return normalizedValue || null;
 }
 
 function isProductStatus(value: string): value is ProductStatus {

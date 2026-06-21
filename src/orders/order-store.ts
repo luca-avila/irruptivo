@@ -8,6 +8,12 @@ import {
   type DeliveryMethodLabel,
   type OrderStatus
 } from "../domain/rules";
+import { getDate } from "../shared/date-utils";
+import {
+  isPrismaKnownError,
+  isRecordNotFoundError,
+  isUniqueConstraintError
+} from "../shared/prisma-utils";
 import { prisma, type PrismaClient } from "../db/client";
 import {
   createPendingOrderFromCheckout,
@@ -86,7 +92,7 @@ export async function createPendingOrderInStore({
   if (existingOrder) {
     return {
       status: "created",
-      order: clonePendingOrder(existingOrder as PendingOrder),
+      order: cloneOrder(existingOrder as PendingOrder),
       updatedCart: cloneCart(cart),
       isDuplicate: true
     };
@@ -156,7 +162,7 @@ export async function createPendingOrderInStore({
 
     return {
       status: "created",
-      order: clonePendingOrder(createdOrder as PendingOrder),
+      order: cloneOrder(createdOrder as PendingOrder),
       updatedCart: cloneCart(result.updatedCart),
       isDuplicate: false
     };
@@ -173,7 +179,7 @@ export async function createPendingOrderInStore({
 
     return {
       status: "created",
-      order: clonePendingOrder(duplicateOrder as PendingOrder),
+      order: cloneOrder(duplicateOrder as PendingOrder),
       updatedCart: cloneCart(cart),
       isDuplicate: true
     };
@@ -254,7 +260,7 @@ export async function storePendingOrderPaymentPreference({
     throw error;
   });
 
-  return order ? clonePendingOrder(mapOrderRecordToOrder(order) as PendingOrder) : null;
+  return order ? cloneOrder(mapOrderRecordToOrder(order) as PendingOrder) : null;
 }
 
 export async function updateOrderStatusInStore({
@@ -486,10 +492,6 @@ function getOrderCreateInput({
   };
 }
 
-function clonePendingOrder(order: PendingOrder): PendingOrder {
-  return cloneOrder(order);
-}
-
 function cloneOrder<T extends Order>(order: T): T {
   return {
     ...order,
@@ -511,17 +513,9 @@ function cloneOrder<T extends Order>(order: T): T {
       }
     })),
     paymentPreference: order.paymentPreference
-      ? clonePaymentPreference(order.paymentPreference)
+      ? { ...order.paymentPreference }
       : null
   } as T;
-}
-
-function clonePaymentPreference(
-  paymentPreference: PendingOrderPaymentPreference
-): PendingOrderPaymentPreference {
-  return {
-    ...paymentPreference
-  };
 }
 
 function cloneCart(cart: Cart): Cart {
@@ -530,16 +524,6 @@ function cloneCart(cart: Cart): Cart {
       ...item
     }))
   };
-}
-
-function getDate(value: Date | string, name: string): Date {
-  const date = typeof value === "string" ? new Date(value) : value;
-
-  if (Number.isNaN(date.getTime())) {
-    throw new RangeError(`${name} must be a valid date`);
-  }
-
-  return date;
 }
 
 function getDefaultStatusReason(status: OrderStatus): string {
@@ -562,21 +546,4 @@ function toDeliveryMethodLabel(label: string): DeliveryMethodLabel {
   }
 
   return label as DeliveryMethodLabel;
-}
-
-function isUniqueConstraintError(error: unknown): boolean {
-  return isPrismaKnownError(error, "P2002");
-}
-
-function isRecordNotFoundError(error: unknown): boolean {
-  return isPrismaKnownError(error, "P2025");
-}
-
-function isPrismaKnownError(error: unknown, code: string): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    (error as { code?: unknown }).code === code
-  );
 }

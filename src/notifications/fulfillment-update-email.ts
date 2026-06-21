@@ -4,7 +4,10 @@ import {
   getOrderStatusLabel,
   type OrderStatus
 } from "../domain/rules";
+import { getDate } from "../shared/date-utils";
+import { escapeHtml, sendEmailSafely } from "./email-helpers";
 import { buildGuestOrderStatusPath } from "../orders/guest-order-status";
+import { getDeliverySummary } from "../orders/order-delivery";
 import {
   type Order,
   type PendingOrderDeliverySnapshot
@@ -234,16 +237,6 @@ function getFulfillmentUpdateSubject(order: Order): string {
   return `Tu pedido ${order.orderNumber} está listo para retirar - Irruptivo`;
 }
 
-function getDeliverySummary(delivery: PendingOrderDeliverySnapshot): string {
-  if (delivery.method === DELIVERY_METHOD.shipping && delivery.shippingAddress) {
-    const { addressLine, city, province, postalCode } = delivery.shippingAddress;
-
-    return `${delivery.methodLabel}: ${addressLine}, ${city}, ${province} (${postalCode}).`;
-  }
-
-  return "Retiro local en Benavidez/Zona Norte. Coordinamos punto y horario por WhatsApp.";
-}
-
 function readFulfillmentUpdateEmailConfig(
   env: Record<string, string | undefined> = process.env
 ): FulfillmentUpdateEmailConfig {
@@ -255,37 +248,4 @@ function readFulfillmentUpdateEmailConfig(
       env.VERCEL_URL,
     whatsappUrl: env.NEXT_PUBLIC_WHATSAPP_URL
   };
-}
-
-async function sendEmailSafely(
-  emailProvider: (message: EmailMessage) => Promise<EmailSendResult>,
-  message: EmailMessage
-): Promise<EmailSendResult> {
-  try {
-    return await emailProvider(message);
-  } catch {
-    return {
-      status: "failed",
-      provider: "unknown",
-      message: "No pudimos enviar el email transaccional."
-    };
-  }
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
-}
-
-function getDate(value: Date | string, name: string): Date {
-  const date = typeof value === "string" ? new Date(value) : value;
-
-  if (Number.isNaN(date.getTime())) {
-    throw new RangeError(`${name} must be a valid date`);
-  }
-
-  return date;
 }

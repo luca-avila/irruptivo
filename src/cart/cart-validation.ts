@@ -3,10 +3,10 @@ import {
   type CatalogProductRecord,
   type CatalogProductVariantRecord
 } from "../catalog/catalog";
-import { resolveUnitPrice } from "../domain/rules";
+import { calculateLineTotal, resolveUnitPrice } from "../domain/rules";
+import { getDate } from "../shared/date-utils";
 import {
   CART_PRICE_SNAPSHOT_WINDOW_MS,
-  getLineTotal,
   type Cart,
   type CartItem
 } from "./cart";
@@ -241,7 +241,7 @@ function validateCartItem({
     variant,
     quantity: nextQuantity,
     unitPriceArs: priceRefresh.unitPriceArs,
-    lineTotalArs: getLineTotal({
+    lineTotalArs: calculateLineTotal({
       unitPriceArs: priceRefresh.unitPriceArs,
       quantity: nextQuantity
     }),
@@ -273,7 +273,7 @@ function getBlockedCartItem({
     variant,
     quantity: cartItem.quantity,
     unitPriceArs,
-    lineTotalArs: getLineTotal({
+    lineTotalArs: calculateLineTotal({
       unitPriceArs,
       quantity: cartItem.quantity
     }),
@@ -310,14 +310,4 @@ function getCurrentUnitPrice(
     productBasePriceArs: product.basePriceArs,
     variantPriceOverrideArs: variant.priceOverrideArs
   });
-}
-
-function getDate(value: Date | string, name: string): Date {
-  const date = typeof value === "string" ? new Date(value) : value;
-
-  if (Number.isNaN(date.getTime())) {
-    throw new RangeError(`${name} must be a valid date`);
-  }
-
-  return date;
 }

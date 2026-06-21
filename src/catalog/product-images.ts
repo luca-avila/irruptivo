@@ -2,6 +2,7 @@ import {
   getPublicMediaUrl,
   isValidProductMediaPath
 } from "../media/product-media";
+import { normalizeOptionalText, normalizeText } from "../shared/string-utils";
 import {
   type CatalogProductImageRecord,
   type CatalogProductImageRenditionRecord,
@@ -441,16 +442,6 @@ function hasSameUniqueValues(
   }
 
   return currentValues.every((value) => nextSet.has(value));
-}
-
-function normalizeText(value: string): string {
-  return value.trim().replace(/\s+/g, " ");
-}
-
-function normalizeOptionalText(value: string | null | undefined): string | null {
-  const normalizedValue = value?.trim().replace(/\s+/g, " ") ?? "";
-
-  return normalizedValue || null;
 }
 
 function normalizeImageMatchText(value: string | null | undefined): string | null {

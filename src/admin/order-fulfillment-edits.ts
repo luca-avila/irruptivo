@@ -1,4 +1,8 @@
 import { DELIVERY_METHOD, ORDER_STATUS, type OrderStatus } from "../domain/rules";
+import {
+  normalizeNullableText,
+  normalizeOptionalText
+} from "../shared/string-utils";
 import { type Order } from "../orders/order-creation";
 import {
   findOrderByIdInStore,
@@ -131,7 +135,7 @@ export async function updateOrderFulfillmentFields(
     orderRepository = defaultOrderRepository
   }: AdminOrderFulfillmentEditOptions = {}
 ): Promise<AdminOrderFulfillmentEditResult> {
-  const normalizedOrderId = normalizeText(orderId);
+  const normalizedOrderId = normalizeNullableText(orderId);
 
   if (!normalizedOrderId) {
     return getError("not_found");
@@ -313,7 +317,7 @@ function applyRequiredTextField({
   emptyCode: AdminOrderFulfillmentEditErrorCode;
   apply: (value: string) => void;
 }): AdminOrderFulfillmentEditResult {
-  const normalizedValue = normalizeText(value);
+  const normalizedValue = normalizeNullableText(value);
 
   if (!normalizedValue) {
     return getError(emptyCode);
@@ -373,7 +377,7 @@ function applyShippingAddressTextField({
     return getError("immutable_field", `delivery.shippingAddress.${key}`);
   }
 
-  const normalizedValue = normalizeText(value);
+  const normalizedValue = normalizeNullableText(value);
 
   if (!normalizedValue) {
     return getError(emptyCode, `delivery.shippingAddress.${key}`);
@@ -485,18 +489,8 @@ function getErrorMessage(
   }
 }
 
-function normalizeText(value: string | null | undefined): string {
-  return value?.trim().replace(/\s+/g, " ") ?? "";
-}
-
-function normalizeOptionalText(value: string | null | undefined): string | null {
-  const normalizedValue = normalizeText(value);
-
-  return normalizedValue || null;
-}
-
 function normalizeEmail(value: string | null | undefined): string {
-  return normalizeText(value).toLocaleLowerCase("es-AR");
+  return normalizeNullableText(value).toLocaleLowerCase("es-AR");
 }
 
 function cloneOrder(order: Order): Order {
