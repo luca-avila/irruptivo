@@ -1,12 +1,18 @@
 import { describe, expect, it } from "vitest";
 
-import { DELIVERY_METHOD, ORDER_STATUS, type OrderStatus } from "../domain/rules";
+import {
+  DELIVERY_METHOD,
+  ORDER_STATUS,
+  ORDER_STATUSES,
+  type OrderStatus
+} from "../domain/rules";
 import {
   type OrderConfirmationEmailResult
 } from "../notifications/order-confirmation-email";
 import { type AdminOrderNotificationResult } from "../notifications/admin-order-notification-email";
 import { type Order } from "../orders/order-creation";
 import {
+  PAYMENT_MANUAL_REVIEW_PROCESSING_RESULT,
   type PaymentEventIdentity,
   type PaymentEventRecord,
   type RecordPaymentEventOnceResult
@@ -339,6 +345,52 @@ describe("Mercado Pago payment reconciliation", () => {
     });
     expect(repository.getOrder()?.status).toBe(ORDER_STATUS.paid);
     expect(repository.readEvents()).toHaveLength(2);
+  });
+
+  it("stores processing results from the pre-settlement decision table", async () => {
+    const paymentStatusCases = [
+      {
+        paymentStatus: "pending",
+        expectedProcessingResult: () => "ignored"
+      },
+      {
+        paymentStatus: "approved",
+        expectedProcessingResult: (orderStatus: OrderStatus) =>
+          orderStatus === ORDER_STATUS.pendingPayment
+            ? "paid"
+            : orderStatus === ORDER_STATUS.expired
+              ? PAYMENT_MANUAL_REVIEW_PROCESSING_RESULT
+              : "ignored"
+      },
+      {
+        paymentStatus: "rejected",
+        expectedProcessingResult: (orderStatus: OrderStatus) =>
+          orderStatus === ORDER_STATUS.pendingPayment
+            ? "payment_failed"
+            : "ignored"
+      }
+    ];
+
+    for (const orderStatus of ORDER_STATUSES) {
+      for (const { paymentStatus, expectedProcessingResult } of paymentStatusCases) {
+        const repository = createOrderRepository(getOrder(orderStatus));
+
+        await reconcileMercadoPagoEvent(getNotification(), {
+          paymentProvider: async () => getPayment({ status: paymentStatus }),
+          repository,
+          confirmationEmailSender: async (order) =>
+            getSentConfirmationEmailResult(order),
+          adminNotificationEmailSender: async (order) =>
+            getSkippedAdminNotificationResult(order),
+          now
+        });
+
+        expect(repository.readEvents()[0]).toMatchObject({
+          providerStatus: paymentStatus,
+          processingResult: expectedProcessingResult(orderStatus)
+        });
+      }
+    }
   });
 
   it("does not automatically mark an expired order paid after a late success", async () => {

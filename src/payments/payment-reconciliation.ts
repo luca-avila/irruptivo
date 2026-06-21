@@ -131,6 +131,21 @@ export type PaymentReconciliationResult =
       providerPaymentId: string;
     };
 
+type ReconciliationProviderStatus = "approved" | "failed" | null;
+
+type ReconciliationDecision =
+  | { kind: "ignored_unsupported" }
+  | { kind: "settle_approved" }
+  | { kind: "manual_review_expired" }
+  | { kind: "already_reconciled" }
+  | { kind: "fail" };
+
+type PaymentEventProcessingResult =
+  | "ignored"
+  | "paid"
+  | "payment_failed"
+  | typeof PAYMENT_MANUAL_REVIEW_PROCESSING_RESULT;
+
 const defaultRepository: PaymentReconciliationRepository = {
   findOrderById: findOrderByIdInStore,
   updateOrderStatus: updateOrderStatusInStore,
@@ -199,7 +214,7 @@ export async function reconcileMercadoPagoEvent(
     repository,
     now
   });
-  const processingResult = getProcessingResult(
+  const decision = getReconciliationDecision(
     reconciledOrder.status,
     providerStatus
   );
@@ -208,12 +223,10 @@ export async function reconcileMercadoPagoEvent(
     payment,
     orderId: order.id,
     providerEventId,
-    processingResult,
+    processingResult: getProcessingResult(decision),
     receivedAt: getDate(now, "now").toISOString()
   });
-  const recordsPaymentEventInSettlement =
-    providerStatus === "approved" &&
-    reconciledOrder.status === ORDER_STATUS.pendingPayment;
+  const recordsPaymentEventInSettlement = decision.kind === "settle_approved";
 
   if (!recordsPaymentEventInSettlement) {
     const recordResult = await repository.recordPaymentEvent(paymentEventRecord);
@@ -227,35 +240,47 @@ export async function reconcileMercadoPagoEvent(
     }
   }
 
-  if (!providerStatus) {
-    return {
-      status: "ignored",
-      reason: "unsupported_payment_status",
-      providerPaymentId: payment.id
-    };
+  switch (decision.kind) {
+    case "ignored_unsupported":
+      return {
+        status: "ignored",
+        reason: "unsupported_payment_status",
+        providerPaymentId: payment.id
+      };
+    case "settle_approved":
+      return await reconcileApprovedPayment({
+        order: reconciledOrder,
+        notification,
+        payment,
+        providerEventId,
+        paymentEventRecord,
+        repository,
+        confirmationEmailSender,
+        adminNotificationEmailSender,
+        now
+      });
+    case "manual_review_expired":
+      return {
+        status: "manual_review_required",
+        orderId: reconciledOrder.id,
+        providerPaymentId: payment.id,
+        orderStatus: ORDER_STATUS.expired
+      };
+    case "already_reconciled":
+      return {
+        status: "ignored",
+        reason: "already_reconciled",
+        providerPaymentId: payment.id
+      };
+    case "fail":
+      return reconcileFailedPayment({
+        order: reconciledOrder,
+        payment,
+        repository
+      });
+    default:
+      return assertNever(decision);
   }
-
-  if (providerStatus === "approved") {
-    return await reconcileApprovedPayment({
-      order: reconciledOrder,
-      notification,
-      payment,
-      providerEventId,
-      paymentEventRecord: recordsPaymentEventInSettlement
-        ? paymentEventRecord
-        : null,
-      repository,
-      confirmationEmailSender,
-      adminNotificationEmailSender,
-      now
-    });
-  }
-
-  return reconcileFailedPayment({
-    order: reconciledOrder,
-    payment,
-    repository
-  });
 }
 
 /**
@@ -344,23 +369,6 @@ async function reconcileApprovedPayment({
   adminNotificationEmailSender: AdminOrderNotificationEmailSender;
   now: Date | string;
 }): Promise<PaymentReconciliationResult> {
-  if (order.status === ORDER_STATUS.expired) {
-    return {
-      status: "manual_review_required",
-      orderId: order.id,
-      providerPaymentId: payment.id,
-      orderStatus: ORDER_STATUS.expired
-    };
-  }
-
-  if (order.status !== ORDER_STATUS.pendingPayment) {
-    return {
-      status: "ignored",
-      reason: "already_reconciled",
-      providerPaymentId: payment.id
-    };
-  }
-
   const settlementResult = await repository.markOrderPaidAndDecrementStock({
     orderId: order.id,
     reason: "payment_approved",
@@ -663,14 +671,6 @@ async function reconcileFailedPayment({
   payment: MercadoPagoPayment;
   repository: PaymentReconciliationRepository;
 }): Promise<PaymentReconciliationResult> {
-  if (order.status !== ORDER_STATUS.pendingPayment) {
-    return {
-      status: "ignored",
-      reason: "already_reconciled",
-      providerPaymentId: payment.id
-    };
-  }
-
   const updatedOrder = await repository.updateOrderStatus({
     orderId: order.id,
     status: ORDER_STATUS.paymentFailed,
@@ -738,7 +738,7 @@ function getPaymentOrderId(payment: MercadoPagoPayment): string | null {
 
 function mapMercadoPagoPaymentStatus(
   status: string
-): "approved" | "failed" | null {
+): ReconciliationProviderStatus {
   const normalizedStatus = status.trim().toLowerCase();
 
   if (normalizedStatus === "approved") {
@@ -756,25 +756,50 @@ function mapMercadoPagoPaymentStatus(
   return null;
 }
 
-function getProcessingResult(
+function getReconciliationDecision(
   orderStatus: OrderStatus,
-  providerStatus: ReturnType<typeof mapMercadoPagoPaymentStatus>
-): string {
+  providerStatus: ReconciliationProviderStatus
+): ReconciliationDecision {
   if (!providerStatus) {
-    return "ignored";
+    return { kind: "ignored_unsupported" };
   }
 
   if (providerStatus === "approved") {
-    return orderStatus === ORDER_STATUS.expired
-      ? PAYMENT_MANUAL_REVIEW_PROCESSING_RESULT
-      : orderStatus === ORDER_STATUS.pendingPayment
-        ? "paid"
-        : "ignored";
+    if (orderStatus === ORDER_STATUS.pendingPayment) {
+      return { kind: "settle_approved" };
+    }
+
+    if (orderStatus === ORDER_STATUS.expired) {
+      return { kind: "manual_review_expired" };
+    }
+
+    return { kind: "already_reconciled" };
   }
 
-  return orderStatus === ORDER_STATUS.pendingPayment
-    ? "payment_failed"
-    : "ignored";
+  if (orderStatus === ORDER_STATUS.pendingPayment) {
+    return { kind: "fail" };
+  }
+
+  return { kind: "already_reconciled" };
+}
+
+function getProcessingResult(
+  decision: ReconciliationDecision
+): PaymentEventProcessingResult {
+  switch (decision.kind) {
+    case "ignored_unsupported":
+      return "ignored";
+    case "settle_approved":
+      return "paid";
+    case "manual_review_expired":
+      return PAYMENT_MANUAL_REVIEW_PROCESSING_RESULT;
+    case "already_reconciled":
+      return "ignored";
+    case "fail":
+      return "payment_failed";
+    default:
+      return assertNever(decision);
+  }
 }
 
 function buildPaymentEventRecord({
@@ -841,6 +866,10 @@ function isPrismaKnownError(error: unknown, code: string): boolean {
     "code" in error &&
     (error as { code?: unknown }).code === code
   );
+}
+
+function assertNever(value: never): never {
+  throw new Error(`Unhandled reconciliation decision: ${String(value)}`);
 }
 
 function getDate(value: Date | string, name: string): Date {
