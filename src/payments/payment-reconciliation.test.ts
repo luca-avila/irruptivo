@@ -79,7 +79,7 @@ describe("Mercado Pago payment reconciliation", () => {
     });
     expect(repository.readEvents()).toMatchObject([
       {
-        providerEventId: "event-001",
+        providerEventId: "payment-001:approved",
         providerPaymentId: "payment-001",
         orderId: "order-001",
         providerStatus: "approved",
@@ -188,7 +188,7 @@ describe("Mercado Pago payment reconciliation", () => {
     });
     expect(repository.readEvents()).toMatchObject([
       {
-        providerEventId: "event-001",
+        providerEventId: "payment-001:approved",
         processingResult: "paid"
       }
     ]);
@@ -197,7 +197,7 @@ describe("Mercado Pago payment reconciliation", () => {
     expect(repository.readVariantStock("creatina-300g")).toBe(9);
   });
 
-  it("does not decrement stock again for a second approved event with a different event id", async () => {
+  it("does not decrement stock again for a second approved event with a different notification id", async () => {
     const repository = createOrderRepository(getOrder(ORDER_STATUS.pendingPayment));
 
     const firstResult = await reconcileMercadoPagoEvent(
@@ -226,15 +226,15 @@ describe("Mercado Pago payment reconciliation", () => {
       orderId: "order-001"
     });
     expect(secondResult).toEqual({
-      status: "ignored",
-      reason: "already_reconciled",
+      status: "duplicate",
+      orderId: "order-001",
       providerPaymentId: "payment-001"
     });
     expect(repository.getOrder()?.status).toBe(ORDER_STATUS.paid);
     expect(repository.transitionCount).toBe(1);
     expect(repository.readVariantStock("tee-black-s")).toBe(8);
     expect(repository.readVariantStock("creatina-300g")).toBe(9);
-    expect(repository.readEvents()).toHaveLength(2);
+    expect(repository.readEvents()).toHaveLength(1);
   });
 
   it("does not repeat a failed transition for a duplicate failure event", async () => {
@@ -403,7 +403,7 @@ describe("Mercado Pago payment reconciliation", () => {
     expect(adminNotifications).toEqual([]);
     expect(repository.readEvents()).toMatchObject([
       {
-        providerEventId: "event-001:insufficient_stock",
+        providerEventId: "payment-001:approved:insufficient_stock",
         providerPaymentId: "payment-001",
         orderId: "order-001",
         providerStatus: "approved",
@@ -521,6 +521,67 @@ describe("Mercado Pago payment reconciliation", () => {
       }
     });
     expect(repository.getOrder()?.status).toBe(ORDER_STATUS.paid);
+  });
+
+  it("dedups an approved payment across webhook and buyer return reconciliation", async () => {
+    const repository = createOrderRepository(getOrder(ORDER_STATUS.pendingPayment));
+    const confirmationEmails: Order[] = [];
+
+    const webhookResult = await reconcileMercadoPagoEvent(
+      getNotification({
+        id: "event-001",
+        dataId: "payment-001"
+      }),
+      {
+        paymentProvider: async () => getPayment({ status: "approved" }),
+        repository,
+        confirmationEmailSender: async (order) => {
+          confirmationEmails.push(order);
+
+          return getSentConfirmationEmailResult(order);
+        },
+        adminNotificationEmailSender: async (order) =>
+          getSkippedAdminNotificationResult(order),
+        now
+      }
+    );
+    const returnResult = await reconcileMercadoPagoPaymentById("payment-001", {
+      paymentProvider: async () => getPayment({ status: "approved" }),
+      repository,
+      confirmationEmailSender: async (order) => {
+        confirmationEmails.push(order);
+
+        return getSentConfirmationEmailResult(order);
+      },
+      adminNotificationEmailSender: async (order) =>
+        getSkippedAdminNotificationResult(order),
+      now
+    });
+
+    expect(webhookResult).toMatchObject({
+      status: "paid",
+      orderId: "order-001",
+      providerPaymentId: "payment-001"
+    });
+    expect(returnResult).toEqual({
+      status: "duplicate",
+      orderId: "order-001",
+      providerPaymentId: "payment-001"
+    });
+    expect(repository.getOrder()?.status).toBe(ORDER_STATUS.paid);
+    expect(repository.transitionCount).toBe(1);
+    expect(repository.readVariantStock("tee-black-s")).toBe(8);
+    expect(repository.readVariantStock("creatina-300g")).toBe(9);
+    expect(confirmationEmails).toHaveLength(1);
+    expect(repository.readEvents()).toMatchObject([
+      {
+        providerEventId: "payment-001:approved",
+        providerPaymentId: "payment-001",
+        orderId: "order-001",
+        providerStatus: "approved",
+        processingResult: "paid"
+      }
+    ]);
   });
 
   it("reconciles to paid from only a payment id on the buyer's return", async () => {

@@ -192,7 +192,7 @@ export async function reconcileMercadoPagoEvent(
       };
   }
 
-  const providerEventId = getProviderEventId(notification, payment);
+  const providerEventId = getProviderEventId(payment);
   const providerStatus = mapMercadoPagoPaymentStatus(payment.status);
   const reconciledOrder = await expirePendingPaymentOrderIfNeeded({
     order,
@@ -264,7 +264,8 @@ export async function reconcileMercadoPagoEvent(
  * but the status, order ownership, and amount are all verified server-side
  * against the Mercado Pago API (the same checks as the webhook path), so the
  * redirect params act only as a trigger and cannot be forged into a
- * confirmation. Idempotent with the webhook via the order-level paid guard.
+ * confirmation. Idempotent with the webhook via the payment-derived
+ * PaymentEvent key and, ultimately, the order-level paid guard.
  */
 export async function reconcileMercadoPagoPaymentById(
   providerPaymentId: string,
@@ -804,15 +805,8 @@ function buildPaymentEventRecord({
   };
 }
 
-function getProviderEventId(
-  notification: MercadoPagoWebhookNotification,
-  payment: MercadoPagoPayment
-): string {
-  if (notification.id !== notification.dataId) {
-    return notification.id;
-  }
-
-  return `${notification.dataId}:${notification.action}:${payment.status}`;
+function getProviderEventId(payment: MercadoPagoPayment): string {
+  return `${payment.id}:${payment.status}`;
 }
 
 function getInsufficientStockProviderEventId(providerEventId: string): string {

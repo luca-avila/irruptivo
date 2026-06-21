@@ -359,7 +359,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
         )
       ).toMatchObject([
         {
-          providerEventId: "phase7-event-concurrent",
+          providerEventId: "phase7-payment-concurrent:approved",
           processingResult: "paid"
         }
       ]);

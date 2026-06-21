@@ -77,8 +77,9 @@ Entidades principales (`prisma/schema.prisma`):
   (nombre, slug, SKU, opciones, precio unitario y total de línea). Las refs a producto/
   variante son snapshots, no FKs.
 - **`OrderStatusHistory`** — auditoría de transiciones (from/to, razón, actor).
-- **`PaymentEvent`** — eventos del webhook con `@@unique([provider, providerEventId])`
-  para **idempotencia**.
+- **`PaymentEvent`** — ledger de eventos de pago con `@@unique([provider, providerEventId])`
+  para **idempotencia**; la clave se deriva de `payment.id + payment.status` para deduplicar
+  webhook y retorno, y la transición atómica del pedido sigue siendo el gate final.
 - **`EmailDelivery`** — estado de envío de emails transaccionales (idempotencia de
   "enviar una vez"), `@@unique` por `orderId + kind`. `kind` es un `String`
   (default `buyer_confirmation`); valores en uso: `buyer_confirmation`,
