@@ -39,6 +39,7 @@ negocio vive en módulos profundos bajo `src/`; las rutas y la UI bajo `app/`.
 | `admin/` | Auth/sesión de admin, gestión de productos/variantes/imágenes (incluye filtros, búsqueda instantánea, carga por lote, asociación de imágenes y borrado permanente de producto), cola y detalle de pedidos, transiciones de fulfillment, edición de contacto/fulfillment. |
 | `storefront/` | Homepage, navegación, páginas de confianza (trust), y `components/` (UI compartida del storefront). |
 | `media/` | Resolución y servido de media de producto desde el filesystem. |
+| `shared/` | Utilidades transversales sin dependencia de feature: fechas (`getDate`), strings (`normalizeText`, `slugify`, `assertNonEmptyString`), URLs, helpers de errores de Prisma, lectura de `FormData` y generación de ids únicos. Reutilizar antes de re-implementar. |
 | `db/client.ts` | Singleton del cliente Prisma. |
 
 ### `app/` — rutas (App Router)
@@ -120,8 +121,9 @@ Estados con pago bloqueado para el admin (`isAdminPaymentLockedOrderStatus`):
 5. **Confirmación (server-side).** La fuente de verdad es el **webhook**
    (`/api/mercado-pago/webhook`) con verificación de firma. La reconciliación
    (`payments/payment-reconciliation.ts`) actualiza el pedido a `paid`, registra el
-   `PaymentEvent` de forma idempotente y **decrementa el stock** (ver más abajo). El commit
-   más reciente también reconcilia al volver el comprador (no solo vía webhook).
+   `PaymentEvent` de forma idempotente y **decrementa el stock** (ver más abajo). La
+   reconciliación también corre al volver el comprador a las páginas de retorno (no solo vía
+   webhook), haciendo su propio fetch server-side a MP por payment id.
 6. **Emails de compra pagada.** Tras `paid`, se intenta enviar el email al comprador y el
    aviso interno al admin una sola vez por `kind` (idempotencia vía `EmailDelivery`). El
    destinatario admin se resuelve por DB (`StoreSettings`) y fallback

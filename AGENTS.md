@@ -48,6 +48,18 @@ npx prisma db seed       # datos de demo (prisma/seed.ts)
 - `prisma/schema.prisma` — modelo de datos (Product/Variant/Image, Order/Item/StatusHistory,
   PaymentEvent, EmailDelivery).
 
+### `src/shared/` — utilidades transversales
+
+Helpers compartidos extraídos de duplicación. Reutilizar acá antes de re-implementar.
+
+- `date-utils.ts` — `getDate` (coacciona `Date | string` validando, lanza si es inválida).
+- `string-utils.ts` — `normalizeText`/`normalizeNullableText`/`normalizeOptionalText`,
+  `slugify`, `assertNonEmptyString`.
+- `url-utils.ts` — `normalizeAbsoluteUrlOrigin`, `normalizeAbsoluteUrlHref`.
+- `prisma-utils.ts` — `isPrismaKnownError`, `isUniqueConstraintError`, `isRecordNotFoundError`.
+- `form-utils.ts` — `readStringField` (lee un campo string de `FormData`).
+- `id-utils.ts` — `generateUniqueId` (loop de sufijo-contador para ids/slugs únicos).
+
 ### `src/catalog/` — lectura de catálogo
 
 - `catalog.ts` — tipos y vistas públicas + queries: `listActiveProducts(ByArea)`,
@@ -82,6 +94,7 @@ npx prisma db seed       # datos de demo (prisma/seed.ts)
 - `order-store.ts` — persistencia de pedidos (Prisma): create/read/update, lookups por id y
   por retorno de pago.
 - `order-expiration.ts` — `expirePendingPaymentOrders` (expira a los 30 min, **lazy/on-read**).
+- `order-delivery.ts` — `getDeliverySummary` (resumen `es-AR` del envío/retiro de un pedido).
 - `guest-access-token.ts` — `createGuestOrderAccessToken`.
 - `guest-order-status.ts` — `getGuestOrderStatusByToken`, `getGuestOrderStatusView` (proyección
   `es-AR` para `/pedido/[token]`).
@@ -101,6 +114,8 @@ npx prisma db seed       # datos de demo (prisma/seed.ts)
 - `email-provider.ts` — adaptador agnóstico de proveedor (`sendEmail`). Modos según
   `IRRUPTIVO_EMAIL_PROVIDER`: `local` (outbox de dev), `http` (POST genérico) y `resend`
   (producción, `https://api.resend.com/emails`). Sumar otro proveedor = nueva función `send*`.
+- `email-helpers.ts` — `escapeHtml` (escape de HTML para cuerpos de email) y `sendEmailSafely`
+  (envío que captura errores en vez de propagarlos).
 - `order-confirmation-email.ts` — `sendOrderConfirmationOnce` (idempotente vía `EmailDelivery`),
   `buildOrderConfirmationEmailMessage`.
 - `admin-order-notification-email.ts` — `sendAdminOrderNotificationOnce` (aviso interno al

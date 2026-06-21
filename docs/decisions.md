@@ -57,7 +57,12 @@ The MVP needs real ecommerce payment behavior while avoiding custom payment proc
 
 Orders are created before redirecting to Mercado Pago with status `pending_payment`. Mercado Pago webhook/server-side verification is the source of truth for payment confirmation.
 
-Return pages are user-facing status pages only. They display the current known order/payment state but do not by themselves mark an order as paid.
+Return pages do not trust their URL parameters to mark an order as paid. When the buyer
+returns with a payment id, the page triggers a server-side reconciliation that fetches the
+payment from Mercado Pago's API by id (`reconcileMercadoPagoPaymentById`) — the same
+verification path as the webhook — and otherwise just displays the current known state. So a
+return can result in a `paid` order, but only through server-side verification, never from
+the return URL alone.
 
 ## Why
 
