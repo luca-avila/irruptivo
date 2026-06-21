@@ -1,5 +1,7 @@
 "use server";
 
+import { readStringField } from "../shared/form-utils";
+
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
@@ -47,12 +49,6 @@ function readSubmittedFields(formData: FormData): Record<string, string> {
   }
 
   return fields;
-}
-
-function readStringField(formData: FormData, name: string): string {
-  const value = formData.get(name);
-
-  return typeof value === "string" ? value : "";
 }
 
 function getOrderDetailPath(orderId: string): string {

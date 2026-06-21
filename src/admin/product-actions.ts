@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
+import { readStringField } from "../shared/form-utils";
+
 import {
   reorderProductImages,
   softDeleteProductImage,
@@ -590,12 +592,6 @@ function getProductImageBatchShape(
       imageUploadId: normalizedUploadIds[index] ?? ""
     }))
   };
-}
-
-function readStringField(formData: FormData, name: string): string {
-  const value = formData.get(name);
-
-  return typeof value === "string" ? value : "";
 }
 
 function readStringFields(

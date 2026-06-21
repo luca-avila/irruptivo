@@ -1,7 +1,13 @@
 import { z } from "zod";
 
 import {
+  normalizeNullableText,
+  normalizeOptionalText
+} from "../shared/string-utils";
+
+import {
   DELIVERY_METHODS,
+  assertNonNegativeInteger,
   calculateOrderTotal,
   getDeliveryCost,
   getDeliveryMethodLabel,
@@ -131,14 +137,14 @@ export function validateCheckoutInput(
 
   const checkoutInput = parsedInput.data;
   const errors: CheckoutValidationErrors = {};
-  const fullName = normalizeText(checkoutInput.fullName);
+  const fullName = normalizeNullableText(checkoutInput.fullName);
   const email = normalizeEmail(checkoutInput.email);
-  const phone = normalizeText(checkoutInput.phone);
+  const phone = normalizeNullableText(checkoutInput.phone);
   const deliveryMethod = normalizeDeliveryMethod(checkoutInput.deliveryMethod);
-  const addressLine = normalizeText(checkoutInput.addressLine);
-  const city = normalizeText(checkoutInput.city);
-  const province = normalizeText(checkoutInput.province);
-  const postalCode = normalizeText(checkoutInput.postalCode);
+  const addressLine = normalizeNullableText(checkoutInput.addressLine);
+  const city = normalizeNullableText(checkoutInput.city);
+  const province = normalizeNullableText(checkoutInput.province);
+  const postalCode = normalizeNullableText(checkoutInput.postalCode);
   const notes = normalizeOptionalText(checkoutInput.notes);
 
   if (!fullName) {
@@ -254,24 +260,14 @@ export function buildCheckoutSummary({
   };
 }
 
-function normalizeText(value: string | null | undefined): string {
-  return value?.trim().replace(/\s+/g, " ") ?? "";
-}
-
-function normalizeOptionalText(value: string | null | undefined): string | null {
-  const normalizedValue = normalizeText(value);
-
-  return normalizedValue || null;
-}
-
 function normalizeEmail(value: string | null | undefined): string {
-  return normalizeText(value).toLocaleLowerCase("es-AR");
+  return normalizeNullableText(value).toLocaleLowerCase("es-AR");
 }
 
 function normalizeDeliveryMethod(
   value: string | null | undefined
 ): DeliveryMethod | null {
-  const normalizedValue = normalizeText(value);
+  const normalizedValue = normalizeNullableText(value);
 
   return isDeliveryMethod(normalizedValue) ? normalizedValue : null;
 }
@@ -317,10 +313,4 @@ function addError(
 
 function hasErrors(errors: CheckoutValidationErrors): boolean {
   return Object.keys(errors).length > 0;
-}
-
-function assertNonNegativeInteger(value: number, name: string) {
-  if (!Number.isInteger(value) || value < 0) {
-    throw new RangeError(`${name} must be a non-negative integer`);
-  }
 }

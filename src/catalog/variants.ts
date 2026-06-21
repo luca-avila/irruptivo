@@ -4,6 +4,12 @@ import {
   resolveUnitPrice as resolveDomainUnitPrice,
   type AvailabilityLabel
 } from "../domain/rules";
+import { generateUniqueId } from "../shared/id-utils";
+import {
+  normalizeOptionalText,
+  normalizeText,
+  slugify
+} from "../shared/string-utils";
 import { getAvailableStock, setVariantStock } from "./stock";
 import type {
   CatalogProductVariantRecord,
@@ -184,37 +190,5 @@ function generateUniqueVariantId(
   const baseId = `${slugify(productId) || "product"}-${slugify(sku) || "sku"}`;
   const existingIds = new Set(existingVariants.map((variant) => variant.id));
 
-  if (!existingIds.has(baseId)) {
-    return baseId;
-  }
-
-  let suffix = 2;
-  let candidate = `${baseId}-${suffix}`;
-
-  while (existingIds.has(candidate)) {
-    suffix += 1;
-    candidate = `${baseId}-${suffix}`;
-  }
-
-  return candidate;
-}
-
-function normalizeText(value: string): string {
-  return value.trim().replace(/\s+/g, " ");
-}
-
-function normalizeOptionalText(value: string | null | undefined): string | null {
-  const normalizedValue = value?.trim().replace(/\s+/g, " ") ?? "";
-
-  return normalizedValue || null;
-}
-
-function slugify(value: string): string {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+  return generateUniqueId(baseId, existingIds);
 }

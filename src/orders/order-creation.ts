@@ -6,6 +6,7 @@ import {
   type ProductArea,
   type VariantOptionValues
 } from "../catalog/catalog";
+import { getDate } from "../shared/date-utils";
 import {
   getCartCount,
   getCartSummary,
@@ -202,7 +203,7 @@ function getOrderItemSnapshots(
         variantId: variant.id,
         variantName: variant.name,
         sku: variant.sku,
-        options: cloneVariantOptions(variant.options),
+        options: { ...(variant.options ?? {}) },
         optionSummary: getOptionSummary(variant),
         quantity: item.quantity,
         unitPriceArs: item.unitPriceArs,
@@ -240,14 +241,6 @@ function getOrderedOptionValues(options: VariantOptionValues): string[] {
   ].filter((value): value is string => Boolean(value));
 }
 
-function cloneVariantOptions(
-  options: CatalogProductVariantRecord["options"]
-): VariantOptionValues {
-  return {
-    ...(options ?? {})
-  };
-}
-
 function cloneCart(cart: Cart): Cart {
   return {
     items: cart.items.map((item) => ({
@@ -263,14 +256,4 @@ function createOrderNumber(createdAt: Date, orderId: string): string {
   const suffix = orderId.replace(/[^a-zA-Z0-9]/g, "").slice(0, 8).toUpperCase();
 
   return `IRR-${year}${month}${day}-${suffix || "PEDIDO"}`;
-}
-
-function getDate(value: Date | string, name: string): Date {
-  const date = typeof value === "string" ? new Date(value) : value;
-
-  if (Number.isNaN(date.getTime())) {
-    throw new RangeError(`${name} must be a valid date`);
-  }
-
-  return date;
 }

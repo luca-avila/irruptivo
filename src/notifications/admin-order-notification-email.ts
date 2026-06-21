@@ -1,4 +1,7 @@
 import { DELIVERY_METHOD, ORDER_STATUS } from "../domain/rules";
+import { getDate } from "../shared/date-utils";
+import { normalizeAbsoluteUrlOrigin } from "../shared/url-utils";
+import { escapeHtml, sendEmailSafely } from "./email-helpers";
 import { type Order } from "../orders/order-creation";
 import {
   sendEmail,
@@ -210,7 +213,7 @@ function getDeliveryLines(order: Order): string[] {
 }
 
 function getAdminOrderUrl(orderId: string, appUrl: string | null | undefined): string {
-  const origin = normalizeAbsoluteUrl(appUrl) ?? DEFAULT_APP_URL;
+  const origin = normalizeAbsoluteUrlOrigin(appUrl, { allowVercelHostWithoutProtocol: true }) ?? DEFAULT_APP_URL;
 
   return new URL(`/admin/pedidos/${encodeURIComponent(orderId)}`, origin).toString();
 }
@@ -225,62 +228,4 @@ function readAdminOrderNotificationEmailConfig(
       env.NEXT_PUBLIC_SITE_URL ??
       env.VERCEL_URL
   };
-}
-
-async function sendEmailSafely(
-  emailProvider: (message: EmailMessage) => Promise<EmailSendResult>,
-  message: EmailMessage
-): Promise<EmailSendResult> {
-  try {
-    return await emailProvider(message);
-  } catch {
-    return {
-      status: "failed",
-      provider: "unknown",
-      message: "No pudimos enviar el email transaccional."
-    };
-  }
-}
-
-function normalizeAbsoluteUrl(value: string | null | undefined): string | null {
-  const trimmedValue = value?.trim();
-
-  if (!trimmedValue) {
-    return null;
-  }
-
-  const urlValue =
-    trimmedValue.endsWith(".vercel.app") && !trimmedValue.includes("://")
-      ? `https://${trimmedValue}`
-      : trimmedValue;
-
-  try {
-    const url = new URL(urlValue);
-
-    if (url.protocol !== "https:" && url.protocol !== "http:") {
-      return null;
-    }
-
-    return url.origin;
-  } catch {
-    return null;
-  }
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
-}
-
-function getDate(value: Date | string, name: string): Date {
-  const date = typeof value === "string" ? new Date(value) : value;
-
-  if (Number.isNaN(date.getTime())) {
-    throw new RangeError(`${name} must be a valid date`);
-  }
-
-  return date;
 }

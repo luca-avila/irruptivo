@@ -1,4 +1,10 @@
-import { calculateLineTotal, calculateSubtotal } from "../domain/rules";
+import {
+  assertMoney,
+  assertPositiveInteger,
+  calculateLineTotal,
+  calculateSubtotal
+} from "../domain/rules";
+import { assertNonEmptyString } from "../shared/string-utils";
 
 export const CART_PRICE_SNAPSHOT_WINDOW_MS = 24 * 60 * 60 * 1000;
 
@@ -142,7 +148,7 @@ export function getLineTotal(line: CartLineTotalInput): number {
 export function calculateCartSubtotal(
   lines: readonly CartLineTotalInput[]
 ): number {
-  return calculateSubtotal(lines.map(getLineTotal));
+  return calculateSubtotal(lines.map(calculateLineTotal));
 }
 
 export function getCartSummary(
@@ -286,22 +292,4 @@ function getSnapshotTimestamp(snapshotAt: Date | string | undefined): string {
   }
 
   return timestamp.toISOString();
-}
-
-function assertNonEmptyString(value: string, name: string): void {
-  if (value.trim().length === 0) {
-    throw new RangeError(`${name} must be a non-empty string`);
-  }
-}
-
-function assertMoney(value: number, name: string): void {
-  if (!Number.isInteger(value) || value < 0) {
-    throw new RangeError(`${name} must be a non-negative integer`);
-  }
-}
-
-function assertPositiveInteger(value: number, name: string): void {
-  if (!Number.isInteger(value) || value < 1) {
-    throw new RangeError(`${name} must be a positive integer`);
-  }
 }

@@ -1,5 +1,7 @@
 import { ORDER_STATUS, type OrderStatus } from "../domain/rules";
 import { prisma } from "../db/client";
+import { getDate } from "../shared/date-utils";
+import { isPrismaKnownError } from "../shared/prisma-utils";
 import { getAdminNotificationRecipient } from "../admin/settings";
 import {
   sendAdminOrderNotificationOnce,
@@ -835,25 +837,6 @@ class AlreadyReconciledSettlementError extends Error {
   }
 }
 
-function isPrismaKnownError(error: unknown, code: string): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    (error as { code?: unknown }).code === code
-  );
-}
-
 function assertNever(value: never): never {
   throw new Error(`Unhandled reconciliation decision: ${String(value)}`);
-}
-
-function getDate(value: Date | string, name: string): Date {
-  const date = typeof value === "string" ? new Date(value) : value;
-
-  if (Number.isNaN(date.getTime())) {
-    throw new RangeError(`${name} must be a valid date`);
-  }
-
-  return date;
 }

@@ -193,17 +193,17 @@ export function isAdminPaymentLockedOrderStatus(status: OrderStatus): boolean {
   );
 }
 
-function assertMoney(value: number, name: string): void {
+export function assertMoney(value: number, name: string): void {
   assertNonNegativeInteger(value, name);
 }
 
-function assertNonNegativeInteger(value: number, name: string): void {
+export function assertNonNegativeInteger(value: number, name: string): void {
   if (!Number.isInteger(value) || value < 0) {
     throw new RangeError(`${name} must be a non-negative integer`);
   }
 }
 
-function assertPositiveInteger(value: number, name: string): void {
+export function assertPositiveInteger(value: number, name: string): void {
   if (!Number.isInteger(value) || value < 1) {
     throw new RangeError(`${name} must be a positive integer`);
   }

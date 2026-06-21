@@ -3,6 +3,8 @@ import {
   type PendingOrder,
   type PendingOrderPaymentPreference
 } from "../orders/order-creation";
+import { getDate } from "../shared/date-utils";
+import { normalizeAbsoluteUrlOrigin } from "../shared/url-utils";
 
 const MERCADO_PAGO_API_BASE_URL = "https://api.mercadopago.com";
 
@@ -286,12 +288,12 @@ function normalizePaymentPreferenceConfig(
   config: PaymentPreferenceConfig
 ): NormalizedPaymentPreferenceConfig | null {
   const accessToken = config.accessToken?.trim() ?? "";
-  const appUrl = normalizeAbsoluteUrl(config.appUrl, {
+  const appUrl = normalizeAbsoluteUrlOrigin(config.appUrl, {
     allowVercelHostWithoutProtocol: true
   });
-  const notificationUrl = normalizeAbsoluteUrl(config.notificationUrl);
+  const notificationUrl = normalizeAbsoluteUrlOrigin(config.notificationUrl);
   const apiBaseUrl =
-    normalizeAbsoluteUrl(config.apiBaseUrl) ?? MERCADO_PAGO_API_BASE_URL;
+    normalizeAbsoluteUrlOrigin(config.apiBaseUrl) ?? MERCADO_PAGO_API_BASE_URL;
 
   if (!accessToken || !appUrl) {
     return null;
@@ -303,36 +305,6 @@ function normalizePaymentPreferenceConfig(
     notificationUrl,
     apiBaseUrl
   };
-}
-
-function normalizeAbsoluteUrl(
-  value: string | null | undefined,
-  options: { allowVercelHostWithoutProtocol?: boolean } = {}
-): string | null {
-  const trimmedValue = value?.trim();
-
-  if (!trimmedValue) {
-    return null;
-  }
-
-  const urlValue =
-    options.allowVercelHostWithoutProtocol &&
-    trimmedValue.endsWith(".vercel.app") &&
-    !trimmedValue.includes("://")
-      ? `https://${trimmedValue}`
-      : trimmedValue;
-
-  try {
-    const url = new URL(urlValue);
-
-    if (url.protocol !== "https:" && url.protocol !== "http:") {
-      return null;
-    }
-
-    return url.origin;
-  } catch {
-    return null;
-  }
 }
 
 function getCheckoutUrl(
@@ -366,16 +338,6 @@ function readOptionalString(value: unknown, key: string): string | null {
   return typeof fieldValue === "string" && fieldValue.trim()
     ? fieldValue
     : null;
-}
-
-function getDate(value: Date | string, name: string): Date {
-  const date = typeof value === "string" ? new Date(value) : value;
-
-  if (Number.isNaN(date.getTime())) {
-    throw new RangeError(`${name} must be a valid date`);
-  }
-
-  return date;
 }
 
 // Argentina has no DST and sits at a fixed UTC-03:00.

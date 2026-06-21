@@ -1,12 +1,18 @@
 import { type EmailDelivery as EmailDeliveryRow } from "@prisma/client";
 
 import { prisma } from "../db/client";
+import { getDate } from "../shared/date-utils";
+import { isUniqueConstraintError } from "../shared/prisma-utils";
+import { normalizeAbsoluteUrlOrigin } from "../shared/url-utils";
+import { assertNonEmptyString } from "../shared/string-utils";
+import { escapeHtml, sendEmailSafely } from "./email-helpers";
 import {
   DELIVERY_METHOD,
   ORDER_STATUS,
   getOrderStatusLabel
 } from "../domain/rules";
 import { buildGuestOrderStatusPath } from "../orders/guest-order-status";
+import { getDeliverySummary } from "../orders/order-delivery";
 import {
   type Order,
   type PendingOrderDeliverySnapshot
@@ -459,38 +465,13 @@ export async function readOrderEmailDeliveryByOrderIdAndKind({
   return delivery ? mapOrderConfirmationEmailDeliveryRowToRecord(delivery) : null;
 }
 
-async function sendEmailSafely(
-  emailProvider: (message: EmailMessage) => Promise<EmailSendResult>,
-  message: EmailMessage
-): Promise<EmailSendResult> {
-  try {
-    return await emailProvider(message);
-  } catch {
-    return {
-      status: "failed",
-      provider: "unknown",
-      message: "No pudimos enviar el email transaccional."
-    };
-  }
-}
-
 export function getGuestStatusUrl(
   statusPath: string,
   appUrl: string | null | undefined
 ): string {
-  const normalizedAppUrl = normalizeAbsoluteUrl(appUrl);
+  const normalizedAppUrl = normalizeAbsoluteUrlOrigin(appUrl, { allowVercelHostWithoutProtocol: true });
 
   return normalizedAppUrl ? new URL(statusPath, normalizedAppUrl).toString() : statusPath;
-}
-
-function getDeliverySummary(delivery: PendingOrderDeliverySnapshot): string {
-  if (delivery.method === DELIVERY_METHOD.shipping && delivery.shippingAddress) {
-    const { addressLine, city, province, postalCode } = delivery.shippingAddress;
-
-    return `${delivery.methodLabel}: ${addressLine}, ${city}, ${province} (${postalCode}).`;
-  }
-
-  return "Retiro local en Benavidez/Zona Norte. Coordinamos punto y horario por WhatsApp.";
 }
 
 function getFulfillmentNextStep(delivery: PendingOrderDeliverySnapshot): string {
@@ -501,65 +482,12 @@ function getFulfillmentNextStep(delivery: PendingOrderDeliverySnapshot): string 
   return "Preparamos tu compra y te escribimos por WhatsApp para coordinar el retiro.";
 }
 
-function normalizeAbsoluteUrl(value: string | null | undefined): string | null {
-  const trimmedValue = value?.trim();
-
-  if (!trimmedValue) {
-    return null;
-  }
-
-  const urlValue =
-    trimmedValue.endsWith(".vercel.app") && !trimmedValue.includes("://")
-      ? `https://${trimmedValue}`
-      : trimmedValue;
-
-  try {
-    const url = new URL(urlValue);
-
-    if (url.protocol !== "https:" && url.protocol !== "http:") {
-      return null;
-    }
-
-    return url.origin;
-  } catch {
-    return null;
-  }
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
-}
-
-function getDate(value: Date | string, name: string): Date {
-  const date = typeof value === "string" ? new Date(value) : value;
-
-  if (Number.isNaN(date.getTime())) {
-    throw new RangeError(`${name} must be a valid date`);
-  }
-
-  return date;
-}
-
 function getNonNegativeMilliseconds(value: number, name: string): number {
   if (!Number.isFinite(value) || value < 0) {
     throw new RangeError(`${name} must be a non-negative number`);
   }
 
   return value;
-}
-
-function assertNonEmptyString(value: string, name: string): string {
-  const trimmedValue = value.trim();
-
-  if (!trimmedValue) {
-    throw new RangeError(`${name} must be a non-empty string`);
-  }
-
-  return trimmedValue;
 }
 
 function toOrderConfirmationEmailDeliveryStatus(
@@ -574,17 +502,4 @@ function toOrderConfirmationEmailDeliveryStatus(
   }
 
   return status as OrderConfirmationEmailDeliveryStatus;
-}
-
-function isUniqueConstraintError(error: unknown): boolean {
-  return isPrismaKnownError(error, "P2002");
-}
-
-function isPrismaKnownError(error: unknown, code: string): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    (error as { code?: unknown }).code === code
-  );
 }

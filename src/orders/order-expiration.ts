@@ -3,6 +3,7 @@ import {
   PENDING_PAYMENT_EXPIRATION_MS,
   type OrderStatus
 } from "../domain/rules";
+import { getDate } from "../shared/date-utils";
 import { type Order } from "./order-creation";
 import {
   readOrderStoreSnapshot,
@@ -111,14 +112,4 @@ function shouldExpirePendingPaymentOrder(order: Order, now: Date): boolean {
   const createdAt = getDate(order.createdAt, "order.createdAt");
 
   return now.getTime() - createdAt.getTime() >= PENDING_PAYMENT_EXPIRATION_MS;
-}
-
-function getDate(value: Date | string, name: string): Date {
-  const date = typeof value === "string" ? new Date(value) : value;
-
-  if (Number.isNaN(date.getTime())) {
-    throw new RangeError(`${name} must be a valid date`);
-  }
-
-  return date;
 }

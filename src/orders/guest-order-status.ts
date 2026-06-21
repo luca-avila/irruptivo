@@ -11,6 +11,7 @@ import {
   type OrderStatus,
   ORDER_STATUS
 } from "../domain/rules";
+import { getDeliverySummary } from "./order-delivery";
 import {
   type PendingOrder,
   type PendingOrderDeliverySnapshot
@@ -273,16 +274,6 @@ function getGuestOrderStatusProjection(
       totalArs: order.totalArs
     }
   };
-}
-
-function getDeliverySummary(delivery: PendingOrderDeliverySnapshot): string {
-  if (delivery.method === DELIVERY_METHOD.shipping && delivery.shippingAddress) {
-    const { addressLine, city, province, postalCode } = delivery.shippingAddress;
-
-    return `${delivery.methodLabel}: ${addressLine}, ${city}, ${province} (${postalCode}).`;
-  }
-
-  return "Retiro local en Benavidez/Zona Norte. Coordinamos punto y horario por WhatsApp.";
 }
 
 function getProductHref(productArea: ProductArea, productSlug: string): string {

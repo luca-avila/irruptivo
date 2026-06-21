@@ -495,22 +495,17 @@ async function getAdminOrderFulfillmentNotificationView(
   };
 }
 
+const EMAIL_DELIVERY_STATUS_LABEL: Record<OrderConfirmationEmailDeliveryStatus, string> = {
+  sent: "Email enviado",
+  sending: "Envío pendiente",
+  configuration_missing: "Falta configuración de email",
+  failed: "Falló el envío"
+};
+
 function getEmailDeliveryStatusLabel(
   status: OrderConfirmationEmailDeliveryStatus | null
 ): string {
-  switch (status) {
-    case "sent":
-      return "Email enviado";
-    case "sending":
-      return "Envío pendiente";
-    case "configuration_missing":
-      return "Falta configuración de email";
-    case "failed":
-      return "Falló el envío";
-    case null:
-    default:
-      return "Email no enviado";
-  }
+  return status !== null ? EMAIL_DELIVERY_STATUS_LABEL[status] : "Email no enviado";
 }
 
 function getAdminOrderFulfillmentUnavailableReason(order: Order): string {
@@ -595,27 +590,20 @@ function getShippingAddressView(order: Order): AdminOrderShippingAddressView | n
   };
 }
 
+const STATUS_TONE: Record<OrderStatus, AdminOrderStatusTone> = {
+  [ORDER_STATUS.pendingPayment]: "neutral",
+  [ORDER_STATUS.paid]: "confirmed",
+  [ORDER_STATUS.paymentFailed]: "danger",
+  [ORDER_STATUS.expired]: "warning",
+  [ORDER_STATUS.preparing]: "in-progress",
+  [ORDER_STATUS.readyForPickup]: "ready",
+  [ORDER_STATUS.shipped]: "sent",
+  [ORDER_STATUS.delivered]: "done",
+  [ORDER_STATUS.pickedUp]: "done"
+};
+
 function getStatusTone(status: OrderStatus): AdminOrderStatusTone {
-  switch (status) {
-    case ORDER_STATUS.paid:
-      return "confirmed";
-    case ORDER_STATUS.paymentFailed:
-      return "danger";
-    case ORDER_STATUS.expired:
-      return "warning";
-    case ORDER_STATUS.preparing:
-      return "in-progress";
-    case ORDER_STATUS.readyForPickup:
-      return "ready";
-    case ORDER_STATUS.shipped:
-      return "sent";
-    case ORDER_STATUS.delivered:
-    case ORDER_STATUS.pickedUp:
-      return "done";
-    case ORDER_STATUS.pendingPayment:
-    default:
-      return "neutral";
-  }
+  return STATUS_TONE[status] ?? "neutral";
 }
 
 function formatPriceArs(priceArs: number): string {
