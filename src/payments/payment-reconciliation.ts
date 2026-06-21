@@ -11,7 +11,7 @@ import {
   type OrderConfirmationEmailResult,
   type OrderConfirmationEmailSender
 } from "../notifications/order-confirmation-email";
-import { expirePendingPaymentOrders } from "../orders/order-expiration";
+import { expirePendingPaymentOrderIfDue } from "../orders/order-expiration";
 import { type Order } from "../orders/order-creation";
 import {
   findOrderByIdInStore,
@@ -328,24 +328,11 @@ async function expirePendingPaymentOrderIfNeeded({
   repository: PaymentReconciliationRepository;
   now: Date | string;
 }): Promise<Order> {
-  const expirationResult = await expirePendingPaymentOrders({
+  return expirePendingPaymentOrderIfDue({
+    order,
     now,
-    orderRepository: {
-      listOrders: async () => [order],
-      updateOrderStatus: (input) => repository.updateOrderStatus(input)
-    }
+    updateOrderStatus: (input) => repository.updateOrderStatus(input)
   });
-
-  if (expirationResult.expiredOrderCount === 0) {
-    return order;
-  }
-
-  return (
-    (await repository.findOrderById(order.id)) ?? {
-      ...order,
-      status: ORDER_STATUS.expired
-    }
-  );
 }
 
 async function reconcileApprovedPayment({

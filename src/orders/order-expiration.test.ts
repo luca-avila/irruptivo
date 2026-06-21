@@ -2,11 +2,66 @@ import { describe, expect, it } from "vitest";
 
 import { DELIVERY_METHOD, ORDER_STATUS, type OrderStatus } from "../domain/rules";
 import { type Order } from "./order-creation";
-import { expirePendingPaymentOrders } from "./order-expiration";
+import {
+  expirePendingPaymentOrderIfDue,
+  expirePendingPaymentOrders
+} from "./order-expiration";
 
 const createdAt = "2026-05-30T12:00:00.000Z";
 
 describe("pending payment expiration", () => {
+  it("expires one pending order past the 30 minute payment window", async () => {
+    const order = getOrder(ORDER_STATUS.pendingPayment);
+    const repository = createOrderRepository([order]);
+
+    const result = await expirePendingPaymentOrderIfDue({
+      order,
+      now: "2026-05-30T12:31:00.000Z",
+      updateOrderStatus: repository.updateOrderStatus
+    });
+
+    expect(result.status).toBe(ORDER_STATUS.expired);
+    expect(await repository.listOrders()).toMatchObject([
+      {
+        id: "order-001",
+        status: ORDER_STATUS.expired
+      }
+    ]);
+    expect(repository.lastUpdate).toMatchObject({
+      orderId: "order-001",
+      status: ORDER_STATUS.expired,
+      reason: "expired"
+    });
+  });
+
+  it("keeps one pending order unchanged before the payment window ends", async () => {
+    const order = getOrder(ORDER_STATUS.pendingPayment);
+    const repository = createOrderRepository([order]);
+
+    const result = await expirePendingPaymentOrderIfDue({
+      order,
+      now: "2026-05-30T12:29:59.999Z",
+      updateOrderStatus: repository.updateOrderStatus
+    });
+
+    expect(result).toBe(order);
+    expect(repository.lastUpdate).toBeNull();
+  });
+
+  it("keeps one non-pending order unchanged", async () => {
+    const order = getOrder(ORDER_STATUS.paid);
+    const repository = createOrderRepository([order]);
+
+    const result = await expirePendingPaymentOrderIfDue({
+      order,
+      now: "2026-05-30T12:31:00.000Z",
+      updateOrderStatus: repository.updateOrderStatus
+    });
+
+    expect(result).toBe(order);
+    expect(repository.lastUpdate).toBeNull();
+  });
+
   it("keeps a pending order active before the 30 minute payment window ends", async () => {
     const repository = createOrderRepository([getOrder(ORDER_STATUS.pendingPayment)]);
 

@@ -41,6 +41,30 @@ const defaultOrderRepository: PendingPaymentExpirationOrderRepository = {
   updateOrderStatus: updateOrderStatusInStore
 };
 
+export async function expirePendingPaymentOrderIfDue({
+  order,
+  updateOrderStatus,
+  now = new Date()
+}: {
+  order: Order;
+  updateOrderStatus: PendingPaymentExpirationOrderRepository["updateOrderStatus"];
+  now?: Date | string;
+}): Promise<Order> {
+  if (!shouldExpirePendingPaymentOrder(order, getDate(now, "now"))) {
+    return order;
+  }
+
+  const updatedOrder = await updateOrderStatus({
+    orderId: order.id,
+    status: ORDER_STATUS.expired,
+    reason: "expired"
+  });
+
+  return updatedOrder?.status === ORDER_STATUS.expired
+    ? updatedOrder
+    : { ...order, status: ORDER_STATUS.expired };
+}
+
 export async function expirePendingPaymentOrders({
   now = new Date(),
   orderRepository = defaultOrderRepository
