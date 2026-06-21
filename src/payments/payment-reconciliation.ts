@@ -456,25 +456,6 @@ async function markOrderPaidAndDecrementStockInStore({
         }
       }
 
-      const existingOrder = await tx.order.findUnique({
-        where: {
-          id: normalizedOrderId
-        },
-        include: {
-          items: true
-        }
-      });
-
-      if (!existingOrder) {
-        throw new AlreadyReconciledSettlementError(null);
-      }
-
-      const currentOrder = mapOrderRecordToOrder(existingOrder);
-
-      if (existingOrder.status !== ORDER_STATUS.pendingPayment) {
-        throw new AlreadyReconciledSettlementError(currentOrder);
-      }
-
       const paidOrderUpdate = await tx.order.updateMany({
         where: {
           id: normalizedOrderId,
@@ -500,32 +481,6 @@ async function markOrderPaidAndDecrementStockInStore({
         );
       }
 
-      await tx.orderStatusHistory.create({
-        data: {
-          orderId: normalizedOrderId,
-          fromStatus: existingOrder.status,
-          toStatus: ORDER_STATUS.paid,
-          reason,
-          actor
-        }
-      });
-
-      for (const [variantId, quantity] of getVariantQuantityTotals(
-        existingOrder.items
-      )) {
-        const updatedRows = await tx.$executeRaw`
-          UPDATE "product_variants"
-          SET "stock" = "stock" - ${quantity},
-              "updated_at" = NOW()
-          WHERE "id" = ${variantId}
-            AND "stock" >= ${quantity}
-        `;
-
-        if (updatedRows !== 1) {
-          throw new InsufficientStockSettlementError(currentOrder);
-        }
-      }
-
       const paidOrder = await tx.order.findUnique({
         where: {
           id: normalizedOrderId
@@ -539,9 +494,43 @@ async function markOrderPaidAndDecrementStockInStore({
         throw new Error("Paid order disappeared during payment settlement.");
       }
 
+      const settledOrder = mapOrderRecordToOrder(paidOrder);
+      const pendingOrderForInsufficientStock = {
+        ...settledOrder,
+        status: ORDER_STATUS.pendingPayment
+      };
+
+      await tx.orderStatusHistory.create({
+        data: {
+          orderId: normalizedOrderId,
+          fromStatus: ORDER_STATUS.pendingPayment,
+          toStatus: ORDER_STATUS.paid,
+          reason,
+          actor
+        }
+      });
+
+      for (const [variantId, quantity] of getVariantQuantityTotals(
+        paidOrder.items
+      )) {
+        const updatedRows = await tx.$executeRaw`
+          UPDATE "product_variants"
+          SET "stock" = "stock" - ${quantity},
+              "updated_at" = NOW()
+          WHERE "id" = ${variantId}
+            AND "stock" >= ${quantity}
+        `;
+
+        if (updatedRows !== 1) {
+          throw new InsufficientStockSettlementError(
+            pendingOrderForInsufficientStock
+          );
+        }
+      }
+
       return {
         status: "paid",
-        order: mapOrderRecordToOrder(paidOrder)
+        order: settledOrder
       };
     });
   } catch (error) {
