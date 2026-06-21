@@ -23,7 +23,6 @@ import {
   findPaymentEventByIdentity,
   mapPaymentEventRecordToRow,
   recordPaymentEventOnce,
-  type PaymentEventIdentity,
   type PaymentEventRecord,
   type RecordPaymentEventOnceResult
 } from "./payment-events";
@@ -49,7 +48,6 @@ export type PaymentReconciliationRepository = {
     actor?: string;
     paymentEvent?: PaymentEventRecord;
   }) => Promise<ApprovedPaymentSettlementResult>;
-  findPaymentEvent: PaymentEventFinder;
   recordPaymentEvent: PaymentEventRecorder;
 };
 
@@ -60,10 +58,6 @@ export type MercadoPagoPaymentProvider = (
 export type PaymentEventRecorder = (
   event: PaymentEventRecord
 ) => Promise<RecordPaymentEventOnceResult>;
-
-export type PaymentEventFinder = (
-  identity: PaymentEventIdentity
-) => Promise<PaymentEventRecord | null>;
 
 export type ApprovedPaymentSettlementResult =
   | {
@@ -141,7 +135,6 @@ const defaultRepository: PaymentReconciliationRepository = {
   findOrderById: findOrderByIdInStore,
   updateOrderStatus: updateOrderStatusInStore,
   markOrderPaidAndDecrementStock: markOrderPaidAndDecrementStockInStore,
-  findPaymentEvent: findPaymentEventByIdentity,
   recordPaymentEvent: recordPaymentEventOnce
 };
 
@@ -200,19 +193,6 @@ export async function reconcileMercadoPagoEvent(
   }
 
   const providerEventId = getProviderEventId(notification, payment);
-  const existingEvent = await repository.findPaymentEvent({
-    provider: "mercado_pago",
-    providerEventId
-  });
-
-  if (existingEvent) {
-    return {
-      status: "duplicate",
-      orderId: existingEvent.orderId,
-      providerPaymentId: existingEvent.providerPaymentId
-    };
-  }
-
   const providerStatus = mapMercadoPagoPaymentStatus(payment.status);
   const reconciledOrder = await expirePendingPaymentOrderIfNeeded({
     order,

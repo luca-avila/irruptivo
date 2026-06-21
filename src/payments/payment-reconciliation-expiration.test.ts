@@ -170,13 +170,6 @@ function createOrderRepository(order: Order | null): TestOrderRepository {
 
       return cloneOrder(currentOrder);
     },
-    async findPaymentEvent(
-      identity: PaymentEventIdentity
-    ): Promise<PaymentEventRecord | null> {
-      const event = findStoredPaymentEvent(identity);
-
-      return event ? clonePaymentEvent(event) : null;
-    },
     recordPaymentEvent,
     async markOrderPaidAndDecrementStock(): Promise<ApprovedPaymentSettlementResult> {
       throw new Error(

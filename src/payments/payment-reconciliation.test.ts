@@ -723,13 +723,6 @@ function createOrderRepository(
 
       return cloneOrder(currentOrder);
     },
-    async findPaymentEvent(
-      identity: PaymentEventIdentity
-    ): Promise<PaymentEventRecord | null> {
-      const event = findStoredPaymentEvent(identity);
-
-      return event ? clonePaymentEvent(event) : null;
-    },
     recordPaymentEvent,
     async markOrderPaidAndDecrementStock(input: {
       orderId: string;
