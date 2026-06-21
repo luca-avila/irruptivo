@@ -141,8 +141,7 @@ export function createPendingOrderFromCheckout({
     cart: {
       itemCount: getCartCount(cartValidation.updatedCart),
       subtotalArs: cartSummary.subtotalArs,
-      canCheckout: cartValidation.canCheckout,
-      hasBlockingIssues: cartValidation.hasBlockingIssues
+      canCheckout: cartValidation.canCheckout
     }
   });
 

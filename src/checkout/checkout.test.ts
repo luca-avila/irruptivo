@@ -10,8 +10,7 @@ import {
 const validCart = {
   itemCount: 2,
   subtotalArs: 58000,
-  canCheckout: true,
-  hasBlockingIssues: false
+  canCheckout: true
 };
 
 const validShippingInput = {
@@ -99,8 +98,7 @@ describe("checkout validation", () => {
       cart: {
         itemCount: 1,
         subtotalArs: 26000,
-        canCheckout: false,
-        hasBlockingIssues: true
+        canCheckout: false
       }
     });
 

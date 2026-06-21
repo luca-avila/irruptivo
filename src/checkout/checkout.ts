@@ -34,7 +34,6 @@ export type CheckoutCartInput = {
   itemCount: number;
   subtotalArs: number;
   canCheckout: boolean;
-  hasBlockingIssues?: boolean;
 };
 
 export type CheckoutInput = {
@@ -113,8 +112,7 @@ const rawCheckoutInputSchema = z.object({
   cart: z.object({
     itemCount: z.number(),
     subtotalArs: z.number(),
-    canCheckout: z.boolean(),
-    hasBlockingIssues: z.boolean().optional()
+    canCheckout: z.boolean()
   })
 });
 
@@ -285,7 +283,7 @@ function getCartError(cart: CheckoutCartInput): string | null {
     return "No pudimos validar el carrito. Volvé al carrito y revisá los productos.";
   }
 
-  if (!cart.canCheckout || cart.hasBlockingIssues) {
+  if (!cart.canCheckout) {
     return "El carrito tiene productos para corregir antes de pagar.";
   }
 
@@ -295,7 +293,6 @@ function getCartError(cart: CheckoutCartInput): string | null {
 function canBuildSummary(cart: CheckoutCartInput): boolean {
   return (
     cart.canCheckout &&
-    !cart.hasBlockingIssues &&
     Number.isInteger(cart.itemCount) &&
     cart.itemCount > 0 &&
     Number.isInteger(cart.subtotalArs) &&
