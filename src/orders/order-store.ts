@@ -62,13 +62,15 @@ export type UpdateOrderInStoreInput = Order;
 export type OrderRecordWithItems = Prisma.OrderGetPayload<{
   include: {
     items: true;
+    paymentPreference: true;
   };
 }>;
 
 type OrderStorePrismaClient = PrismaClient | Prisma.TransactionClient;
 
 const orderWithItems = {
-  items: true
+  items: true,
+  paymentPreference: true
 } as const satisfies Prisma.OrderInclude;
 
 export async function createPendingOrderInStore({
@@ -238,20 +240,52 @@ export async function storePendingOrderPaymentPreference({
     return null;
   }
 
-  const order = await prisma.order.update({
-    where: {
-      id: normalizedOrderId
-    },
-    data: {
-      paymentProvider: paymentPreference.provider,
-      paymentPreferenceId: paymentPreference.preferenceId,
-      paymentCheckoutUrl: paymentPreference.checkoutUrl,
-      paymentInitPoint: paymentPreference.initPoint,
-      paymentSandboxInitPoint: paymentPreference.sandboxInitPoint,
-      paymentExternalReference: paymentPreference.externalReference,
-      paymentCreatedAt: getDate(paymentPreference.createdAt, "payment.createdAt")
-    },
-    include: orderWithItems
+  const preferenceCreatedAt = getDate(
+    paymentPreference.createdAt,
+    "payment.createdAt"
+  );
+
+  const order = await prisma.$transaction(async (tx) => {
+    const existingOrder = await tx.order.findUnique({
+      where: {
+        id: normalizedOrderId
+      },
+      select: {
+        id: true
+      }
+    });
+
+    if (!existingOrder) {
+      return null;
+    }
+
+    await tx.paymentPreference.upsert({
+      where: {
+        orderId: normalizedOrderId
+      },
+      create: {
+        order: {
+          connect: {
+            id: normalizedOrderId
+          }
+        },
+        preferenceId: paymentPreference.preferenceId,
+        checkoutUrl: paymentPreference.checkoutUrl,
+        createdAt: preferenceCreatedAt
+      },
+      update: {
+        preferenceId: paymentPreference.preferenceId,
+        checkoutUrl: paymentPreference.checkoutUrl,
+        createdAt: preferenceCreatedAt
+      }
+    });
+
+    return tx.order.findUnique({
+      where: {
+        id: normalizedOrderId
+      },
+      include: orderWithItems
+    });
   }).catch((error: unknown) => {
     if (isRecordNotFoundError(error)) {
       return null;
@@ -407,15 +441,11 @@ export function mapOrderRecordToOrder(record: OrderRecordWithItems): Order {
     subtotalArs: record.subtotalArs,
     deliveryCostArs: record.deliveryCostArs,
     totalArs: record.totalArs,
-    paymentPreference: record.paymentProvider
+    paymentPreference: record.paymentPreference
       ? {
-          provider: record.paymentProvider,
-          preferenceId: record.paymentPreferenceId ?? "",
-          checkoutUrl: record.paymentCheckoutUrl ?? "",
-          initPoint: record.paymentInitPoint ?? "",
-          sandboxInitPoint: record.paymentSandboxInitPoint,
-          externalReference: record.paymentExternalReference ?? "",
-          createdAt: record.paymentCreatedAt?.toISOString() ?? ""
+          preferenceId: record.paymentPreference.preferenceId,
+          checkoutUrl: record.paymentPreference.checkoutUrl,
+          createdAt: record.paymentPreference.createdAt.toISOString()
         }
       : null
   });
@@ -481,14 +511,7 @@ function getOrderCreateInput({
     adminNotes: order.adminNotes ?? null,
     subtotalArs: order.subtotalArs,
     deliveryCostArs: order.deliveryCostArs,
-    totalArs: order.totalArs,
-    paymentProvider: null,
-    paymentPreferenceId: null,
-    paymentCheckoutUrl: null,
-    paymentInitPoint: null,
-    paymentSandboxInitPoint: null,
-    paymentExternalReference: null,
-    paymentCreatedAt: null
+    totalArs: order.totalArs
   };
 }
 

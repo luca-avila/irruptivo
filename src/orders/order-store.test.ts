@@ -198,17 +198,18 @@ describe.skipIf(!process.env.DATABASE_URL)("pending order database store", () =>
     await storePendingOrderPaymentPreference({
       orderId: "order-001",
       paymentPreference: {
-        provider: "mercado_pago",
         preferenceId: "pref-123",
         checkoutUrl: "https://www.mercadopago.com.ar/init/pref-123",
-        initPoint: "https://www.mercadopago.com.ar/init/pref-123",
-        sandboxInitPoint: null,
-        externalReference: "order-001",
         createdAt: now
       }
     });
 
     const order = await findOrderByIdInStore("order-001");
+    const persistedPreference = await prisma.paymentPreference.findUnique({
+      where: {
+        orderId: "order-001"
+      }
+    });
 
     if (!order) {
       throw new Error("Expected order to exist.");
@@ -236,10 +237,15 @@ describe.skipIf(!process.env.DATABASE_URL)("pending order database store", () =>
       },
       adminNotes: "Avisar por WhatsApp",
       paymentPreference: {
-        provider: "mercado_pago",
         preferenceId: "pref-123",
-        externalReference: "order-001"
+        checkoutUrl: "https://www.mercadopago.com.ar/init/pref-123",
+        createdAt: now
       }
+    });
+    expect(persistedPreference).toMatchObject({
+      orderId: "order-001",
+      preferenceId: "pref-123",
+      checkoutUrl: "https://www.mercadopago.com.ar/init/pref-123"
     });
   });
 });

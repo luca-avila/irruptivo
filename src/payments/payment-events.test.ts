@@ -17,7 +17,6 @@ const receivedAt = "2026-05-30T12:00:00.000Z";
 describe("payment event mappers", () => {
   it("round-trips a PaymentEvent DB row and PaymentEventRecord without a database", () => {
     const row = mapPaymentEventRecordToRow({
-      provider: "mercado_pago",
       providerEventId: " event-001 ",
       providerPaymentId: " payment-001 ",
       orderId: " order-001 ",
@@ -29,7 +28,6 @@ describe("payment event mappers", () => {
     });
 
     expect(row).toMatchObject({
-      provider: "mercado_pago",
       providerEventId: "event-001",
       providerPaymentId: "payment-001",
       orderId: "order-001",
@@ -40,7 +38,6 @@ describe("payment event mappers", () => {
     });
     expect(row.receivedAt).toEqual(new Date(receivedAt));
     expect(mapPaymentEventRowToRecord(row)).toEqual({
-      provider: "mercado_pago",
       providerEventId: "event-001",
       providerPaymentId: "payment-001",
       orderId: "order-001",
@@ -65,7 +62,6 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
     it("records a verified Mercado Pago event once for auditability", async () => {
       const result = await recordPaymentEventOnce({
-        provider: "mercado_pago",
         providerEventId: "event-001",
         providerPaymentId: "payment-001",
         orderId: "order-001",
@@ -79,7 +75,6 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(result).toMatchObject({
         status: "recorded",
         event: {
-          provider: "mercado_pago",
           providerEventId: "event-001",
           providerPaymentId: "payment-001",
           orderId: "order-001",
@@ -90,7 +85,6 @@ describe.skipIf(!process.env.DATABASE_URL)(
       });
       await expect(
         hasProcessedPaymentEvent({
-          provider: "mercado_pago",
           providerEventId: "event-001"
         })
       ).resolves.toBe(true);
@@ -99,7 +93,6 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
     it("does not record or process the same provider event twice", async () => {
       await recordPaymentEventOnce({
-        provider: "mercado_pago",
         providerEventId: "event-001",
         providerPaymentId: "payment-001",
         orderId: "order-001",
@@ -111,7 +104,6 @@ describe.skipIf(!process.env.DATABASE_URL)(
       });
 
       const duplicateResult = await recordPaymentEventOnce({
-        provider: "mercado_pago",
         providerEventId: "event-001",
         providerPaymentId: "payment-001",
         orderId: "order-001",
@@ -134,7 +126,6 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
     it("exposes late expired-payment review state with Spanish admin copy", async () => {
       await recordPaymentEventOnce({
-        provider: "mercado_pago",
         providerEventId: "event-late-001",
         providerPaymentId: "payment-late-001",
         orderId: "order-001",
@@ -145,7 +136,6 @@ describe.skipIf(!process.env.DATABASE_URL)(
         receivedAt
       });
       await recordPaymentEventOnce({
-        provider: "mercado_pago",
         providerEventId: "event-late-002",
         providerPaymentId: "payment-late-002",
         orderId: "order-001",
@@ -174,7 +164,6 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
     it("returns a neutral admin review state when an order has no late expired payment", async () => {
       await recordPaymentEventOnce({
-        provider: "mercado_pago",
         providerEventId: "event-paid-001",
         providerPaymentId: "payment-paid-001",
         orderId: "order-001",
@@ -218,14 +207,7 @@ async function createTestOrder(orderId = "order-001"): Promise<void> {
       adminNotes: null,
       subtotalArs: 26000,
       deliveryCostArs: 0,
-      totalArs: 26000,
-      paymentProvider: null,
-      paymentPreferenceId: null,
-      paymentCheckoutUrl: null,
-      paymentInitPoint: null,
-      paymentSandboxInitPoint: null,
-      paymentExternalReference: null,
-      paymentCreatedAt: null
+      totalArs: 26000
     }
   });
 }

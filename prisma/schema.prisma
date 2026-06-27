@@ -35,10 +35,6 @@ enum DeliveryMethod {
   pickup
 }
 
-enum PaymentProvider {
-  mercado_pago
-}
-
 enum EmailDeliveryStatus {
   sending
   sent
@@ -129,13 +125,7 @@ model Order {
   subtotalArs              Int                  @map("subtotal_ars")
   deliveryCostArs          Int                  @map("delivery_cost_ars")
   totalArs                 Int                  @map("total_ars")
-  paymentProvider          PaymentProvider?     @map("payment_provider")
-  paymentPreferenceId      String?              @map("payment_preference_id")
-  paymentCheckoutUrl       String?              @map("payment_checkout_url")
-  paymentInitPoint         String?              @map("payment_init_point")
-  paymentSandboxInitPoint  String?              @map("payment_sandbox_init_point")
-  paymentExternalReference String?              @map("payment_external_reference")
-  paymentCreatedAt         DateTime?            @map("payment_created_at")
+  paymentPreference        PaymentPreference?
   items                    OrderItem[]
   statusHistory            OrderStatusHistory[]
   paymentEvents            PaymentEvent[]
@@ -143,6 +133,17 @@ model Order {
 
   @@index([status, createdAt])
   @@map("orders")
+}
+
+model PaymentPreference {
+  id           String   @id @default(uuid())
+  orderId      String   @unique @map("order_id")
+  preferenceId String   @map("preference_id")
+  checkoutUrl  String   @map("checkout_url")
+  createdAt    DateTime @map("created_at")
+  order        Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("payment_preferences")
 }
 
 model OrderItem {
@@ -186,7 +187,6 @@ model OrderStatusHistory {
 
 model PaymentEvent {
   id                String          @id @default(uuid())
-  provider          PaymentProvider
   providerEventId   String          @map("provider_event_id")
   providerPaymentId String          @map("provider_payment_id")
   orderId           String?         @map("order_id")
@@ -197,7 +197,7 @@ model PaymentEvent {
   receivedAt        DateTime        @map("received_at")
   order             Order?          @relation(fields: [orderId], references: [id], onDelete: SetNull)
 
-  @@unique([provider, providerEventId])
+  @@unique([providerEventId])
   @@index([orderId, processingResult])
   @@map("payment_events")
 }

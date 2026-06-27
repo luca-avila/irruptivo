@@ -46,7 +46,7 @@ npx prisma db seed       # datos de demo (prisma/seed.ts)
   para cualquier invariante de negocio.
 - `src/db/client.ts` — singleton del cliente Prisma (`prisma`).
 - `prisma/schema.prisma` — modelo de datos (Product/Variant/Image, Order/Item/StatusHistory,
-  PaymentEvent, EmailDelivery).
+  PaymentPreference, PaymentEvent, EmailDelivery).
 
 ### `src/shared/` — utilidades transversales
 
@@ -111,9 +111,9 @@ Helpers compartidos extraídos de duplicación. Reutilizar acá antes de re-impl
 
 ### `src/notifications/` — email
 
-- `email-provider.ts` — adaptador agnóstico de proveedor (`sendEmail`). Modos según
-  `IRRUPTIVO_EMAIL_PROVIDER`: `local` (outbox de dev), `http` (POST genérico) y `resend`
-  (producción, `https://api.resend.com/emails`). Sumar otro proveedor = nueva función `send*`.
+- `email-provider.ts` — adaptador de email transaccional (`sendEmail`). Modos según
+  `IRRUPTIVO_EMAIL_PROVIDER`: `local` (outbox de dev/tests) y `resend` (producción,
+  `https://api.resend.com/emails`).
 - `email-helpers.ts` — `escapeHtml` (escape de HTML para cuerpos de email) y `sendEmailSafely`
   (envío que captura errores en vez de propagarlos).
 - `order-confirmation-email.ts` — `sendOrderConfirmationOnce` (idempotente vía `EmailDelivery`),

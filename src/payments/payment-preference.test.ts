@@ -41,12 +41,8 @@ describe("Mercado Pago payment preference", () => {
     expect(result).toMatchObject({
       status: "created",
       preference: {
-        provider: "mercado_pago",
         preferenceId: "pref-123",
         checkoutUrl: "https://sandbox.mercadopago.com.ar/init/pref-123",
-        initPoint: "https://www.mercadopago.com.ar/init/pref-123",
-        sandboxInitPoint: "https://sandbox.mercadopago.com.ar/init/pref-123",
-        externalReference: "order-001",
         createdAt: now
       }
     });

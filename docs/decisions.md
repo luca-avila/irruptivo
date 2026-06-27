@@ -259,7 +259,7 @@ Send a basic confirmation email after Mercado Pago payment is verified as `paid`
 
 The email should include order number, total, delivery or pickup summary, next steps, WhatsApp/contact path, and secure guest order-status link.
 
-Email provider: Resend. The adapter keeps local/dev outbox and generic HTTP modes, but
+Email provider: Resend. The adapter keeps a local/dev outbox for tests and demos, but
 production transactional email uses Resend's `/emails` API with the provider-specific
 payload shape. Sender-domain DNS verification remains a production readiness task.
 

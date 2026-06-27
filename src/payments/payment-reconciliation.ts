@@ -474,7 +474,8 @@ async function markOrderPaidAndDecrementStockInStore({
             id: normalizedOrderId
           },
           include: {
-            items: true
+            items: true,
+            paymentPreference: true
           }
         });
 
@@ -488,7 +489,8 @@ async function markOrderPaidAndDecrementStockInStore({
           id: normalizedOrderId
         },
         include: {
-          items: true
+          items: true,
+          paymentPreference: true
         }
       });
 
@@ -548,7 +550,6 @@ async function markOrderPaidAndDecrementStockInStore({
         status: "duplicate",
         event:
           (await findPaymentEventByIdentity({
-            provider: error.event.provider,
             providerEventId: error.event.providerEventId
           })) ?? error.event
       };
@@ -796,7 +797,6 @@ function buildPaymentEventRecord({
   receivedAt: string;
 }): PaymentEventRecord {
   return {
-    provider: "mercado_pago",
     providerEventId,
     providerPaymentId: payment.id,
     orderId,

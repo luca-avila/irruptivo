@@ -4,13 +4,10 @@ import { prisma, type PrismaClient } from "../db/client";
 import { isUniqueConstraintError } from "../shared/prisma-utils";
 import { assertNonEmptyString } from "../shared/string-utils";
 
-export type PaymentEventProvider = "mercado_pago";
-
 export const PAYMENT_MANUAL_REVIEW_PROCESSING_RESULT =
   "manual_review_required";
 
 export type PaymentEventIdentity = {
-  provider: PaymentEventProvider;
   providerEventId: string;
 };
 
@@ -81,17 +78,13 @@ export async function recordPaymentEventOnce(
 }
 
 export async function hasProcessedPaymentEvent({
-  provider,
   providerEventId
 }: PaymentEventIdentity): Promise<boolean> {
   assertNonEmptyString(providerEventId, "providerEventId");
 
   const event = await prisma.paymentEvent.findUnique({
     where: {
-      provider_providerEventId: {
-        provider,
-        providerEventId: providerEventId.trim()
-      }
+      providerEventId: providerEventId.trim()
     },
     select: {
       id: true
@@ -159,12 +152,7 @@ export async function resetPaymentEventsForTests(): Promise<void> {
 export function mapPaymentEventRowToRecord(
   row: PaymentEventRow | PaymentEventWriteRow
 ): PaymentEventRecord {
-  if (row.provider !== "mercado_pago") {
-    throw new RangeError("provider must be mercado_pago");
-  }
-
   return {
-    provider: row.provider,
     providerEventId: row.providerEventId,
     providerPaymentId: row.providerPaymentId,
     orderId: row.orderId,
@@ -182,7 +170,6 @@ export function mapPaymentEventRecordToRow(
   const normalizedEvent = normalizePaymentEventRecord(event);
 
   return {
-    provider: normalizedEvent.provider,
     providerEventId: normalizedEvent.providerEventId,
     providerPaymentId: normalizedEvent.providerPaymentId,
     orderId: normalizedEvent.orderId,
@@ -230,10 +217,7 @@ async function readPaymentEventByIdentity(
 ): Promise<PaymentEventRecord | null> {
   const existingEvent = await client.paymentEvent.findUnique({
     where: {
-      provider_providerEventId: {
-        provider: event.provider,
-        providerEventId: event.providerEventId.trim()
-      }
+      providerEventId: event.providerEventId.trim()
     }
   });
 
@@ -249,16 +233,11 @@ function normalizePaymentEventRecord(
   assertNonEmptyString(event.action, "action");
   assertNonEmptyString(event.processingResult, "processingResult");
 
-  if (event.provider !== "mercado_pago") {
-    throw new RangeError("provider must be mercado_pago");
-  }
-
   if (Number.isNaN(Date.parse(event.receivedAt))) {
     throw new RangeError("receivedAt must be a valid date");
   }
 
   return {
-    provider: event.provider,
     providerEventId: event.providerEventId.trim(),
     providerPaymentId: event.providerPaymentId.trim(),
     orderId: event.orderId?.trim() || null,

@@ -35,7 +35,7 @@ negocio vive en módulos profundos bajo `src/`; las rutas y la UI bajo `app/`.
 | `checkout/` | Formulario de checkout, métodos de entrega, handoff de pago. |
 | `orders/` | Creación de pedido, store de pedidos (Prisma), expiración de pendientes, token de acceso de invitado y proyección de estado de pedido. |
 | `payments/` | Preferencia de Mercado Pago, webhook, reconciliación de pago, eventos de pago (idempotencia), páginas de resultado de pago. |
-| `notifications/` | Emails transaccionales (confirmación al comprador, aviso al admin, y aviso de fulfillment al comprador en envío/retiro) y adaptador agnóstico de proveedor de email: modos `local` (outbox de dev), `http` (genérico) y `resend` (producción). |
+| `notifications/` | Emails transaccionales (confirmación al comprador, aviso al admin, y aviso de fulfillment al comprador en envío/retiro) y adaptador de email: modos `local` (outbox de dev/tests) y `resend` (producción). |
 | `admin/` | Auth/sesión de admin, gestión de productos/variantes/imágenes (incluye filtros, búsqueda instantánea, carga por lote, asociación de imágenes y borrado permanente de producto), cola y detalle de pedidos, transiciones de fulfillment, edición de contacto/fulfillment. |
 | `storefront/` | Homepage, navegación, páginas de confianza (trust), y `components/` (UI compartida del storefront). |
 | `media/` | Resolución y servido de media de producto desde el filesystem. |
@@ -70,15 +70,17 @@ Entidades principales (`prisma/schema.prisma`):
   `variantId` para imágenes específicas de Suplementos, más `renditions` (JSON:
   card/detail/original) y soft-delete (`deletedAt`).
 - **`Order`** — incluye número de pedido, **token de acceso de invitado**, **clave de
-  idempotencia**, estado, datos de contacto, método/dirección de entrega, montos
-  (subtotal/envío/total) y campos de pago de Mercado Pago (preference id, init points,
-  external reference). Relaciona `OrderItem`, `OrderStatusHistory`, `PaymentEvent`,
-  `EmailDelivery`.
+  idempotencia**, estado, datos de contacto, método/dirección de entrega y montos
+  (subtotal/envío/total). Relaciona `OrderItem`, `OrderStatusHistory`, `PaymentPreference`,
+  `PaymentEvent` y `EmailDelivery`.
+- **`PaymentPreference`** — handoff 1:1 del pedido a Mercado Pago: `preferenceId`,
+  `checkoutUrl` y `createdAt`. Los init points y external reference no se persisten; sólo se
+  usan transitoriamente al crear la preferencia y calcular la URL de checkout.
 - **`OrderItem`** — **snapshot** del producto/variante al momento de la compra
   (nombre, slug, SKU, opciones, precio unitario y total de línea). Las refs a producto/
   variante son snapshots, no FKs.
 - **`OrderStatusHistory`** — auditoría de transiciones (from/to, razón, actor).
-- **`PaymentEvent`** — ledger de eventos de pago con `@@unique([provider, providerEventId])`
+- **`PaymentEvent`** — ledger de eventos de pago con `@@unique([providerEventId])`
   para **idempotencia**; la clave se deriva de `payment.id + payment.status` para deduplicar
   webhook y retorno, y la transición atómica del pedido sigue siendo el gate final.
 - **`EmailDelivery`** — estado de envío de emails transaccionales (idempotencia de
@@ -89,7 +91,7 @@ Entidades principales (`prisma/schema.prisma`):
   `adminNotificationEmail`.
 
 Enums: `ProductArea` (clothing/supplement), `ProductStatus`, `OrderStatus` (9 estados),
-`DeliveryMethod`, `PaymentProvider` (mercado_pago), `EmailDeliveryStatus`.
+`DeliveryMethod`, `EmailDeliveryStatus`.
 
 ## Máquina de estados del pedido
 
@@ -188,21 +190,18 @@ pendiente.
 
 ## Notificaciones por email
 
-`notifications/email-provider.ts` es un **adaptador agnóstico de proveedor**: el resto del
-código sólo conoce `sendEmail(EmailMessage)` y un `EmailSendResult` discriminado
+`notifications/email-provider.ts` es el adaptador de email transaccional: el resto del código
+sólo conoce `sendEmail(EmailMessage)` y un `EmailSendResult` discriminado
 (`sent` / `configuration_missing` / `failed`). El proveedor se elige con
-`IRRUPTIVO_EMAIL_PROVIDER` y hoy hay tres modos:
+`IRRUPTIVO_EMAIL_PROVIDER` y hoy hay dos modos:
 
-- **`local`** — outbox en memoria para dev/demo (default fuera de producción); no envía nada
+- **`local`** — outbox en memoria para dev/tests (default fuera de producción); no envía nada
   real, sólo permite inspección/tests.
-- **`http`** — POST genérico a `IRRUPTIVO_EMAIL_PROVIDER_URL` con `Bearer` token. Pensado para
-  enchufar cualquier proveedor con un endpoint propio.
 - **`resend`** — producción. POST a `https://api.resend.com/emails` con
-  `IRRUPTIVO_EMAIL_PROVIDER_TOKEN`; `IRRUPTIVO_EMAIL_PROVIDER_URL` **no** aplica en este modo.
+  `IRRUPTIVO_EMAIL_PROVIDER_TOKEN`.
 
 En todos los modos el remitente sale de `IRRUPTIVO_EMAIL_FROM_EMAIL` /
-`IRRUPTIVO_EMAIL_FROM_NAME`, y agregar otro proveedor es escribir una nueva función `send*` +
-su rama de normalización de config. El estado de cada envío se persiste en `email_deliveries`.
+`IRRUPTIVO_EMAIL_FROM_NAME`. El estado de cada envío se persiste en `email_deliveries`.
 Pendiente para producción: verificar el dominio remitente en Resend (SPF/DKIM), si no los
 emails caen en spam o el envío falla.
 

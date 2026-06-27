@@ -4,7 +4,6 @@ import { DELIVERY_METHOD, ORDER_STATUS, type OrderStatus } from "../domain/rules
 import { type Order } from "../orders/order-creation";
 import {
   buildPaymentManualReviewState,
-  type PaymentEventIdentity,
   type PaymentEventRecord,
   type RecordPaymentEventOnceResult
 } from "./payment-events";
@@ -114,13 +113,12 @@ function createOrderRepository(order: Order | null): TestOrderRepository {
   let transitionCount = 0;
   const events: PaymentEventRecord[] = [];
   const findStoredPaymentEvent = ({
-    provider,
     providerEventId
-  }: PaymentEventIdentity): PaymentEventRecord | null =>
+  }: {
+    providerEventId: string;
+  }): PaymentEventRecord | null =>
     events.find(
-      (candidateEvent) =>
-        candidateEvent.provider === provider &&
-        candidateEvent.providerEventId === providerEventId
+      (candidateEvent) => candidateEvent.providerEventId === providerEventId
     ) ?? null;
   const recordPaymentEvent = async (
     event: PaymentEventRecord

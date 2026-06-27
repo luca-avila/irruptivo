@@ -117,12 +117,8 @@ export async function createPaymentPreferenceForOrder(
     return {
       status: "created",
       preference: {
-        provider: "mercado_pago",
         preferenceId: providerResult.preferenceId,
         checkoutUrl: getCheckoutUrl(providerResult, normalizedConfig),
-        initPoint: providerResult.initPoint,
-        sandboxInitPoint: providerResult.sandboxInitPoint,
-        externalReference: order.id,
         createdAt: getDate(now, "now").toISOString()
       }
     };

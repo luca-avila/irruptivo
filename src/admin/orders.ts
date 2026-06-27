@@ -439,7 +439,7 @@ function getAdminOrderDetailView(
     },
     payment: {
       statusLabel: getOrderStatusLabel(order.status),
-      providerLabel: order.paymentPreference?.provider === "mercado_pago"
+      providerLabel: order.paymentPreference
         ? "Mercado Pago"
         : "Sin preferencia asociada",
       preferenceLabel: order.paymentPreference?.preferenceId ?? "No registrada"

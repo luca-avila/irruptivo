@@ -91,12 +91,86 @@ describe.skipIf(!process.env.DATABASE_URL)("checkout payment handoff", () => {
         id: "order-001",
         status: ORDER_STATUS.pendingPayment,
         paymentPreference: {
-          provider: "mercado_pago",
           preferenceId: "pref-123",
-          externalReference: "order-001"
+          checkoutUrl: "https://www.mercadopago.com.ar/init/pref-123",
+          createdAt: now
         }
       }
     ]);
+  });
+
+  it("reuses the stored checkout URL on duplicate handoff without creating another preference", async () => {
+    await resetOrderStoreForTests();
+    let providerCalls = 0;
+
+    const firstResult = await createCheckoutPaymentHandoff({
+      idempotencyKey: "checkout-submit-duplicate",
+      cart: getCart(),
+      checkout: getCheckout(),
+      products,
+      orderId: "order-duplicate",
+      orderNumber: "IRR-000077",
+      guestAccessToken: "guest-token-duplicate",
+      now,
+      paymentPreferenceOptions: {
+        config: {
+          accessToken: "APP_USR-123",
+          appUrl: "https://irruptivo.test"
+        },
+        provider: async () => {
+          providerCalls += 1;
+
+          return {
+            preferenceId: "pref-duplicate",
+            initPoint: "https://www.mercadopago.com.ar/init/pref-duplicate",
+            sandboxInitPoint: null
+          };
+        },
+        now
+      }
+    });
+    const duplicateResult = await createCheckoutPaymentHandoff({
+      idempotencyKey: "checkout-submit-duplicate",
+      cart: getCart(),
+      checkout: getCheckout(),
+      products,
+      orderId: "order-ignored",
+      orderNumber: "IRR-999999",
+      guestAccessToken: "guest-token-ignored",
+      now,
+      paymentPreferenceOptions: {
+        config: {
+          accessToken: "APP_USR-123",
+          appUrl: "https://irruptivo.test"
+        },
+        provider: async () => {
+          providerCalls += 1;
+          throw new Error("Duplicate handoff should reuse stored preference.");
+        },
+        now
+      }
+    });
+
+    expect(firstResult).toMatchObject({
+      status: "created",
+      isDuplicate: false,
+      payment: {
+        checkoutUrl: "https://www.mercadopago.com.ar/init/pref-duplicate"
+      }
+    });
+    expect(duplicateResult).toMatchObject({
+      status: "created",
+      isDuplicate: true,
+      order: {
+        orderId: "order-duplicate"
+      },
+      payment: {
+        preferenceId: "pref-duplicate",
+        checkoutUrl: "https://www.mercadopago.com.ar/init/pref-duplicate"
+      }
+    });
+    expect(providerCalls).toBe(1);
+    await expect(prisma.paymentPreference.count()).resolves.toBe(1);
   });
 
   it("leaves the order pending and returns a retryable Spanish error when preference creation fails", async () => {

@@ -8,13 +8,13 @@ describe("order database row mapper", () => {
     const order = mapOrderRecordToOrder(
       getOrderRecord({
         status: ORDER_STATUS.paid,
-        paymentProvider: "mercado_pago",
-        paymentPreferenceId: "pref-123",
-        paymentCheckoutUrl: "https://checkout.test/pref-123",
-        paymentInitPoint: "https://init.test/pref-123",
-        paymentSandboxInitPoint: "https://sandbox.test/pref-123",
-        paymentExternalReference: "order-001",
-        paymentCreatedAt: new Date("2026-05-30T12:05:00.000Z")
+        paymentPreference: {
+          id: "payment-preference-001",
+          orderId: "order-001",
+          preferenceId: "pref-123",
+          checkoutUrl: "https://checkout.test/pref-123",
+          createdAt: new Date("2026-05-30T12:05:00.000Z")
+        }
       })
     );
 
@@ -46,12 +46,8 @@ describe("order database row mapper", () => {
         }
       ],
       paymentPreference: {
-        provider: "mercado_pago",
         preferenceId: "pref-123",
         checkoutUrl: "https://checkout.test/pref-123",
-        initPoint: "https://init.test/pref-123",
-        sandboxInitPoint: "https://sandbox.test/pref-123",
-        externalReference: "order-001",
         createdAt: "2026-05-30T12:05:00.000Z"
       }
     });
@@ -105,13 +101,7 @@ function getOrderRecord(
     subtotalArs: 52000,
     deliveryCostArs: 5000,
     totalArs: 57000,
-    paymentProvider: null,
-    paymentPreferenceId: null,
-    paymentCheckoutUrl: null,
-    paymentInitPoint: null,
-    paymentSandboxInitPoint: null,
-    paymentExternalReference: null,
-    paymentCreatedAt: null,
+    paymentPreference: null,
     items: [
       {
         id: "order-item-001",

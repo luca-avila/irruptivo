@@ -356,7 +356,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
             status: "configuration_missing",
             provider: "test",
             message: "Falta configurar el proveedor de email.",
-            missingConfig: ["IRRUPTIVO_EMAIL_PROVIDER_URL"]
+            missingConfig: ["IRRUPTIVO_EMAIL_PROVIDER_TOKEN"]
           };
         },
         appUrl: "https://irruptivo.test",
@@ -615,14 +615,7 @@ async function createTestOrder(order: Order): Promise<void> {
       adminNotes: null,
       subtotalArs: order.subtotalArs,
       deliveryCostArs: order.deliveryCostArs,
-      totalArs: order.totalArs,
-      paymentProvider: null,
-      paymentPreferenceId: null,
-      paymentCheckoutUrl: null,
-      paymentInitPoint: null,
-      paymentSandboxInitPoint: null,
-      paymentExternalReference: null,
-      paymentCreatedAt: null
+      totalArs: order.totalArs
     }
   });
 }

@@ -13,7 +13,6 @@ import { type AdminOrderNotificationResult } from "../notifications/admin-order-
 import { type Order } from "../orders/order-creation";
 import {
   PAYMENT_MANUAL_REVIEW_PROCESSING_RESULT,
-  type PaymentEventIdentity,
   type PaymentEventRecord,
   type RecordPaymentEventOnceResult
 } from "./payment-events";
@@ -781,13 +780,12 @@ function createOrderRepository(
   );
   const events: PaymentEventRecord[] = [];
   const findStoredPaymentEvent = ({
-    provider,
     providerEventId
-  }: PaymentEventIdentity): PaymentEventRecord | null =>
+  }: {
+    providerEventId: string;
+  }): PaymentEventRecord | null =>
     events.find(
-      (candidateEvent) =>
-        candidateEvent.provider === provider &&
-        candidateEvent.providerEventId === providerEventId
+      (candidateEvent) => candidateEvent.providerEventId === providerEventId
     ) ?? null;
   const recordPaymentEvent = async (
     event: PaymentEventRecord

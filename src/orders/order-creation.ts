@@ -58,12 +58,8 @@ export type PendingOrderDeliverySnapshot = {
 };
 
 export type PendingOrderPaymentPreference = {
-  provider: "mercado_pago";
   preferenceId: string;
   checkoutUrl: string;
-  initPoint: string;
-  sandboxInitPoint: string | null;
-  externalReference: string;
   createdAt: string;
 };
 

@@ -60,62 +60,15 @@ describe("email provider adapter", () => {
 
     expect(result).toEqual({
       status: "configuration_missing",
-      provider: "http",
+      provider: "resend",
       message:
-        "Falta configurar IRRUPTIVO_EMAIL_PROVIDER_URL, IRRUPTIVO_EMAIL_PROVIDER_TOKEN e IRRUPTIVO_EMAIL_FROM_EMAIL para enviar emails transaccionales en producción.",
+        "Falta configurar IRRUPTIVO_EMAIL_PROVIDER_TOKEN e IRRUPTIVO_EMAIL_FROM_EMAIL para enviar emails transaccionales en producción.",
       missingConfig: [
-        "IRRUPTIVO_EMAIL_PROVIDER_URL",
         "IRRUPTIVO_EMAIL_PROVIDER_TOKEN",
         "IRRUPTIVO_EMAIL_FROM_EMAIL"
       ]
     });
     expect(readLocalEmailOutboxForTests()).toEqual([]);
-  });
-
-  it("keeps sending through the generic HTTP provider when configured", async () => {
-    const fetcher = vi.fn<typeof fetch>(async () => {
-      return new Response(JSON.stringify({ messageId: "http-email-123" }), {
-        status: 200,
-        headers: {
-          "Content-Type": "application/json"
-        }
-      });
-    });
-
-    const result = await sendEmail(message, {
-      config: {
-        provider: "http",
-        providerUrl: "https://email-provider.example/send",
-        providerToken: "http_secret",
-        fromEmail: "ventas@irruptivo.com",
-        fromName: "Irruptivo",
-        nodeEnv: "production"
-      },
-      fetcher
-    });
-
-    expect(result).toEqual({
-      status: "sent",
-      provider: "http",
-      messageId: "http-email-123"
-    });
-    expect(fetcher).toHaveBeenCalledExactlyOnceWith(
-      "https://email-provider.example/send",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: "Bearer http_secret"
-        },
-        body: JSON.stringify({
-          from: {
-            email: "ventas@irruptivo.com",
-            name: "Irruptivo"
-          },
-          ...message
-        })
-      }
-    );
   });
 
   it("sends production email through Resend with Resend API payload shape", async () => {

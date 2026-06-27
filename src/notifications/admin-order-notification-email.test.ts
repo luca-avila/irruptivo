@@ -270,14 +270,7 @@ async function createTestOrder(order: Order): Promise<void> {
       adminNotes: null,
       subtotalArs: order.subtotalArs,
       deliveryCostArs: order.deliveryCostArs,
-      totalArs: order.totalArs,
-      paymentProvider: null,
-      paymentPreferenceId: null,
-      paymentCheckoutUrl: null,
-      paymentInitPoint: null,
-      paymentSandboxInitPoint: null,
-      paymentExternalReference: null,
-      paymentCreatedAt: null
+      totalArs: order.totalArs
     }
   });
 }

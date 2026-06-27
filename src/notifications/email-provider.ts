@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 
 import { getDate } from "../shared/date-utils";
 import { assertNonEmptyString } from "../shared/string-utils";
-import { normalizeAbsoluteUrlHref } from "../shared/url-utils";
 
 export type EmailRecipient = {
   email: string;
@@ -19,7 +18,6 @@ export type EmailMessage = {
 
 export type EmailProviderConfig = {
   provider?: string | null;
-  providerUrl?: string | null;
   providerToken?: string | null;
   fromEmail?: string | null;
   fromName?: string | null;
@@ -56,13 +54,6 @@ export type LocalEmailOutboxRecord = {
   messageId: string;
 };
 
-type NormalizedHttpEmailProviderConfig = {
-  providerUrl: string;
-  providerToken: string;
-  fromEmail: string;
-  fromName: string;
-};
-
 type NormalizedResendEmailProviderConfig = {
   providerToken: string;
   fromEmail: string;
@@ -71,7 +62,6 @@ type NormalizedResendEmailProviderConfig = {
 
 const DEFAULT_FROM_NAME = "Irruptivo";
 const LOCAL_EMAIL_PROVIDER = "local";
-const HTTP_EMAIL_PROVIDER = "http";
 const RESEND_EMAIL_PROVIDER = "resend";
 const RESEND_EMAIL_ENDPOINT = "https://api.resend.com/emails";
 
@@ -89,34 +79,19 @@ export async function sendEmail(
 ): Promise<EmailSendResult> {
   const normalizedMessage = normalizeEmailMessage(message);
 
-  if (isResendEmailProvider(config)) {
-    const normalizedConfig = normalizeResendEmailProviderConfig(config);
-
-    if (normalizedConfig.status === "configured") {
-      return sendResendEmail(normalizedMessage, normalizedConfig.config, fetcher);
-    }
-
-    return {
-      status: "configuration_missing",
-      provider: RESEND_EMAIL_PROVIDER,
-      message: getMissingConfigMessage(normalizedConfig.missingConfig),
-      missingConfig: normalizedConfig.missingConfig
-    };
-  }
-
-  const normalizedConfig = normalizeHttpEmailProviderConfig(config);
-
-  if (normalizedConfig.status === "configured") {
-    return sendHttpEmail(normalizedMessage, normalizedConfig.config, fetcher);
-  }
-
   if (shouldUseLocalEmailProvider(config)) {
     return sendLocalEmail(normalizedMessage, now);
   }
 
+  const normalizedConfig = normalizeResendEmailProviderConfig(config);
+
+  if (normalizedConfig.status === "configured") {
+    return sendResendEmail(normalizedMessage, normalizedConfig.config, fetcher);
+  }
+
   return {
     status: "configuration_missing",
-    provider: HTTP_EMAIL_PROVIDER,
+    provider: RESEND_EMAIL_PROVIDER,
     message: getMissingConfigMessage(normalizedConfig.missingConfig),
     missingConfig: normalizedConfig.missingConfig
   };
@@ -127,7 +102,6 @@ export function readEmailProviderConfig(
 ): EmailProviderConfig {
   return {
     provider: env.IRRUPTIVO_EMAIL_PROVIDER,
-    providerUrl: env.IRRUPTIVO_EMAIL_PROVIDER_URL,
     providerToken: env.IRRUPTIVO_EMAIL_PROVIDER_TOKEN,
     fromEmail: env.IRRUPTIVO_EMAIL_FROM_EMAIL ?? env.IRRUPTIVO_EMAIL_FROM,
     fromName: env.IRRUPTIVO_EMAIL_FROM_NAME,
@@ -188,43 +162,6 @@ async function sendResendEmail(
   };
 }
 
-async function sendHttpEmail(
-  message: EmailMessage,
-  config: NormalizedHttpEmailProviderConfig,
-  fetcher: typeof fetch
-): Promise<EmailSendResult> {
-  const response = await fetcher(config.providerUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${config.providerToken}`
-    },
-    body: JSON.stringify({
-      from: {
-        email: config.fromEmail,
-        name: config.fromName
-      },
-      ...message
-    })
-  }).catch(() => null);
-
-  if (!response?.ok) {
-    return {
-      status: "failed",
-      provider: HTTP_EMAIL_PROVIDER,
-      message: "No pudimos enviar el email transaccional con el proveedor configurado."
-    };
-  }
-
-  const responseBody: unknown = await response.json().catch(() => null);
-
-  return {
-    status: "sent",
-    provider: HTTP_EMAIL_PROVIDER,
-    messageId: readProviderMessageId(responseBody) ?? randomUUID()
-  };
-}
-
 function sendLocalEmail(
   message: EmailMessage,
   now: Date | string
@@ -281,61 +218,18 @@ function normalizeResendEmailProviderConfig(config: EmailProviderConfig):
   };
 }
 
-function normalizeHttpEmailProviderConfig(config: EmailProviderConfig):
-  | {
-      status: "configured";
-      config: NormalizedHttpEmailProviderConfig;
-      missingConfig: [];
-    }
-  | {
-      status: "missing";
-      missingConfig: string[];
-    } {
-  const providerUrl = normalizeAbsoluteUrlHref(config.providerUrl);
-  const providerToken = config.providerToken?.trim() ?? "";
-  const fromEmail = config.fromEmail?.trim() ?? "";
-  const fromName = config.fromName?.trim() || DEFAULT_FROM_NAME;
-  const missingConfig = [
-    providerUrl ? null : "IRRUPTIVO_EMAIL_PROVIDER_URL",
-    providerToken ? null : "IRRUPTIVO_EMAIL_PROVIDER_TOKEN",
-    fromEmail ? null : "IRRUPTIVO_EMAIL_FROM_EMAIL"
-  ].filter((key): key is string => Boolean(key));
-
-  if (!providerUrl || !providerToken || !fromEmail) {
-    return {
-      status: "missing",
-      missingConfig
-    };
-  }
-
-  return {
-    status: "configured",
-    config: {
-      providerUrl,
-      providerToken,
-      fromEmail,
-      fromName
-    },
-    missingConfig: []
-  };
-}
-
 function shouldUseLocalEmailProvider(config: EmailProviderConfig): boolean {
   const provider = config.provider?.trim().toLowerCase();
 
-  if (provider === LOCAL_EMAIL_PROVIDER) {
+  if (provider === LOCAL_EMAIL_PROVIDER && config.nodeEnv !== "production") {
     return true;
   }
 
-  if (provider === HTTP_EMAIL_PROVIDER || provider === RESEND_EMAIL_PROVIDER) {
+  if (provider === RESEND_EMAIL_PROVIDER) {
     return false;
   }
 
   return config.nodeEnv !== "production";
-}
-
-function isResendEmailProvider(config: EmailProviderConfig): boolean {
-  return config.provider?.trim().toLowerCase() === RESEND_EMAIL_PROVIDER;
 }
 
 function normalizeEmailMessage(message: EmailMessage): EmailMessage {
