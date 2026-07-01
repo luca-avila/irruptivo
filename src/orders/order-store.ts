@@ -4,7 +4,6 @@ import { type Cart } from "../cart/cart";
 import { type CatalogProductRecord } from "../catalog/catalog";
 import {
   DELIVERY_METHOD_LABEL,
-  ORDER_STATUSES,
   type DeliveryMethodLabel,
   type OrderStatus
 } from "../domain/rules";
@@ -394,7 +393,7 @@ export function mapOrderRecordToOrder(record: OrderRecordWithItems): Order {
   return cloneOrder({
     id: record.id,
     orderNumber: record.orderNumber,
-    status: toOrderStatus(record.status),
+    status: record.status,
     createdAt: record.createdAt.toISOString(),
     guestAccessToken: record.guestAccessToken,
     contact: {
@@ -551,14 +550,6 @@ function cloneCart(cart: Cart): Cart {
 
 function getDefaultStatusReason(status: OrderStatus): string {
   return `status_${status}`;
-}
-
-function toOrderStatus(status: string): OrderStatus {
-  if (!ORDER_STATUSES.includes(status as OrderStatus)) {
-    throw new RangeError(`Unknown order status "${status}".`);
-  }
-
-  return status as OrderStatus;
 }
 
 function toDeliveryMethodLabel(label: string): DeliveryMethodLabel {

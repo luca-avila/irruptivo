@@ -1,3 +1,5 @@
+import type { $Enums } from "@prisma/client";
+
 import { type AvailabilityLabel } from "../domain/rules";
 import { getPublicImageSet } from "./product-images";
 import { getAvailableStock } from "./stock";
@@ -8,15 +10,14 @@ export const PRODUCT_AREA = {
   supplement: "supplement"
 } as const;
 
-export type ProductArea = (typeof PRODUCT_AREA)[keyof typeof PRODUCT_AREA];
+export type ProductArea = $Enums.ProductArea;
 
 export const PRODUCT_STATUS = {
   active: "active",
   inactive: "inactive"
 } as const;
 
-export type ProductStatus =
-  (typeof PRODUCT_STATUS)[keyof typeof PRODUCT_STATUS];
+export type ProductStatus = $Enums.ProductStatus;
 
 export type VariantOptionValues = {
   color?: string;

@@ -1,3 +1,5 @@
+import type { $Enums } from "@prisma/client";
+
 export const ORDER_STATUS = {
   pendingPayment: "pending_payment",
   paid: "paid",
@@ -12,7 +14,7 @@ export const ORDER_STATUS = {
 
 export const ORDER_STATUSES = Object.values(ORDER_STATUS);
 
-export type OrderStatus = (typeof ORDER_STATUS)[keyof typeof ORDER_STATUS];
+export type OrderStatus = $Enums.OrderStatus;
 
 export const ORDER_STATUS_LABEL = {
   [ORDER_STATUS.pendingPayment]: "Pago pendiente",
@@ -36,8 +38,7 @@ export const DELIVERY_METHOD = {
 
 export const DELIVERY_METHODS = Object.values(DELIVERY_METHOD);
 
-export type DeliveryMethod =
-  (typeof DELIVERY_METHOD)[keyof typeof DELIVERY_METHOD];
+export type DeliveryMethod = $Enums.DeliveryMethod;
 
 export const DELIVERY_METHOD_LABEL = {
   [DELIVERY_METHOD.shipping]: "Envío a domicilio",

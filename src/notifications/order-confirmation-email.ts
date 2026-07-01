@@ -1,4 +1,4 @@
-import { type EmailDelivery as EmailDeliveryRow } from "@prisma/client";
+import { type $Enums, type EmailDelivery as EmailDeliveryRow } from "@prisma/client";
 
 import { prisma } from "../db/client";
 import { getDate } from "../shared/date-utils";
@@ -24,11 +24,7 @@ import {
   type EmailSendResult
 } from "./email-provider";
 
-export type OrderConfirmationEmailDeliveryStatus =
-  | "sending"
-  | "sent"
-  | "configuration_missing"
-  | "failed";
+export type OrderConfirmationEmailDeliveryStatus = $Enums.EmailDeliveryStatus;
 
 export type OrderConfirmationEmailDeliveryRecord = {
   orderId: string;
