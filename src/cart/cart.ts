@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 import {
   assertMoney,
   assertPositiveInteger,
@@ -186,24 +188,39 @@ export function serializeCart(cart: Cart): string {
   });
 }
 
+const cartItemSchema = z.object({
+  productId: z.string().trim().min(1),
+  variantId: z.string().trim().min(1),
+  sku: z.string().trim().min(1),
+  quantity: z.number().int().min(1),
+  priceSnapshotArs: z.number().int().min(0),
+  priceSnapshotAt: z
+    .string()
+    .trim()
+    .min(1)
+    .refine((value) => !Number.isNaN(Date.parse(value)))
+});
+
 export function hydrateCart(rawCart: string | null | undefined): Cart {
   if (!rawCart) {
     return { items: [] };
   }
 
-  try {
-    const parsedCart: unknown = JSON.parse(rawCart);
-    const rawItems = getRawCartItems(parsedCart);
+  let parsedCart: unknown;
 
-    return {
-      items: rawItems.flatMap((item) => {
-        const normalizedItem = normalizeCartItem(item);
-        return normalizedItem ? [normalizedItem] : [];
-      })
-    };
+  try {
+    parsedCart = JSON.parse(rawCart);
   } catch {
     return { items: [] };
   }
+
+  return {
+    items: getRawCartItems(parsedCart).flatMap((item) => {
+      const parsedItem = cartItemSchema.safeParse(item);
+
+      return parsedItem.success ? [parsedItem.data] : [];
+    })
+  };
 }
 
 function getRawCartItems(parsedCart: unknown): unknown[] {
@@ -221,62 +238,6 @@ function getRawCartItems(parsedCart: unknown): unknown[] {
   }
 
   return [];
-}
-
-function normalizeCartItem(item: unknown): CartItem | null {
-  if (!item || typeof item !== "object") {
-    return null;
-  }
-
-  const productId = getObjectString(item, "productId");
-  const variantId = getObjectString(item, "variantId");
-  const sku = getObjectString(item, "sku");
-  const quantity = getObjectInteger(item, "quantity", { minimum: 1 });
-  const priceSnapshotArs = getObjectInteger(item, "priceSnapshotArs", {
-    minimum: 0
-  });
-  const priceSnapshotAt = getObjectString(item, "priceSnapshotAt");
-
-  if (
-    !productId ||
-    !variantId ||
-    !sku ||
-    !quantity ||
-    priceSnapshotArs === null ||
-    !priceSnapshotAt ||
-    Number.isNaN(Date.parse(priceSnapshotAt))
-  ) {
-    return null;
-  }
-
-  return {
-    productId,
-    variantId,
-    sku,
-    quantity,
-    priceSnapshotArs,
-    priceSnapshotAt
-  };
-}
-
-function getObjectString(item: object, key: keyof CartItem): string | null {
-  const value = (item as Record<string, unknown>)[key];
-
-  return typeof value === "string" && value.trim().length > 0
-    ? value.trim()
-    : null;
-}
-
-function getObjectInteger(
-  item: object,
-  key: keyof CartItem,
-  { minimum }: { minimum: number }
-): number | null {
-  const value = (item as Record<string, unknown>)[key];
-
-  return typeof value === "number" && Number.isInteger(value) && value >= minimum
-    ? value
-    : null;
 }
 
 function getSnapshotTimestamp(snapshotAt: Date | string | undefined): string {

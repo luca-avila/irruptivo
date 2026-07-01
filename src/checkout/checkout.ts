@@ -4,6 +4,7 @@ import {
   normalizeNullableText,
   normalizeOptionalText
 } from "../shared/string-utils";
+import { isValidEmail } from "../shared/email-utils";
 
 import {
   DELIVERY_METHODS,
@@ -110,13 +111,11 @@ const rawCheckoutInputSchema = z.object({
   postalCode: z.string().nullish(),
   notes: z.string().nullish(),
   cart: z.object({
-    itemCount: z.number(),
-    subtotalArs: z.number(),
+    itemCount: z.number().int().nonnegative(),
+    subtotalArs: z.number().int().nonnegative(),
     canCheckout: z.boolean()
   })
 });
-
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function validateCheckoutInput(
   input: CheckoutInput
@@ -151,7 +150,7 @@ export function validateCheckoutInput(
 
   if (!email) {
     addError(errors, "email", "Ingresá tu email.");
-  } else if (!EMAIL_PATTERN.test(email)) {
+  } else if (!isValidEmail(email)) {
     addError(errors, "email", "Ingresá un email válido.");
   }
 
@@ -274,13 +273,12 @@ function isDeliveryMethod(value: string): value is DeliveryMethod {
   return (DELIVERY_METHODS as readonly string[]).includes(value);
 }
 
+// The schema already guarantees `itemCount`/`subtotalArs` are non-negative
+// integers, so this layer only owns the business messaging (empty cart vs.
+// items that still need fixing before paying).
 function getCartError(cart: CheckoutCartInput): string | null {
-  if (!Number.isInteger(cart.itemCount) || cart.itemCount < 1) {
+  if (cart.itemCount < 1) {
     return "Tu carrito está vacío. Agregá productos para continuar.";
-  }
-
-  if (!Number.isInteger(cart.subtotalArs) || cart.subtotalArs < 0) {
-    return "No pudimos validar el carrito. Volvé al carrito y revisá los productos.";
   }
 
   if (!cart.canCheckout) {
@@ -291,13 +289,7 @@ function getCartError(cart: CheckoutCartInput): string | null {
 }
 
 function canBuildSummary(cart: CheckoutCartInput): boolean {
-  return (
-    cart.canCheckout &&
-    Number.isInteger(cart.itemCount) &&
-    cart.itemCount > 0 &&
-    Number.isInteger(cart.subtotalArs) &&
-    cart.subtotalArs >= 0
-  );
+  return cart.canCheckout && cart.itemCount > 0;
 }
 
 function addError(

@@ -3,6 +3,7 @@ import {
   normalizeNullableText,
   normalizeOptionalText
 } from "../shared/string-utils";
+import { isValidEmail } from "../shared/email-utils";
 import { type Order } from "../orders/order-creation";
 import {
   findOrderByIdInStore,
@@ -89,8 +90,6 @@ const EDITABLE_AFTER_PAYMENT_STATUSES = new Set<OrderStatus>([
   ORDER_STATUS.readyForPickup,
   ORDER_STATUS.pickedUp
 ]);
-
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const FIELD_MAX_LENGTHS = {
   adminNotes: 1000,
@@ -288,7 +287,7 @@ function applyEmailField(
 ): AdminOrderFulfillmentEditResult {
   const email = normalizeEmail(value);
 
-  if (!email || !EMAIL_PATTERN.test(email)) {
+  if (!email || !isValidEmail(email)) {
     return getError("invalid_email", "contact.email");
   }
 

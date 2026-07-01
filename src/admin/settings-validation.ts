@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { isValidEmail } from "../shared/email-utils";
+
 export type AdminNotificationEmailFormResult =
   | {
       status: "valid";
@@ -14,7 +16,7 @@ const adminNotificationEmailSchema = z
   .string()
   .transform((value) => value.trim())
   .refine(
-    (value) => value.length === 0 || z.email().safeParse(value).success,
+    (value) => value.length === 0 || isValidEmail(value),
     "Ingresá un email válido o dejá el campo vacío."
   )
   .transform((value) => (value.length > 0 ? value : null));

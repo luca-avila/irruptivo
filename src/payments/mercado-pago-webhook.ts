@@ -1,5 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
+import { z } from "zod";
+
 import { normalizeAbsoluteUrlOrigin } from "../shared/url-utils";
 
 const MERCADO_PAGO_API_BASE_URL = "https://api.mercadopago.com";
@@ -81,38 +83,66 @@ export function normalizeMercadoPagoWebhookConfig(
   };
 }
 
+// Mercado Pago sends ids as either strings or numbers and includes many extra
+// keys we ignore. These schemas describe the shape we depend on, while the
+// field coercion (number → string, lenient money parsing) stays in the helpers
+// below, so the parser tolerates an untrusted third-party payload without
+// trusting it.
+const requiredWebhookStringSchema = z
+  .unknown()
+  .transform(readRequiredWebhookString)
+  .pipe(z.string());
+
+const optionalWebhookStringSchema = z
+  .unknown()
+  .transform((value) => readOptionalWebhookString(value));
+
+const webhookNotificationSchema = z
+  .object({
+    id: requiredWebhookStringSchema,
+    type: requiredWebhookStringSchema,
+    action: requiredWebhookStringSchema,
+    live_mode: z
+      .unknown()
+      .transform((value) => (typeof value === "boolean" ? value : null)),
+    date_created: optionalWebhookStringSchema,
+    data: z.object({ id: requiredWebhookStringSchema })
+  })
+  .transform((notification) => ({
+    id: notification.id,
+    liveMode: notification.live_mode,
+    type: notification.type,
+    action: notification.action,
+    dataId: notification.data.id,
+    dateCreated: notification.date_created
+  }));
+
+const webhookPaymentSchema = z
+  .object({
+    id: requiredWebhookStringSchema,
+    status: requiredWebhookStringSchema,
+    status_detail: optionalWebhookStringSchema,
+    external_reference: optionalWebhookStringSchema,
+    transaction_amount: z.unknown().transform(readMoney),
+    metadata: z.unknown().transform(readMetadataInternalOrderId)
+  })
+  .transform((payment) => ({
+    id: payment.id,
+    status: payment.status,
+    statusDetail: payment.status_detail,
+    externalReference: payment.external_reference,
+    transactionAmount: payment.transaction_amount,
+    metadata: {
+      internalOrderId: payment.metadata
+    }
+  }));
+
 export function parseMercadoPagoWebhookNotification(
   value: unknown
 ): MercadoPagoWebhookNotification | null {
-  if (!value || typeof value !== "object") {
-    return null;
-  }
+  const result = webhookNotificationSchema.safeParse(value);
 
-  const record = value as Record<string, unknown>;
-  const data = record.data;
-
-  if (!data || typeof data !== "object") {
-    return null;
-  }
-
-  const dataRecord = data as Record<string, unknown>;
-  const id = readRequiredWebhookString(record.id);
-  const type = readRequiredWebhookString(record.type);
-  const action = readRequiredWebhookString(record.action);
-  const dataId = readRequiredWebhookString(dataRecord.id);
-
-  if (!id || !type || !action || !dataId) {
-    return null;
-  }
-
-  return {
-    id,
-    liveMode: typeof record.live_mode === "boolean" ? record.live_mode : null,
-    type,
-    action,
-    dataId,
-    dateCreated: readOptionalWebhookString(record.date_created)
-  };
+  return result.success ? result.data : null;
 }
 
 export function verifyMercadoPagoWebhookSignature({
@@ -190,28 +220,9 @@ export async function fetchMercadoPagoPayment(
 }
 
 function normalizeMercadoPagoPayment(value: unknown): MercadoPagoPayment | null {
-  if (!value || typeof value !== "object") {
-    return null;
-  }
+  const result = webhookPaymentSchema.safeParse(value);
 
-  const record = value as Record<string, unknown>;
-  const id = readRequiredWebhookString(record.id);
-  const status = readRequiredWebhookString(record.status);
-
-  if (!id || !status) {
-    return null;
-  }
-
-  return {
-    id,
-    status,
-    statusDetail: readOptionalWebhookString(record.status_detail),
-    externalReference: readOptionalWebhookString(record.external_reference),
-    transactionAmount: readMoney(record.transaction_amount),
-    metadata: {
-      internalOrderId: readMetadataInternalOrderId(record.metadata)
-    }
-  };
+  return result.success ? result.data : null;
 }
 
 function parseSignatureHeader(
