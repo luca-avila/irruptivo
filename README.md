@@ -32,6 +32,8 @@ La documentación vive en [`docs/`](./docs/):
 - **[`architecture.md`](./docs/architecture.md)** — el sistema como está construido: stack,
   módulos, modelo de datos, flujo de compra, modelo de stock y deploy.
 - **[`decisions.md`](./docs/decisions.md)** — log canónico de decisiones de producto y técnicas.
+- **[`runbook.md`](./docs/runbook.md)** — operación en el VPS: deploy, rollback, revisión
+  manual de pagos, emails y backups.
 - **[`agent-rules.md`](./docs/agent-rules.md)** — convenciones de código, UX y copy para
   trabajar en el repo.
 - **[`wireframes/`](./docs/wireframes/)** — referencia de diseño.

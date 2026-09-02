@@ -1,6 +1,7 @@
 # AGENTS.md
 
-Índice de navegación de la codebase para agentes (Codex, Claude Code, etc.).
+Guía para agentes de código (Codex, Claude Code, ZCode, etc.): qué es el proyecto, cómo
+montarlo, cómo trabajarlo y mapa de navegación de la codebase.
 `CLAUDE.md` es un symlink a este archivo, así ambas herramientas lo auto-cargan.
 
 Para el **porqué** del producto y las
@@ -11,7 +12,25 @@ decisiones, ver `docs/` (en especial `docs/product.md`, `docs/architecture.md`,
 
 Ecommerce fullstack de la marca Irruptivo (ropa + suplementos). Next.js 16 (App Router) ·
 React 19 · TypeScript · PostgreSQL + Prisma 6 · Zod 4 · Tailwind 4 · sharp · Mercado Pago ·
-Vitest. Deploy en VPS vía Docker.
+Vitest. Deploy en VPS vía Docker. Node 20 y PostgreSQL 16.
+
+## Configuración del entorno
+
+```bash
+cp .env.example .env            # cada variable está documentada en el propio ejemplo
+docker compose up -d postgres   # solo la DB local (el resto de los servicios es para prod)
+npm install                     # instala deps y corre `prisma generate` (postinstall)
+npx prisma migrate dev          # migraciones a la DB local
+npx prisma db seed              # datos de demo (prisma/seed.ts)
+```
+
+- El CLI de Prisma lee `.env`, **no** `.env.local` — `DATABASE_URL` va en `.env`.
+- `DATABASE_URL` apunta al host (`localhost:5432`); `docker-compose.yml` la reconstruye
+  in-network con `POSTGRES_*` para los contenedores. No mezclar.
+- Para media en local, setear `IRRUPTIVO_MEDIA_ROOT=./.media` (el default
+  `/var/lib/irruptivo/media` suele no ser escribible).
+- Sin credenciales de Mercado Pago ni email funciona igual: el provider de email default
+  es `local` (outbox de dev/tests, ver `src/notifications/email-provider.ts`).
 
 ## Comandos
 
@@ -20,21 +39,49 @@ npm run dev         # servidor de desarrollo
 npm test            # tests (vitest run)
 npm run typecheck   # tsc --noEmit
 npm run build       # next build
-npx prisma migrate dev   # migraciones a la DB local
-npx prisma db seed       # datos de demo (prisma/seed.ts)
 ```
+
+## Testing
+
+- Vitest, sin watch (`npm test`). Tests colocalados junto al código: `src/**/*.test.ts`
+  (los de integración, `*.integration.test.ts`). Corren en serie (`fileParallelism: false`).
+- **Muchos tests usan la DB real vía Prisma**: sin PostgreSQL corriendo y migrada, la suite
+  no pasa (CI levanta un `postgres:16` efímero y corre `prisma migrate deploy` antes).
+- Un solo archivo: `npx vitest run src/cart/cart.test.ts`. Un test puntual:
+  `npx vitest run -t "nombre del test"`.
+- **TDD-first** para: carrito, validación de checkout, validación de stock, transiciones de
+  pedido, reconciliación de pago, idempotencia del webhook. No sobre-testear lo visual.
+- No hay cobertura configurada ni linter: `npm run typecheck` es el gate estático.
+
+## CI / Build / Deploy
+
+- **CI** (`.github/workflows/ci.yml`, en PRs y push a `main`): `prisma migrate deploy`
+  sobre un servicio `postgres:16` efímero → `npm run typecheck` → `npm test` →
+  `npm run build`. Todo verde antes de mergear.
+- **Deploy** (`.github/workflows/deploy.yml`): en push a `main` se buildean dos imágenes
+  Docker multi-stage (`Dockerfile`, targets `deps` y `runner`) y se publican en `ghcr.io`.
+- El VPS no buildea: `docker compose -f docker-compose.prod.yml pull && up -d`. La imagen
+  `-migrate` corre `npx prisma migrate deploy` (one-shot) y la app arranca recién después.
+- `NEXT_PUBLIC_WHATSAPP_URL` / `NEXT_PUBLIC_INSTAGRAM_URL` son build-args: se hornean en
+  el build del deploy, no en runtime.
+
+## PRs y commits
+
+- Correr `npm run typecheck` y `npm test` antes de subir; CI requiere typecheck + test +
+  build en verde.
+- Commits: una línea, imperativo, en inglés (ej.: "Unify email validation and move
+  boundary parsing to Zod").
 
 ## Reglas de trabajo (resumen — ver `docs/agent-rules.md`)
 
 - **Vertical slices**, módulos profundos para la lógica de negocio, UI "tonta" cuando se
   pueda. Evitar abstracciones prematuras y archivos gigantes.
-- **TDD-first** para: carrito, validación de checkout, validación de stock, transiciones de
-  pedido, reconciliación de pago, idempotencia del webhook. No sobre-testear lo visual.
 - **Server Actions** sobre API routes innecesarias. **Zod** para validación.
 - Todo el copy customer-facing y admin en **español de Argentina (`es-AR`)**. Nunca renderizar
   valores internos de enum/estado (`pending_payment`, `paid`, ...) — mapearlos por los helpers
   de label de `src/domain/rules.ts`.
 - Identificadores, enums, rutas, tests y símbolos de código en inglés.
+- Solo implementar lo pedido: no refactorear sistemas no relacionados ni adelantar features.
 
 ## Mapa del código
 
