@@ -47,10 +47,24 @@ export default async function HomePage() {
   return (
     <div className="bg-[#f8f8f6]">
       <section
-        className='relative grid items-end min-h-[calc(100svh-72px)] overflow-hidden text-white bg-center bg-cover [background-image:linear-gradient(180deg,rgba(0,0,0,0.12)_0%,rgba(0,0,0,0.24)_42%,rgba(0,0,0,0.84)_100%),url("/brand/homepage-hero.webp")] min-[760px]:[background-position:center_40%]'
+        className="relative grid items-end min-h-[calc(100svh-72px)] overflow-hidden text-white bg-[#111]"
         aria-labelledby="homepage-hero-title"
       >
-        <div className="w-[min(100%,38rem)] pt-[min(18svh,9rem)] px-5 pb-16 min-[760px]:px-12 min-[1100px]:ml-[max(3rem,calc((100vw-72rem)/2))]">
+        <picture className="absolute inset-0">
+          <source media="(min-width: 760px)" srcSet="/brand/homepage-hero-desktop.webp" />
+          <img
+            src="/brand/homepage-hero.webp"
+            alt="Persona entrenando con mancuerna usando remera Irruptivo en gimnasio"
+            className="h-full w-full object-cover object-center min-[760px]:object-[center_35%]"
+            fetchPriority="high"
+            decoding="async"
+          />
+        </picture>
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.12)_0%,rgba(0,0,0,0.24)_42%,rgba(0,0,0,0.84)_100%)]"
+        />
+        <div className="relative w-[min(100%,38rem)] pt-[min(18svh,9rem)] px-5 pb-16 min-[760px]:px-12 min-[1100px]:ml-[max(3rem,calc((100vw-72rem)/2))]">
           <p className="m-0 text-[0.76rem] font-[850] tracking-[0.13em] uppercase text-[rgba(255,255,255,0.76)]">
             Indumentaria deportiva
           </p>
