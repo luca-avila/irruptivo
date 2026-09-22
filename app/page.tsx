@@ -64,13 +64,13 @@ export default async function HomePage() {
           aria-hidden="true"
           className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.12)_0%,rgba(0,0,0,0.24)_42%,rgba(0,0,0,0.84)_100%)]"
         />
-        <div className="relative w-[min(100%,38rem)] pt-[min(18svh,9rem)] px-5 pb-16 min-[760px]:px-12 min-[1100px]:ml-[max(3rem,calc((100vw-72rem)/2))]">
+        <div className="relative w-[min(100%,38rem)] pt-[min(14svh,7rem)] px-5 pb-12 min-[760px]:w-[min(100%,46rem)] min-[760px]:px-12 min-[760px]:pt-20 min-[760px]:pb-14 min-[1100px]:ml-[max(3rem,calc((100vw-72rem)/2))]">
           <p className="m-0 text-[0.76rem] font-[850] tracking-[0.13em] uppercase text-[rgba(255,255,255,0.76)]">
             Indumentaria deportiva
           </p>
           <h1
             id="homepage-hero-title"
-            className="max-w-[13ch] m-0 mt-[0.95rem] text-[clamp(2.35rem,13vw,5.9rem)] leading-[0.96] tracking-[0]"
+            className="max-w-[13ch] m-0 mt-[0.95rem] text-[clamp(2.35rem,13vw,5.9rem)] leading-[0.96] tracking-[0] min-[760px]:max-w-[16ch] min-[760px]:text-[clamp(2.6rem,5.6vw,4.4rem)]"
           >
             Rendimiento, comodidad y diseño para todos los días.
           </h1>
